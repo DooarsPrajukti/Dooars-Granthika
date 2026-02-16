@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}LibNexa - Smart Library Management System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/core/home.css' %}" />
+{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="hero">
+  <div class="hero-content">
+    <h1 class="hero-title">Welcome to LibNexa</h1>
+    <p class="hero-subtitle">
+      A smart, intuitive platform designed to simplify and modernize library management. From tracking books and managing student records to generating clearance certificates, LibNexa brings every essential library task into one streamlined system.
+    </p>
+    <div class="hero-buttons">
+      {% if user.is_authenticated %}
+        <a href="{% url 'dashboard' %}" class="btn btn-primary btn-lg">Go to Dashboard</a>
+      {% else %}
+        <a href="#" class="btn btn-primary btn-lg">Get Started</a>
+        <a href="{% url 'about' %}" class="btn btn-outline btn-lg">Learn More</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="hero-image">
+    <img src="{% static 'img/hero-illustration.svg' %}" alt="Library Management Illustration" />
+  </div>
+</section>
+
+<!-- Features Section -->
+<section class="features-section">
+  <h2 class="section-title">Why Choose LibNexa?</h2>
+  <div class="feature-grid">
+    <div class="feature-item" style="--item-index: 0">
+      <div class="feature-icon">🎯</div>
+      <h3 class="feature-title">All-in-One Platform</h3>
+      <p class="feature-description">
+        Manage issuing, returns, student records, payments, and certificates in one unified system.
+      </p>
+    </div>
+    
+    <div class="feature-item" style="--item-index: 1">
+      <div class="feature-icon">⚡</div>
+      <h3 class="feature-title">Time-Saving Tools</h3>
+      <p class="feature-description">
+        Bulk upload student/book data using Excel templates—ideal for educational institutions.
+      </p>
+    </div>
+    
+    <div class="feature-item" style="--item-index: 2">
+      <div class="feature-icon">📊</div>
+      <h3 class="feature-title">Smart Record Management</h3>
+      <p class="feature-description">
+        Track book statuses, renewal history, fines, and transactions with precision and ease.
+      </p>
+    </div>
+    
+    <div class="feature-item" style="--item-index: 3">
+      <div class="feature-icon">🎨</div>
+      <h3 class="feature-title">Simple & Intuitive UI</h3>
+      <p class="feature-description">
+        Clean, modern interface with button-driven actions for quick navigation and efficiency.
+      </p>
+    </div>
+    
+    <div class="feature-item" style="--item-index: 4">
+      <div class="feature-icon">🔍</div>
+      <h3 class="feature-title">Real-Time Search & Exports</h3>
+      <p class="feature-description">
+        Locate records instantly and export data for comprehensive reports or secure backups.
+      </p>
+    </div>
+    
+    <div class="feature-item" style="--item-index: 5">
+      <div class="feature-icon">🔒</div>
+      <h3 class="feature-title">Secure & Robust</h3>
+      <p class="feature-description">
+        With authentication, fine tracking, and error handling, your library data stays protected.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- Stats Section -->
+<section class="stats-section">
+  <div class="stat-box" style="--stat-index: 0">
+    <div class="stat-number">10,000+</div>
+    <div class="stat-label">Books Managed</div>
+  </div>
+  <div class="stat-box" style="--stat-index: 1">
+    <div class="stat-number">500+</div>
+    <div class="stat-label">Active Libraries</div>
+  </div>
+  <div class="stat-box" style="--stat-index: 2">
+    <div class="stat-number">50,000+</div>
+    <div class="stat-label">Students Served</div>
+  </div>
+  <div class="stat-box" style="--stat-index: 3">
+    <div class="stat-number">99.9%</div>
+    <div class="stat-label">Uptime</div>
+  </div>
+</section>
+
+<!-- CTA Section -->
+<section class="cta-section">
+  <h2>Ready to Transform Your Library?</h2>
+  <p>Join hundreds of libraries already using LibNexa to streamline their operations.</p>
+  {% if not user.is_authenticated %}
+    <a href="#" class="btn btn-primary btn-lg">Start Free Trial</a>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/home.js' %}"></script>
+{% endblock %}
+
+{% block inline_js %}
+{% endblock %}

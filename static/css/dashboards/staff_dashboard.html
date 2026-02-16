@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Staff Dashboard - LibNexa{% endblock %}
+
+{% block header %}{% endblock %}
+{% block footer %}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-wrapper">
+  <div class="header">
+    <img src="{% static 'img/logo.png' %}" alt="Logo" />
+    <h1>LibNexa</h1>
+    <h2>📖 Staff Dashboard</h2>
+    <div class="institute" id="institute">{{ institute_name|default:"Loading..." }}</div>
+  </div>
+
+  <div class="info-area">
+    <div style="text-align: center;">
+      <p>Welcome to the Staff Dashboard. You have access to essential library management features including book transactions, student lookups, and basic reporting.</p>
+    </div>
+  </div>
+
+  <div class="notification-container">
+    <div class="notification-bar overdue-notification">
+      <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
+        <div style="font-size: 2rem;">⚠️</div>
+        <div>
+          <div style="font-size: 1.1rem; font-weight: 600;">Overdue Books</div>
+          <div style="font-size: 0.9rem;"><span id="overdue-count">0</span> books are currently overdue</div>
+        </div>
+      </div>
+    </div>
+    <div class="notification-bar quick-status-notification">
+      <div style="display: flex; align-items: center; gap: 15px;">
+        <div style="font-size: 2rem;">✅</div>
+        <div>
+          <div style="font-size: 1.1rem; font-weight: 600;">Today's Activity</div>
+          <div style="font-size: 0.9rem;">Ready to process transactions</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 30px; align-items: flex-start; flex-wrap: wrap;">
+    <div class="quick-actions-container" style="flex: 1; min-width: 300px;">
+      <h2 style="margin-bottom: 20px;">⚡ Quick Actions</h2>
+      <div class="actions-grid">
+        <div class="action-item">
+          <button class="action-btn" onclick="viewBorrowRegister()">📘 Student Library Transactions</button>
+          <p>Issue, return, and renew books for students with complete transaction tracking.</p>
+        </div>
+        <div class="action-item">
+          <button class="action-btn" onclick="teacherregister()">📗 Teacher Library Transactions</button>
+          <p>Manage book lending operations specifically for teachers and faculty members.</p>
+        </div>
+        <div class="action-item">
+          <button class="action-btn" onclick="viewStudentDatabase()">👨‍🎓 Student Lookup</button>
+          <p>Search and view student records and borrowing history.</p>
+        </div>
+        <div class="action-item">
+          <button class="action-btn" onclick="viewBookDatabase()">📖 Book Catalog</button>
+          <p>Browse the complete book catalog and check availability status.</p>
+        </div>
+        <div class="action-item">
+          <button class="action-btn" onclick="viewBookStock()">📦 Book Inventory</button>
+          <p>View current book stock levels and availability information.</p>
+        </div>
+        <div class="action-item">
+          <button class="action-btn" onclick="viewteacherDatabase()">👨‍🏫 Teacher Lookup</button>
+          <p>Search and view teacher records and borrowing history.</p>
+        </div>
+        <div class="action-item">
+          <button class="action-btn" onclick="BOOKRECOVERY()">📚 Recover from Student</button>
+          <p>Record compensation for lost or damaged books before student clearance.</p>
+        </div>
+        <div class="action-item">
+          <button class="action-btn" onclick="assignMissingBook()">📓 Assign Missing Book</button>
+          <p>Track lost or damaged books and manage replacement procedures.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; width: 350px; flex-shrink: 0;">
+      <div id="overdue-board">
+        <h2>📌 Overdue Book Reminders</h2>
+        <ul id="overdue-list">
+          <li>✅ Loading...</li>
+        </ul>
+      </div>
+
+      <div class="quick-stats-container">
+        <h2>📊 Quick Statistics</h2>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-icon">📚</div>
+            <div>
+              <div class="stat-number" id="total-books">...</div>
+              <div class="stat-label">Total Books</div>
+            </div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-icon">👨‍🎓</div>
+            <div>
+              <div class="stat-number" id="total-students">...</div>
+              <div class="stat-label">Total Students</div>
+            </div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-icon">👨‍🏫</div>
+            <div>
+              <div class="stat-number" id="total-teachers">...</div>
+              <div class="stat-label">Total Teachers</div>
+            </div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-icon">📖</div>
+            <div>
+              <div class="stat-number" id="books-issued">...</div>
+              <div class="stat-label">Books Issued</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/dashboard.js' %}"></script>
+{% endblock %}

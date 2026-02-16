@@ -1,0 +1,87 @@
+{% comment %} {% extends 'base.html' %} {% endcomment %}
+{% load static %}
+
+{% comment %} {% block title %}Sign In - LibNexa{% endblock %} {% endcomment %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/accounts/auth.css' %}" />
+{% endblock %}
+
+{% block content %}
+<div class="bg-decoration"></div>
+
+<div class="auth-wrapper">
+  <div class="login-container">
+    <div class="logo-section">
+      <div class="logo-container">
+        <span class="logo-icon"><img src="{% static "assets/img/logo2.png" %}" alt="DG" width="80" height="80"></span>
+      </div>
+      <div class="logo-text">Dooars Granthika</div>
+    </div>
+
+    <div class="header-section">
+      <h2>Welcome Back</h2>
+      <p class="subtitle">Access your digital library</p>
+    </div>
+
+    {% if messages %}
+      <div id="status-msg" class="status">
+        {% for message in messages %}
+          {{ message }}
+        {% endfor %}
+      </div>
+    {% else %}
+      <div id="status-msg" class="status"></div>
+    {% endif %}
+
+    <form method="post" id="loginForm">
+      {% csrf_token %}
+      
+      <div class="form-group">
+        <div class="input-wrapper">
+          <div class="input-icon">👤</div>
+          <input 
+            type="text" 
+            id="username" 
+            name="username" 
+            placeholder="Enter your User ID" 
+            required
+            autofocus
+          />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="input-wrapper">
+          <div class="input-icon">🔒</div>
+          <input 
+            type="password" 
+            id="password" 
+            name="password" 
+            placeholder="Enter your password" 
+            required
+          />
+        </div>
+      </div>
+
+      <div class="save-password-container">
+        <input type="checkbox" id="savePassword" name="remember_me">
+        <label for="savePassword">Remember Me</label>
+      </div>
+
+      <button type="submit" class="btn login-btn" id="loginBtn">
+        <div class="loading-spinner"></div>
+        <span class="btn-text">Sign In</span>
+      </button>
+    </form>
+
+    <div class="forgot-password">
+      <a href="{% url 'accounts:forgetpassword' %}" class="forgot-link">Forgot your password?</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/accounts/auth.js' %}"></script>
+{% endblock %}
