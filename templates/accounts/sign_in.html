@@ -1,87 +1,258 @@
 {% comment %} {% extends 'base.html' %} {% endcomment %}
 {% load static %}
 
-{% comment %} {% block title %}Sign In - LibNexa{% endblock %} {% endcomment %}
+{% comment %} {% block title %}Library Registration - Dooars Granthika{% endblock %} {% endcomment %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/accounts/auth.css' %}" />
+<link rel="stylesheet" href="{% static 'css/accounts/sign_up.css' %}" />
 {% endblock %}
 
 {% block content %}
-<div class="bg-decoration"></div>
+
+<!-- Background Image -->
+<img
+  src="{% static 'assets/img/SIGNUP_BACKGROUND.png' %}"
+  alt=""
+  aria-hidden="true"
+  id="bg-img"
+>
 
 <div class="auth-wrapper">
-  <div class="login-container">
+  <div class="register-container">
+
+    <!-- Logo -->
     <div class="logo-section">
       <div class="logo-container">
-        <span class="logo-icon"><img src="{% static "assets/img/logo2.png" %}" alt="DG" width="80" height="80"></span>
+        <span class="logo-icon">
+          <img src="{% static 'assets/img/logo2.png' %}" alt="Dooars Granthika" width="42" height="42">
+        </span>
       </div>
       <div class="logo-text">Dooars Granthika</div>
     </div>
 
+    <!-- Heading -->
     <div class="header-section">
-      <h2>Welcome Back</h2>
-      <p class="subtitle">Access your digital library</p>
+      <h2>Library Registration</h2>
+      <p class="subtitle">Register your library and start managing efficiently</p>
     </div>
 
+    <!-- Django messages -->
     {% if messages %}
-      <div id="status-msg" class="status">
-        {% for message in messages %}
-          {{ message }}
-        {% endfor %}
+      <div id="status-msg" class="status {% for message in messages %}{{ message.tags }}{% endfor %}">
+        {% for message in messages %}{{ message }}{% endfor %}
       </div>
     {% else %}
       <div id="status-msg" class="status"></div>
     {% endif %}
 
-    <form method="post" id="loginForm">
+    <form method="post" id="registrationForm" novalidate>
       {% csrf_token %}
-      
-      <div class="form-group">
-        <div class="input-wrapper">
-          <div class="input-icon">👤</div>
-          <input 
-            type="text" 
-            id="username" 
-            name="username" 
-            placeholder="Enter your User ID" 
-            required
-            autofocus
-          />
+
+      <!-- ── Library Information ── -->
+      <div class="form-section">
+        <div class="section-title">📚 Library Information</div>
+        <div class="form-grid">
+
+          <div class="form-group" id="libraryName-group">
+            <label for="libraryName">Library Name</label>
+            <div class="input-wrapper">
+              <div class="input-icon">📖</div>
+              <input
+                type="text"
+                id="libraryName"
+                name="library_name"
+                placeholder="Library Name"
+                required
+                autofocus
+                autocomplete="organization"
+              />
+            </div>
+            <div class="error-message">Library name is required</div>
+          </div>
+
+          <div class="form-group" id="instituteName-group">
+            <label for="instituteName">Institute Name</label>
+            <div class="input-wrapper">
+              <div class="input-icon">🏫</div>
+              <input
+                type="text"
+                id="instituteName"
+                name="institute_name"
+                placeholder="Institute Name"
+                required
+                autocomplete="organization"
+              />
+            </div>
+            <div class="error-message">Institute name is required</div>
+          </div>
+
         </div>
       </div>
 
-      <div class="form-group">
-        <div class="input-wrapper">
-          <div class="input-icon">🔒</div>
-          <input 
-            type="password" 
-            id="password" 
-            name="password" 
-            placeholder="Enter your password" 
-            required
-          />
+      <!-- ── Contact Details ── -->
+      <div class="form-section">
+        <div class="section-title">📍 Contact Details</div>
+        <div class="form-grid">
+
+          <div class="form-group" id="instituteEmail-group">
+            <label for="instituteEmail">Institute Email</label>
+            <div class="input-wrapper">
+              <div class="input-icon">📧</div>
+              <input
+                type="email"
+                id="instituteEmail"
+                name="institute_email"
+                placeholder="Institute Email"
+                required
+                autocomplete="email"
+              />
+            </div>
+            <div class="error-message">A valid email address is required</div>
+          </div>
+
+          <div class="form-group" id="address-group">
+            <label for="address">Address</label>
+            <div class="input-wrapper">
+              <div class="input-icon">📍</div>
+              <input
+                type="text"
+                id="address"
+                name="address"
+                placeholder="Address"
+                required
+                autocomplete="street-address"
+              />
+            </div>
+            <div class="error-message">Address is required</div>
+          </div>
+
+          <div class="form-group" id="district-group">
+            <label for="district">District</label>
+            <div class="input-wrapper">
+              <div class="input-icon">🏘️</div>
+              <input
+                type="text"
+                id="district"
+                name="district"
+                placeholder="District"
+                required
+                autocomplete="address-level3"
+              />
+            </div>
+            <div class="error-message">District is required</div>
+          </div>
+
+          <div class="form-group" id="state-group">
+            <label for="state">State</label>
+            <div class="input-wrapper">
+              <div class="input-icon">🗺️</div>
+              <input
+                type="text"
+                id="state"
+                name="state"
+                placeholder="State"
+                required
+                autocomplete="address-level1"
+              />
+            </div>
+            <div class="error-message">State is required</div>
+          </div>
+
+          <div class="form-group" id="country-group">
+            <label for="country">Country</label>
+            <div class="input-wrapper">
+              <div class="input-icon">🌍</div>
+              <input
+                type="text"
+                id="country"
+                name="country"
+                placeholder="Country"
+                required
+                autocomplete="country-name"
+              />
+            </div>
+            <div class="error-message">Country is required</div>
+          </div>
+
         </div>
       </div>
 
-      <div class="save-password-container">
-        <input type="checkbox" id="savePassword" name="remember_me">
-        <label for="savePassword">Remember Me</label>
+      <!-- ── Library Settings ── -->
+      <div class="form-section">
+        <div class="section-title">⚙️ Library Settings</div>
+        <div class="form-grid">
+
+          <div class="form-group" id="latefine-group">
+            <label for="latefine">Late Fine (Per Day)</label>
+            <div class="input-wrapper">
+              <div class="input-icon">💰</div>
+              <input
+                type="number"
+                id="latefine"
+                name="late_fine"
+                placeholder="Late Fine (Per Day)"
+                min="0"
+                step="0.01"
+                required
+              />
+            </div>
+            <div class="error-message">Late fine must be 0 or greater</div>
+          </div>
+
+          <div class="form-group" id="borrowingPeriod-group">
+            <label for="borrowingPeriod">Borrowing Period (Days)</label>
+            <div class="input-wrapper">
+              <div class="input-icon">📅</div>
+              <input
+                type="number"
+                id="borrowingPeriod"
+                name="borrowing_period"
+                placeholder="Borrowing Period (Days)"
+                min="1"
+                max="365"
+                required
+              />
+            </div>
+            <div class="error-message">Borrowing period must be between 1–365 days</div>
+          </div>
+
+          <div class="form-group" id="AlottedBooks-group">
+            <label for="AlottedBooks">Books Per Member</label>
+            <div class="input-wrapper">
+              <div class="input-icon">📖</div>
+              <input
+                type="number"
+                id="AlottedBooks"
+                name="allotted_books"
+                placeholder="Books Per Member"
+                min="1"
+                max="50"
+                required
+              />
+            </div>
+            <div class="error-message">Books per member must be between 1–50</div>
+          </div>
+
+        </div>
       </div>
 
-      <button type="submit" class="btn login-btn" id="loginBtn">
+      <!-- Submit -->
+      <button type="submit" class="btn-register" id="registerBtn">
         <div class="loading-spinner"></div>
-        <span class="btn-text">Sign In</span>
+        <span class="btn-text">Create Library Account</span>
       </button>
-    </form>
 
-    <div class="forgot-password">
-      <a href="{% url 'accounts:forgetpassword' %}" class="forgot-link">Forgot your password?</a>
-    </div>
-  </div>
-</div>
+      <p class="signup-text">
+        Already have an account?
+        <a class="signup-link" href="{% url 'accounts:signin' %}">Login here</a>
+      </p>
+
+    </form>
+  </div><!-- /register-container -->
+</div><!-- /auth-wrapper -->
+
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/accounts/auth.js' %}"></script>
+<script src="{% static 'js/accounts/sign_up.js' %}"></script>
 {% endblock %}

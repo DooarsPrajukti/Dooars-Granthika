@@ -4,11 +4,11 @@
 {% comment %} {% block title %}Library Registration - LibNexa{% endblock %} {% endcomment %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/accounts/auth.css' %}" />
+<link rel="stylesheet" href="{% static 'css/accounts/sign_up.css' %}" />
 {% endblock %}
 
 {% block content %}
-<div class="bg-decoration"></div>
+{% comment %} <div class="bg-decoration"><img src="{% static "{% url "assets/img/SIGNUP_BACKGROUND.png" %}" %}" alt="SIGN UP BACKGROUND"></div> {% endcomment %}
 
 {% comment %} <button class="back-btn" onclick="window.location.href='{% url 'login' %}'" aria-label="Go back">
   ←
@@ -206,11 +206,12 @@
         <div class="loading-spinner"></div>
         <span class="btn-text">Create Library Account</span>
       </button>
+      <h6 class='signup-text'>Already have an account? <a class='signup-link' href="{% url "accounts:signin" %}">Login here</a></h6>
     </form>
   </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/accounts/auth.js' %}"></script>
+<script src="{% static 'js/accounts/sign_up.js' %}"></script>
 {% endblock %}
