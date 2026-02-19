@@ -1,0 +1,251 @@
+{% comment %} {% extends 'base.html' %} {% endcomment %}
+{% load static %}
+
+{% comment %} {% block title %}Library Dashboard - Dooars Granthika{% endblock %} {% endcomment %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard/library_dashboard.css' %}" />
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-wrapper">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-container">
+        <img src="{% static 'assets/img/logo2.png' %}" alt="Logo" width="36" height="36">
+      </div>
+      <h3 class="logo-text">{{ library_name|default:"Library" }}</h3>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active">
+        <span class="nav-icon">📊</span>
+        <span class="nav-text">Dashboard</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">📚</span>
+        <span class="nav-text">My Books</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">👥</span>
+        <span class="nav-text">Members</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">📖</span>
+        <span class="nav-text">Issue/Return</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">💰</span>
+        <span class="nav-text">Fines</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">📈</span>
+        <span class="nav-text">Reports</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-text">Settings</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <a href="{% url 'accounts:logout' %}" class="nav-item logout">
+        <span class="nav-icon">🚪</span>
+        <span class="nav-text">Logout</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="page-title">
+        <h1>Library Dashboard</h1>
+        <p class="subtitle">{{ library_name|default:"Your Library Management" }}</p>
+      </div>
+      <div class="top-bar-actions">
+        <button class="btn-icon" title="Notifications">
+          <span class="notification-badge">5</span>
+          🔔
+        </button>
+        <div class="user-profile">
+          <img src="{% static 'assets/img/default-avatar.png' %}" alt="Librarian" class="user-avatar">
+          <div class="user-info">
+            <span class="user-name">{{ user.username|default:"Librarian" }}</span>
+            <span class="user-role">Library Manager</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Stats Cards -->
+    <section class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon blue">📚</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ total_books|default:"0" }}</h3>
+          <p class="stat-label">Total Books</p>
+          {% if books_change %}
+          <span class="stat-change {{ books_change_class }}">{{ books_change }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon green">👥</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ total_members|default:"0" }}</h3>
+          <p class="stat-label">Active Members</p>
+          {% if members_change %}
+          <span class="stat-change {{ members_change_class }}">{{ members_change }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon purple">📖</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ books_issued|default:"0" }}</h3>
+          <p class="stat-label">Books Issued</p>
+          {% if issued_change %}
+          <span class="stat-change {{ issued_change_class }}">{{ issued_change }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon orange">⚠️</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ overdue_books|default:"0" }}</h3>
+          <p class="stat-label">Overdue Books</p>
+          {% if overdue_change %}
+          <span class="stat-change {{ overdue_change_class }}">{{ overdue_change }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <!-- Charts & Tables Row -->
+    <section class="dashboard-row">
+      
+      <!-- Recent Transactions -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Recent Transactions</h2>
+          <a href="#" class="card-action">View All →</a>
+        </div>
+        <div class="card-body">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Book Title</th>
+                <th>Action</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for transaction in recent_transactions %}
+              <tr>
+                <td>{{ transaction.member_name }}</td>
+                <td>{{ transaction.book_title }}</td>
+                <td><span class="badge {{ transaction.action_class }}">{{ transaction.action }}</span></td>
+                <td>{{ transaction.date }}</td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="4" class="empty-state">No transactions yet</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Overdue Books -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Overdue Books</h2>
+          <a href="#" class="card-action">View All →</a>
+        </div>
+        <div class="card-body">
+          <div class="overdue-list">
+            {% for overdue in overdue_list %}
+            <div class="overdue-item">
+              <div class="overdue-info">
+                <p class="overdue-book">{{ overdue.book_title }}</p>
+                <p class="overdue-member">Borrowed by: {{ overdue.member_name }}</p>
+              </div>
+              <div class="overdue-details">
+                <span class="overdue-days">{{ overdue.days_overdue }} days</span>
+                <span class="overdue-fine">₹{{ overdue.fine_amount }}</span>
+              </div>
+            </div>
+            {% empty %}
+            <p class="empty-state">No overdue books</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Popular Books -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">Most Borrowed Books</h2>
+        <a href="#" class="card-action">View All →</a>
+      </div>
+      <div class="card-body">
+        <div class="books-grid">
+          {% for book in popular_books %}
+          <div class="book-card">
+            <div class="book-cover">{{ book.icon|default:"📘" }}</div>
+            <div class="book-info">
+              <h4 class="book-title">{{ book.title }}</h4>
+              <p class="book-author">{{ book.author }}</p>
+              <span class="book-count">Borrowed {{ book.borrow_count }} times</span>
+            </div>
+          </div>
+          {% empty %}
+          <p class="empty-state">No borrowing data available yet</p>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick Actions -->
+    <section class="quick-actions">
+      <h2 class="section-title">Quick Actions</h2>
+      <div class="actions-grid">
+        <button class="action-btn">
+          <span class="action-icon">➕</span>
+          <span class="action-text">Add Book</span>
+        </button>
+        <button class="action-btn">
+          <span class="action-icon">👤</span>
+          <span class="action-text">Add Member</span>
+        </button>
+        <button class="action-btn">
+          <span class="action-icon">📖</span>
+          <span class="action-text">Issue Book</span>
+        </button>
+        <button class="action-btn">
+          <span class="action-icon">↩️</span>
+          <span class="action-text">Return Book</span>
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/dashboard/library_dashboard.js' %}"></script>
+{% endblock %}

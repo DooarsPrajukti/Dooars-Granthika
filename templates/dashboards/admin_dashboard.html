@@ -1,148 +1,225 @@
-{% extends 'base.html' %}
+{% comment %} {% extends 'base.html' %} {% endcomment %}
 {% load static %}
 
-{% block title %}Admin Dashboard - LibNexa{% endblock %}
-
-{% block header %}{% endblock %}
-{% block footer %}{% endblock %}
+{% comment %} {% block title %}Admin Dashboard - Dooars Granthika{% endblock %} {% endcomment %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
+<link rel="stylesheet" href="{% static 'css/dashboards/admin_dashboard.css' %}" />
 {% endblock %}
 
 {% block content %}
 <div class="dashboard-wrapper">
-  <div class="header">
-    <img src="{% static 'img/logo.png' %}" alt="Logo" />
-    <h1>LibNexa</h1>
-    <h2>📖 Admin Dashboard</h2>
-    <div class="institute" id="institute">{{ institute_name|default:"Loading..." }}</div>
-  </div>
 
-  <div class="info-area">
-    <div style="text-align: center;">
-      <p>Welcome to the Admin Dashboard. You have comprehensive access to library management features including student and teacher management, book inventory, transactions, and reporting.</p>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-container">
+        <img src="{% static 'assets/img/logo2.png' %}" alt="Logo" >
+      </div>
+      <h3 class="logo-text">Dooars Granthika</h3>
     </div>
-  </div>
 
-  <div class="notification-container">
-    <div class="notification-bar overdue-notification">
-      <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
-        <div style="font-size: 2rem;">⚠️</div>
-        <div>
-          <div style="font-size: 1.1rem; font-weight: 600;">Overdue Books</div>
-          <div style="font-size: 0.9rem;"><span id="overdue-count">0</span> books are currently overdue</div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active">
+        <span class="nav-icon">📊</span>
+        <span class="nav-text">Dashboard</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">🏛️</span>
+        <span class="nav-text">Libraries</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">📚</span>
+        <span class="nav-text">Books</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">👥</span>
+        <span class="nav-text">Members</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">📖</span>
+        <span class="nav-text">Transactions</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">📈</span>
+        <span class="nav-text">Reports</span>
+      </a>
+      <a href="#" class="nav-item">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-text">Settings</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <a href="#" class="nav-item logout">
+        <span class="nav-icon">🚪</span>
+        <span class="nav-text">Logout</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="page-title">
+        <h1>Admin Dashboard</h1>
+        <p class="subtitle">Welcome back, Administrator</p>
+      </div>
+      <div class="top-bar-actions">
+        <button class="btn-icon" title="Notifications">
+          <span class="notification-badge">3</span>
+          🔔
+        </button>
+        <div class="user-profile">
+          <img src="{% static 'assets/img/default-avatar.png' %}" alt="Admin" class="user-avatar">
+          <div class="user-info">
+            <span class="user-name">Admin</span>
+            <span class="user-role">Administrator</span>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="notification-bar quick-status-notification">
-      <div style="display: flex; align-items: center; gap: 15px;">
-        <div style="font-size: 2rem;">📊</div>
-        <div>
-          <div style="font-size: 1.1rem; font-weight: 600;">Quick Status</div>
-          <div style="font-size: 0.9rem;">All operations running smoothly</div>
+    </header>
+
+    <!-- Stats Cards -->
+    <section class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon blue">🏛️</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ total_libraries|default:"0" }}</h3>
+          <p class="stat-label">Total Libraries</p>
+          {% if libraries_change %}
+          <span class="stat-change {{ libraries_change_class }}">{{ libraries_change }}</span>
+          {% endif %}
         </div>
       </div>
-    </div>
-  </div>
 
-  <div style="display: flex; gap: 30px; align-items: flex-start; flex-wrap: wrap;">
-    <div class="quick-actions-container" style="flex: 1; min-width: 300px;">
-      <h2 style="margin-bottom: 20px;">⚡ Quick Actions</h2>
+      <div class="stat-card">
+        <div class="stat-icon green">📚</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ total_books|default:"0" }}</h3>
+          <p class="stat-label">Total Books</p>
+          {% if books_change %}
+          <span class="stat-change {{ books_change_class }}">{{ books_change }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon purple">👥</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ total_members|default:"0" }}</h3>
+          <p class="stat-label">Active Members</p>
+          {% if members_change %}
+          <span class="stat-change {{ members_change_class }}">{{ members_change }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon orange">📖</div>
+        <div class="stat-content">
+          <h3 class="stat-value">{{ active_transactions|default:"0" }}</h3>
+          <p class="stat-label">Active Loans</p>
+          {% if transactions_change %}
+          <span class="stat-change {{ transactions_change_class }}">{{ transactions_change }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <!-- Charts & Tables Row -->
+    <section class="dashboard-row">
+      
+      <!-- Recent Libraries -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Recent Libraries</h2>
+          <a href="#" class="card-action">View All →</a>
+        </div>
+        <div class="card-body">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Library Name</th>
+                <th>Institute</th>
+                <th>Location</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for library in recent_libraries %}
+              <tr>
+                <td>{{ library.name }}</td>
+                <td>{{ library.institute_name }}</td>
+                <td>{{ library.district }}, {{ library.state }}</td>
+                <td><span class="badge {{ library.status_class }}">{{ library.status }}</span></td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="4" class="empty-state">No libraries registered yet</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Activity Feed -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Recent Activity</h2>
+          <a href="#" class="card-action">View All →</a>
+        </div>
+        <div class="card-body">
+          <div class="activity-feed">
+            {% for activity in recent_activities %}
+            <div class="activity-item">
+              <div class="activity-icon {{ activity.icon_class }}">{{ activity.icon }}</div>
+              <div class="activity-content">
+                <p class="activity-text"><strong>{{ activity.title }}</strong></p>
+                <p class="activity-detail">{{ activity.description }}</p>
+                <span class="activity-time">{{ activity.timestamp }}</span>
+              </div>
+            </div>
+            {% empty %}
+            <p class="empty-state">No recent activity</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Quick Actions -->
+    <section class="quick-actions">
+      <h2 class="section-title">Quick Actions</h2>
       <div class="actions-grid">
-        <div class="action-item">
-          <button class="action-btn" onclick="viewBorrowRegister()">📘 Student Library Transactions</button>
-          <p>Issue, return, and renew books for students with complete transaction tracking.</p>
-        </div>
-        <div class="action-item">
-          <button class="action-btn" onclick="teacherregister()">📗 Teacher Library Transactions</button>
-          <p>Manage book lending operations specifically for teachers and faculty members.</p>
-        </div>
-        <div class="action-item">
-          <button class="action-btn" onclick="viewStudentDatabase()">👨‍🎓 Student Management</button>
-          <p>Register, search, and manage student records with bulk import capabilities.</p>
-        </div>
-        <div class="action-item">
-          <button class="action-btn" onclick="viewBookStock()">📦 Inventory Management</button>
-          <p>Track book quantities, add new stock, assign unique Book IDs and generate inventory reports.</p>
-        </div>
-        <div class="action-item">
-          <button class="action-btn" onclick="viewBookDatabase()">📖 Book Catalog</button>
-          <p>Complete book catalog with detailed information and availability status.</p>
-        </div>
-        <div class="action-item">
-          <button class="action-btn" onclick="viewteacherDatabase()">👨‍🏫 Teacher Management</button>
-          <p>Register and organize teacher records within the system database.</p>
-        </div>
-        <div class="action-item">
-          <button class="action-btn" onclick="view_passedoutstudents()">🎓 Alumni Directory</button>
-          <p>Maintain records of graduated students with certificates and contact details.</p>
-        </div>
-        <div class="action-item">
-          <button class="action-btn" onclick="cashbook()">📒 Financial Ledger</button>
-          <p>Track all financial transactions including credits, debits, and payment records.</p>
-        </div>
-        <div class="action-item">
-          <button class="action-btn" onclick="BOOKRECOVERY()">📚 Recover from Student</button>
-          <p>Record compensation for lost or damaged books before student clearance.</p>
-        </div>
-        <div class="action-item">
-          <button class="action-btn" onclick="assignMissingBook()">📓 Assign Missing Book</button>
-          <p>Track lost or damaged books and manage replacement procedures.</p>
-        </div>
-        <div class="action-item">
-          <button class="action-btn" onclick="setting()">⚙️ Settings</button>
-          <p>Configure system preferences and customize application behavior.</p>
-        </div>
+        <button class="action-btn">
+          <span class="action-icon">➕</span>
+          <span class="action-text">Add Library</span>
+        </button>
+        <button class="action-btn">
+          <span class="action-icon">📚</span>
+          <span class="action-text">Add Books</span>
+        </button>
+        <button class="action-btn">
+          <span class="action-icon">👤</span>
+          <span class="action-text">Add Member</span>
+        </button>
+        <button class="action-btn">
+          <span class="action-icon">📊</span>
+          <span class="action-text">Generate Report</span>
+        </button>
       </div>
-    </div>
+    </section>
 
-    <div style="display: flex; flex-direction: column; gap: 20px; width: 350px; flex-shrink: 0;">
-      <div id="overdue-board">
-        <h2>📌 Overdue Book Reminders</h2>
-        <ul id="overdue-list">
-          <li>✅ Loading...</li>
-        </ul>
-      </div>
+  </main>
 
-      <div class="quick-stats-container">
-        <h2>📊 Quick Statistics</h2>
-        <div class="stats-grid">
-          <div class="stat-item">
-            <div class="stat-icon">📚</div>
-            <div>
-              <div class="stat-number" id="total-books">...</div>
-              <div class="stat-label">Total Books</div>
-            </div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-icon">👨‍🎓</div>
-            <div>
-              <div class="stat-number" id="total-students">...</div>
-              <div class="stat-label">Total Students</div>
-            </div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-icon">👨‍🏫</div>
-            <div>
-              <div class="stat-number" id="total-teachers">...</div>
-              <div class="stat-label">Total Teachers</div>
-            </div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-icon">📖</div>
-            <div>
-              <div class="stat-number" id="books-issued">...</div>
-              <div class="stat-label">Books Issued</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/dashboard.js' %}"></script>
+<script src="{% static 'js/dashboard/admin_dashboard.js' %}"></script>
 {% endblock %}

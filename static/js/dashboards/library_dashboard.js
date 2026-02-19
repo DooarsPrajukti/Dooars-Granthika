@@ -1,9 +1,9 @@
 /**
- * Admin Dashboard JavaScript
+ * Library Dashboard JavaScript
  */
 
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('Admin dashboard loaded');
+  console.log('Library dashboard loaded');
 
   // Mobile sidebar toggle
   initMobileSidebar();
