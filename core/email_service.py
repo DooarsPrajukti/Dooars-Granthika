@@ -17,132 +17,341 @@ def build_html_email(title, body_content):
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>{title}</title>
     <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        /* ── Reset & Base ── */
+        *, *::before, *::after {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
         body {{
-            background-color: #f4f6f8;
+            background-color: #eef1f5;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             color: #333333;
-            padding: 40px 20px;
+            padding: 48px 20px;
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
         }}
+
+        /* ── Outer Wrapper ── */
         .email-wrapper {{
-            max-width: 600px;
+            max-width: 620px;
             margin: 0 auto;
             background-color: #ffffff;
-            border-radius: 12px;
+            border-radius: 16px;
             overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0,0,0,0.06);
         }}
+
+        /* ── Header ── */
         .email-header {{
-            background: linear-gradient(135deg, #2c3e50, #4a6fa5);
-            padding: 36px 40px;
+            background: linear-gradient(135deg, #1e3a5f 0%, #2c3e50 40%, #4a6fa5 100%);
+            padding: 44px 48px 40px;
             text-align: center;
+            position: relative;
+            overflow: hidden;
+        }}
+        .email-header::before {{
+            content: '';
+            position: absolute;
+            top: -60px;
+            right: -60px;
+            width: 200px;
+            height: 200px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 50%;
+        }}
+        .email-header::after {{
+            content: '';
+            position: absolute;
+            bottom: -80px;
+            left: -40px;
+            width: 240px;
+            height: 240px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 50%;
         }}
         .email-header h1 {{
             color: #ffffff;
-            font-size: 26px;
+            font-size: 28px;
             font-weight: 700;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.6px;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.2);
+            position: relative;
+            z-index: 1;
         }}
         .email-header p {{
-            color: #c8d6e5;
-            font-size: 13px;
-            margin-top: 6px;
-            letter-spacing: 1px;
+            color: #a8c4e0;
+            font-size: 11px;
+            margin-top: 8px;
+            letter-spacing: 2.5px;
             text-transform: uppercase;
+            font-weight: 500;
+            position: relative;
+            z-index: 1;
         }}
+        .header-badge {{
+            display: inline-block;
+            margin-top: 14px;
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 20px;
+            padding: 4px 14px;
+            font-size: 11px;
+            color: #c8ddf0;
+            letter-spacing: 0.5px;
+            position: relative;
+            z-index: 1;
+        }}
+
+        /* ── Body ── */
         .email-body {{
-            padding: 40px;
+            padding: 44px 48px;
         }}
         .email-body p {{
             font-size: 15px;
-            line-height: 1.7;
-            color: #555555;
-            margin-bottom: 16px;
+            line-height: 1.75;
+            color: #4a4a4a;
+            margin-bottom: 18px;
         }}
+        .email-body p:last-child {{
+            margin-bottom: 0;
+        }}
+
+        /* ── Greeting ── */
+        .greeting {{
+            font-size: 22px !important;
+            font-weight: 700;
+            color: #1e3a5f !important;
+            margin-bottom: 10px !important;
+            letter-spacing: -0.3px;
+        }}
+
+        /* ── Credential Box ── */
         .credential-box {{
-            background-color: #f0f4ff;
-            border-left: 4px solid #4a6fa5;
-            border-radius: 8px;
-            padding: 20px 24px;
-            margin: 24px 0;
+            background: linear-gradient(135deg, #f0f5ff 0%, #e8f0fe 100%);
+            border-left: 5px solid #4a6fa5;
+            border-radius: 10px;
+            padding: 22px 26px;
+            margin: 26px 0;
+            box-shadow: 0 2px 12px rgba(74, 111, 165, 0.10);
         }}
         .credential-box p {{
             font-size: 14px;
-            color: #333;
-            margin-bottom: 8px;
-        }}
-        .credential-box p:last-child {{ margin-bottom: 0; }}
-        .credential-box strong {{
             color: #2c3e50;
-            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        .credential-box p:last-child {{
+            margin-bottom: 0;
+        }}
+        .credential-box strong {{
+            color: #1e3a5f;
+            font-weight: 700;
+            min-width: 110px;
+            display: inline-block;
         }}
         .credential-box span {{
-            font-family: 'Courier New', monospace;
-            background-color: #dce6f5;
-            padding: 2px 8px;
-            border-radius: 4px;
+            font-family: 'Courier New', 'Lucida Console', monospace;
+            background-color: #ffffff;
+            border: 1px solid #c5d5f0;
+            padding: 4px 12px;
+            border-radius: 6px;
             font-size: 14px;
             color: #1a3a5c;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.06);
+            word-break: break-all;
         }}
+
+        /* ── Warning / Info Box ── */
         .warning-box {{
-            background-color: #fff8e1;
-            border-left: 4px solid #f0a500;
-            border-radius: 8px;
-            padding: 14px 20px;
-            margin: 20px 0;
+            background: linear-gradient(135deg, #fffbf0 0%, #fff8e1 100%);
+            border-left: 5px solid #e5a000;
+            border-radius: 10px;
+            padding: 16px 22px;
+            margin: 22px 0;
             font-size: 14px;
-            color: #7a5c00;
+            color: #6b4f00;
+            line-height: 1.6;
+            box-shadow: 0 2px 8px rgba(229, 160, 0, 0.10);
         }}
+        .warning-box strong {{
+            font-weight: 700;
+            color: #5a4000;
+        }}
+
+        .danger-box {{
+            background: linear-gradient(135deg, #fff5f5 0%, #fee8e8 100%);
+            border-left: 5px solid #e53e3e;
+            border-radius: 10px;
+            padding: 16px 22px;
+            margin: 22px 0;
+            font-size: 14px;
+            color: #742a2a;
+            line-height: 1.6;
+            box-shadow: 0 2px 8px rgba(229, 62, 62, 0.10);
+        }}
+        .danger-box strong {{
+            font-weight: 700;
+            color: #63171b;
+        }}
+
+        .success-box {{
+            background: linear-gradient(135deg, #f0faf5 0%, #e6f7ee 100%);
+            border-left: 5px solid #38a169;
+            border-radius: 10px;
+            padding: 16px 22px;
+            margin: 22px 0;
+            font-size: 14px;
+            color: #1d4731;
+            line-height: 1.6;
+            box-shadow: 0 2px 8px rgba(56, 161, 105, 0.10);
+        }}
+
+        /* ── CTA Button ── */
         .btn-container {{
             text-align: center;
-            margin: 32px 0;
+            margin: 36px 0 28px;
         }}
         .btn {{
             display: inline-block;
             background: linear-gradient(135deg, #4a6fa5, #2c3e50);
             color: #ffffff !important;
             text-decoration: none;
-            padding: 14px 36px;
+            padding: 15px 42px;
             border-radius: 50px;
             font-size: 15px;
-            font-weight: 600;
-            letter-spacing: 0.4px;
-            box-shadow: 0 4px 12px rgba(74, 111, 165, 0.35);
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            box-shadow: 0 6px 20px rgba(44, 62, 80, 0.30), 0 2px 6px rgba(74, 111, 165, 0.25);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }}
+        .btn:hover {{
+            box-shadow: 0 10px 28px rgba(44, 62, 80, 0.38), 0 4px 10px rgba(74, 111, 165, 0.30);
+            transform: translateY(-1px);
         }}
         .fallback-link {{
-            font-size: 13px;
-            color: #888;
+            font-size: 12px;
+            color: #999;
             word-break: break-all;
             text-align: center;
-            margin-top: 12px;
+            margin-top: 14px;
         }}
         .fallback-link a {{
             color: #4a6fa5;
-            text-decoration: none;
+            text-decoration: underline;
         }}
+
+        /* ── Divider ── */
         .divider {{
             border: none;
-            border-top: 1px solid #eaeaea;
-            margin: 30px 0;
+            border-top: 1px solid #e8edf2;
+            margin: 32px 0;
         }}
-        .email-footer {{
-            background-color: #f9fafb;
-            padding: 24px 40px;
+
+        /* ── Stats / Info Strip ── */
+        .info-strip {{
+            display: flex;
+            gap: 12px;
+            margin: 24px 0;
+        }}
+        .info-strip-item {{
+            flex: 1;
+            background: #f7f9fc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 14px 16px;
             text-align: center;
-            border-top: 1px solid #eaeaea;
+        }}
+        .info-strip-item .info-label {{
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }}
+        .info-strip-item .info-value {{
+            font-size: 15px;
+            font-weight: 700;
+            color: #2c3e50;
+        }}
+
+        /* ── Footer ── */
+        .email-footer {{
+            background: linear-gradient(180deg, #f4f7fb 0%, #eef1f5 100%);
+            padding: 28px 48px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
         }}
         .email-footer p {{
             font-size: 12px;
-            color: #aaaaaa;
-            line-height: 1.6;
+            color: #9aa5b4;
+            line-height: 1.8;
         }}
         .email-footer a {{
             color: #4a6fa5;
             text-decoration: none;
+            font-weight: 500;
         }}
+        .email-footer a:hover {{
+            text-decoration: underline;
+        }}
+        .footer-logo {{
+            font-size: 14px;
+            font-weight: 700;
+            color: #4a6fa5;
+            margin-bottom: 8px;
+            letter-spacing: 0.3px;
+        }}
+
+        /* ── Utilities ── */
         .highlight {{
             color: #4a6fa5;
-            font-weight: 600;
+            font-weight: 700;
+        }}
+        .muted {{
+            color: #888;
+            font-size: 13px;
+        }}
+
+        /* ── Responsive ── */
+        @media only screen and (max-width: 640px) {{
+            body {{
+                padding: 20px 12px;
+            }}
+            .email-header {{
+                padding: 32px 28px;
+            }}
+            .email-header h1 {{
+                font-size: 22px;
+            }}
+            .email-body {{
+                padding: 32px 28px;
+            }}
+            .email-footer {{
+                padding: 22px 28px;
+            }}
+            .credential-box {{
+                padding: 18px 18px;
+            }}
+            .credential-box p {{
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }}
+            .btn {{
+                padding: 14px 32px;
+                font-size: 14px;
+                display: block;
+                width: 100%;
+                text-align: center;
+            }}
+            .info-strip {{
+                flex-direction: column;
+            }}
         }}
     </style>
 </head>
@@ -151,15 +360,17 @@ def build_html_email(title, body_content):
         <div class="email-header">
             <h1>📚 Dooars Granthika</h1>
             <p>Library Management System</p>
+            <span class="header-badge">✦ Official Notification</span>
         </div>
         <div class="email-body">
             {body_content}
         </div>
         <div class="email-footer">
+            <div class="footer-logo">Dooars Granthika</div>
             <p>
                 &copy; 2025 Dooars Granthika. All rights reserved.<br/>
                 This is an automated message — please do not reply directly.<br/>
-                <a href="#">Unsubscribe</a> &nbsp;|&nbsp; <a href="#">Privacy Policy</a>
+                <a href="#">Unsubscribe</a> &nbsp;&middot;&nbsp; <a href="#">Privacy Policy</a> &nbsp;&middot;&nbsp; <a href="#">Support</a>
             </p>
         </div>
     </div>
@@ -200,8 +411,8 @@ Please login and change your password immediately.
 """
 
     body_content = f"""
-        <p>Welcome to <span class="highlight">Dooars Granthika</span>! 🎉</p>
-        <p>Your account has been created successfully. Below are your login credentials:</p>
+        <p class="greeting">Welcome aboard! 🎉</p>
+        <p>Your account at <span class="highlight">Dooars Granthika</span> has been created successfully. Here are your login credentials to get started:</p>
 
         <div class="credential-box">
             <p><strong>Login Email:</strong> <span>{email}</span></p>
@@ -209,10 +420,13 @@ Please login and change your password immediately.
         </div>
 
         <div class="warning-box">
-            ⚠️ <strong>Important:</strong> Please log in and change your password immediately for security.
+            ⚠️ <strong>Action Required:</strong> Please log in and change your password immediately to secure your account.
         </div>
 
-        <p>Happy reading and enjoy exploring our library collection!</p>
+        <hr class="divider"/>
+
+        <p>Once logged in, you'll have access to our full library catalogue, borrowing history, and member resources.</p>
+        <p>Happy reading and enjoy exploring our collection! 📖</p>
     """
 
     html_message = build_html_email("Account Credentials", body_content)
@@ -232,14 +446,20 @@ Happy Reading!
 """
 
     body_content = f"""
-        <p>Hello <span class="highlight">{user.username}</span>,</p>
-        <p>Welcome to the <strong>Dooars Granthika Library System</strong>! 📖</p>
-        <p>We're thrilled to have you as a member. You now have access to our growing collection of books, resources, and library services.</p>
+        <p class="greeting">Hello, {user.username}! 👋</p>
+        <p>Welcome to the <span class="highlight">Dooars Granthika Library System</span>. We're thrilled to have you as a member!</p>
+
+        <div class="success-box">
+            ✅ Your membership is now <strong>active</strong>. You have full access to our library collection and services.
+        </div>
 
         <hr class="divider"/>
 
-        <p>Start exploring today and make the most of your membership. If you have any questions, feel free to reach out to our library team.</p>
-        <p style="margin-top: 20px;">Happy Reading! 🌟</p>
+        <p>You can now browse our growing catalogue of books and resources, manage your borrowing history, and take advantage of all member benefits.</p>
+
+        <p>If you ever have questions or need assistance, our library team is always happy to help.</p>
+
+        <p style="margin-top: 24px; font-size: 18px;">Happy Reading! 🌟</p>
     """
 
     html_message = build_html_email("Welcome", body_content)
@@ -248,43 +468,31 @@ Happy Reading!
 # ==============================
 # 3️⃣ Password Reset Email
 # ==============================
-def send_password_reset_email(request, user):
-    subject = "Reset Your Password - Dooars Granthika"
-
-    uid = urlsafe_base64_encode(force_bytes(user.pk))
-    token = default_token_generator.make_token(user)
-    reset_link = request.build_absolute_uri(
-        reverse("password_reset_confirm", kwargs={
-            "uidb64": uid,
-            "token": token
-        })
-    )
+def send_password_reset_email(user, new_password):
+    subject = "Your New Password - Dooars Granthika"
 
     plain_message = f"""
 Hello {user.username},
-Click the link below to reset your password:
-{reset_link}
-If you did not request this, please ignore this email.
+Your password has been reset successfully.
+Your new temporary password is: {new_password}
+Please log in and change your password immediately.
+If you did not request this, please contact support.
 """
 
     body_content = f"""
-        <p>Hello <span class="highlight">{user.username}</span>,</p>
-        <p>We received a request to reset the password for your Dooars Granthika account.</p>
-        <p>Click the button below to set a new password. This link is valid for a limited time.</p>
+        <p class="greeting">Password Reset</p>
+        <p>Hello <span class="highlight">{user.username}</span>, your password has been reset successfully. Use the temporary password below to log in:</p>
 
-        <div class="btn-container">
-            <a href="{reset_link}" class="btn">🔐 Reset My Password</a>
+        <div class="credential-box">
+            <p><strong>New Password:</strong> <span>{new_password}</span></p>
         </div>
 
-        <p class="fallback-link">
-            If the button doesn't work, copy and paste this link into your browser:<br/>
-            <a href="{reset_link}">{reset_link}</a>
-        </p>
-
-        <hr class="divider"/>
-
         <div class="warning-box">
-            🛡️ If you did not request a password reset, please ignore this email. Your account remains secure.
+            ⚠️ <strong>Action Required:</strong> This is a temporary password. Please log in and set a new password immediately.
+        </div>
+
+        <div class="danger-box">
+            🛡️ <strong>Didn't request this?</strong> If you did not initiate a password reset, please contact our support team immediately as your account may be at risk.
         </div>
     """
 

@@ -2,16 +2,20 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.db import transaction
-
 from django.contrib.auth import authenticate, login, logout
-from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from datetime import timedelta
+
 from .models import Library
 from .utils import generate_random_password
-from core.email_service import send_account_credentials
+import core.email_service
 
 
+# ==========================================================
+# 🔐 SIGN IN
+# ==========================================================
 def view_signin(request):
+
     if request.method == "POST":
         username = request.POST.get("username")
         password = request.POST.get("password")
@@ -22,14 +26,14 @@ def view_signin(request):
         if user is not None:
             login(request, user)
 
-            # 🔐 Remember Me Logic
+            # Remember Me Logic
             if not remember_me:
-                request.session.set_expiry(0)  # Session expires when browser closes
+                request.session.set_expiry(0)
             else:
-                request.session.set_expiry(timedelta(days=7))  # 7 days login
+                request.session.set_expiry(timedelta(days=7))
 
             messages.success(request, "Login Successful! Welcome back.")
-            return redirect("accounts:admin_dashboard")  # change to your dashboard url name
+            return redirect("accounts:admin_dashboard")
 
         else:
             messages.error(request, "Invalid User ID or Password.")
@@ -37,12 +41,18 @@ def view_signin(request):
     return render(request, "accounts/sign_in.html")
 
 
+# ==========================================================
+# 🚪 LOGOUT
+# ==========================================================
 def view_logout(request):
     logout(request)
     messages.success(request, "Logged out successfully.")
     return redirect("accounts:signin")
 
 
+# ==========================================================
+# 📝 REGISTER LIBRARY
+# ==========================================================
 def register_library(request):
 
     if request.method == "POST":
@@ -58,7 +68,6 @@ def register_library(request):
         borrowing_period = request.POST.get("borrowing_period")
         allotted_books = request.POST.get("allotted_books")
 
-        # Check duplicate
         if User.objects.filter(username=institute_email).exists():
             messages.error(request, "Account already exists with this email.")
             return redirect("accounts:signup")
@@ -66,17 +75,14 @@ def register_library(request):
         try:
             with transaction.atomic():
 
-                # Generate password
                 raw_password = generate_random_password()
 
-                # Create user (password auto hashed by Django)
                 user = User.objects.create_user(
                     username=institute_email,
                     email=institute_email,
                     password=raw_password
                 )
 
-                # Create library profile
                 Library.objects.create(
                     user=user,
                     library_name=library_name,
@@ -91,10 +97,10 @@ def register_library(request):
                     allotted_books=allotted_books
                 )
 
-            # Send email AFTER DB success
-            email_sent = send_account_credentials(
-                email=institute_email,
-                password=raw_password
+            # Send credentials email
+            email_sent = core.email_service.send_account_credentials(
+                institute_email,
+                raw_password
             )
 
             if email_sent:
@@ -115,10 +121,6 @@ def register_library(request):
     return render(request, "accounts/sign_up.html")
 
 
-# def view_signup(request):
-#     return render(request, 'accounts/sign_up.html')
-
-
 # ==========================================================
 # 🔑 FORGOT PASSWORD
 # Auto-generate new password & email it
@@ -128,20 +130,18 @@ def view_forget_password(request):
     if request.method == "POST":
         email = request.POST.get("email")
 
-        try:
-            user = User.objects.get(email=email)
+        user = User.objects.filter(email=email).first()
 
-            # Generate new password
+        if user:
             new_password = generate_random_password()
 
-            # Set new password (auto hashed)
             user.set_password(new_password)
             user.save()
 
-            # Send email with new password
-            email_sent = send_account_credentials(
-                email=email,
-                password=new_password
+            # ✅ FIXED CALL (Correct parameters)
+            email_sent = core.email_service.send_password_reset_email(
+                user,
+                new_password
             )
 
             if email_sent:
@@ -149,14 +149,15 @@ def view_forget_password(request):
                     request,
                     "A new password has been sent to your email."
                 )
+                return redirect("accounts:signin")
             else:
                 messages.warning(
                     request,
                     "Password updated but email could not be sent."
                 )
 
-        except User.DoesNotExist:
-            # Do not reveal if email exists (security best practice)
+        else:
+            # Security best practice
             messages.success(
                 request,
                 "If this email exists, a new password has been sent."
@@ -164,5 +165,10 @@ def view_forget_password(request):
 
     return render(request, "accounts/forget_password.html")
 
+
+# ==========================================================
+# 🖥 ADMIN DASHBOARD
+# ==========================================================
+@login_required
 def admin(request):
-    return render(request, 'dashboards/admin_dashboard.html')
+    return render(request, "dashboards/admin_dashboard.html")
