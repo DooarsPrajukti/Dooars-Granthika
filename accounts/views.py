@@ -118,8 +118,51 @@ def register_library(request):
 # def view_signup(request):
 #     return render(request, 'accounts/sign_up.html')
 
+
+# ==========================================================
+# 🔑 FORGOT PASSWORD
+# Auto-generate new password & email it
+# ==========================================================
 def view_forget_password(request):
-    return render(request, 'accounts/forget_password.html')
+
+    if request.method == "POST":
+        email = request.POST.get("email")
+
+        try:
+            user = User.objects.get(email=email)
+
+            # Generate new password
+            new_password = generate_random_password()
+
+            # Set new password (auto hashed)
+            user.set_password(new_password)
+            user.save()
+
+            # Send email with new password
+            email_sent = send_account_credentials(
+                email=email,
+                password=new_password
+            )
+
+            if email_sent:
+                messages.success(
+                    request,
+                    "A new password has been sent to your email."
+                )
+            else:
+                messages.warning(
+                    request,
+                    "Password updated but email could not be sent."
+                )
+
+        except User.DoesNotExist:
+            # Do not reveal if email exists (security best practice)
+            messages.success(
+                request,
+                "If this email exists, a new password has been sent."
+            )
+
+    return render(request, "accounts/forget_password.html")
 
 def admin(request):
     return render(request, 'dashboards/admin_dashboard.html')
