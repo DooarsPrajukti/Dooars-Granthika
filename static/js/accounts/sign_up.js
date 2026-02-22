@@ -5,10 +5,12 @@
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const FIELD_IDS = [
-  "libraryName", "instituteName", "instituteEmail",
-  "address", "district", "state", "country",
+  "libraryName", "instituteName", "instituteType", "instituteEmail",
+  "phoneNumber", "address", "district", "state", "country",
   "latefine", "borrowingPeriod", "AlottedBooks"
 ];
+
+const OPTIONAL_FIELDS = ["phoneNumber"];
 
 // ===========================
 // Message Display
@@ -28,6 +30,8 @@ function showMessage(message, type = "success") {
 // ===========================
 // Field Validation
 // ===========================
+const phoneRegex = /^[+\d][\d\s\-().]{6,19}$/;
+
 function validateField(fieldId) {
   const field = document.getElementById(fieldId);
   const group = document.getElementById(fieldId + "-group");
@@ -35,12 +39,22 @@ function validateField(fieldId) {
   if (!field || !group) return true;
 
   const value = field.value.trim();
+  const isOptional = OPTIONAL_FIELDS.includes(fieldId);
   let isValid = true;
 
+  // Optional fields: skip validation if empty, but validate format if filled
   if (!value) {
+    if (isOptional) {
+      group.classList.remove("error", "success");
+      return true;
+    }
     isValid = false;
-  } else if (fieldId === "instituteEmail" && !emailRegex.test(value)) {
-    isValid = false;
+  } else if (fieldId === "instituteType") {
+    isValid = value !== "";
+  } else if (fieldId === "instituteEmail") {
+    isValid = emailRegex.test(value);
+  } else if (fieldId === "phoneNumber") {
+    isValid = phoneRegex.test(value);
   } else if (fieldId === "latefine") {
     const num = parseFloat(value);
     isValid = !isNaN(num) && num >= 0;

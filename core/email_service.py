@@ -399,13 +399,13 @@ def send_basic_email(subject, plain_message, html_message, recipient):
 # ==============================
 # 1️⃣ Account Credentials Email
 # ==============================
-def send_account_credentials(email, password):
+def send_account_credentials(email, password, Username):
     subject = "Your Library Account Credentials"
 
     plain_message = f"""
 Welcome to Dooars Granthika!
 Your account has been created successfully.
-Login Email: {email}
+Login Username: {Username}
 Password: {password}
 Please login and change your password immediately.
 """
@@ -415,7 +415,7 @@ Please login and change your password immediately.
         <p>Your account at <span class="highlight">Dooars Granthika</span> has been created successfully. Here are your login credentials to get started:</p>
 
         <div class="credential-box">
-            <p><strong>Login Email:</strong> <span>{email}</span></p>
+            <p><strong>Login Username:</strong> <span>{Username}</span></p>
             <p><strong>Password:</strong> <span>{password}</span></p>
         </div>
 
@@ -468,27 +468,33 @@ Happy Reading!
 # ==============================
 # 3️⃣ Password Reset Email
 # ==============================
-def send_password_reset_email(user, new_password):
+def send_password_reset_email(user, new_password, lib_name, username):
     subject = "Your New Password - Dooars Granthika"
 
     plain_message = f"""
-Hello {user.username},
+Hello {lib_name},
+
 Your password has been reset successfully.
+
+Your username is: {username}
 Your new temporary password is: {new_password}
+
 Please log in and change your password immediately.
+
 If you did not request this, please contact support.
 """
 
     body_content = f"""
         <p class="greeting">Password Reset</p>
-        <p>Hello <span class="highlight">{user.username}</span>, your password has been reset successfully. Use the temporary password below to log in:</p>
+        <p>Hello <span class="highlight">{lib_name}</span>, your password has been reset successfully. Use the temporary password below to log in:</p>
 
         <div class="credential-box">
+            <p><strong>Username:</strong> <span>{username}</span></p>
             <p><strong>New Password:</strong> <span>{new_password}</span></p>
         </div>
 
         <div class="warning-box">
-            ⚠️ <strong>Action Required:</strong> This is a temporary password. Please log in and set a new password immediately.
+            ⚠️ <strong>Action Required:</strong> Please log in using this password and change it immediately for security reasons.
         </div>
 
         <div class="danger-box">
@@ -497,4 +503,6 @@ If you did not request this, please contact support.
     """
 
     html_message = build_html_email("Password Reset", body_content)
+
+    # ✅ ALWAYS send to email
     return send_basic_email(subject, plain_message, html_message, user.email)

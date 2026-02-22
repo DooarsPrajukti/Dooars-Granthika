@@ -1,4 +1,4 @@
-{% comment %} {% extends 'base.html' %} {% endcomment %}
+
 {% load static %}
 
 {% comment %} {% block title %}Admin Dashboard - Dooars Granthika{% endblock %} {% endcomment %}
@@ -11,52 +11,28 @@
 <div class="dashboard-wrapper">
 
   <!-- Sidebar -->
-  <aside class="sidebar">
+  <nav class="sidebar">
     <div class="sidebar-header">
       <div class="logo-container">
-        <img src="{% static 'assets/img/logo2.png' %}" alt="Logo" >
+        <img src="{% static 'assets/IMG/logo2.png' %}" alt="Logo" />
       </div>
-      <h3 class="logo-text">Dooars Granthika</h3>
+      <span class="logo-text">Dooars Granthika</span>
     </div>
-
-    <nav class="sidebar-nav">
-      <a href="#" class="nav-item active">
-        <span class="nav-icon">📊</span>
-        <span class="nav-text">Dashboard</span>
-      </a>
-      <a href="#" class="nav-item">
-        <span class="nav-icon">🏛️</span>
-        <span class="nav-text">Libraries</span>
-      </a>
-      <a href="#" class="nav-item">
-        <span class="nav-icon">📚</span>
-        <span class="nav-text">Books</span>
-      </a>
-      <a href="#" class="nav-item">
-        <span class="nav-icon">👥</span>
-        <span class="nav-text">Members</span>
-      </a>
-      <a href="#" class="nav-item">
-        <span class="nav-icon">📖</span>
-        <span class="nav-text">Transactions</span>
-      </a>
-      <a href="#" class="nav-item">
-        <span class="nav-icon">📈</span>
-        <span class="nav-text">Reports</span>
-      </a>
-      <a href="#" class="nav-item">
-        <span class="nav-icon">⚙️</span>
-        <span class="nav-text">Settings</span>
-      </a>
-    </nav>
-
+    <ul class="sidebar-nav">
+      <li><a class="nav-item active" href="#"><span class="nav-icon">📊</span> Dashboard</a></li>
+      <li><a class="nav-item" href="#"><span class="nav-icon">🏛️</span> Libraries</a></li>
+      <li><a class="nav-item" href="#"><span class="nav-icon">📚</span> Books</a></li>
+      <li><a class="nav-item" href="#"><span class="nav-icon">👥</span> Members</a></li>
+      <li><a class="nav-item" href="#"><span class="nav-icon">📖</span> Transactions</a></li>
+      <li><a class="nav-item" href="#"><span class="nav-icon">📈</span> Reports</a></li>
+      <li><a class="nav-item" href="{% url "accounts:settings" %}"><span class="nav-icon">⚙️</span> Settings</a></li>
+    </ul>
     <div class="sidebar-footer">
-      <a href="#" class="nav-item logout">
-        <span class="nav-icon">🚪</span>
-        <span class="nav-text">Logout</span>
+      <a class="nav-item logout" href="{% url 'accounts:signout' %}">
+        <span class="nav-icon">🚪</span> Sign Out
       </a>
     </div>
-  </aside>
+  </nav>
 
   <!-- Main Content -->
   <main class="main-content">
@@ -65,18 +41,23 @@
     <header class="top-bar">
       <div class="page-title">
         <h1>Admin Dashboard</h1>
-        <p class="subtitle">Welcome back, Administrator</p>
+        <p class="subtitle">Welcome back, {{ user.get_full_name|default:user.username }}</p>
       </div>
       <div class="top-bar-actions">
-        <button class="btn-icon" title="Notifications">
-          <span class="notification-badge">3</span>
+        <button class="btn-icon">
           🔔
+          <span class="notification-badge">3</span>
         </button>
         <div class="user-profile">
-          <img src="{% static 'assets/img/default-avatar.png' %}" alt="Admin" class="user-avatar">
           <div class="user-info">
-            <span class="user-name">Admin</span>
-            <span class="user-role">Administrator</span>
+            <span class="user-name">
+              {% if user.get_full_name %}
+                {{ user.get_full_name }}
+              {% else %}
+                {{ user.username }}
+              {% endif %}
+            </span>
+            <span class="user-role">{{ user.profile.role|default:"Administrator" }}</span>
           </div>
         </div>
       </div>
@@ -84,13 +65,16 @@
 
     <!-- Stats Cards -->
     <section class="stats-grid">
+
       <div class="stat-card">
         <div class="stat-icon blue">🏛️</div>
         <div class="stat-content">
-          <h3 class="stat-value">{{ total_libraries|default:"0" }}</h3>
-          <p class="stat-label">Total Libraries</p>
+          <div class="stat-value">{{ total_libraries|default:"0" }}</div>
+          <div class="stat-label">Total Libraries</div>
           {% if libraries_change %}
-          <span class="stat-change {{ libraries_change_class }}">{{ libraries_change }}</span>
+            <span class="stat-change {% if libraries_change >= 0 %}positive{% else %}negative{% endif %}">
+              {{ libraries_change }}
+            </span>
           {% endif %}
         </div>
       </div>
@@ -98,10 +82,12 @@
       <div class="stat-card">
         <div class="stat-icon green">📚</div>
         <div class="stat-content">
-          <h3 class="stat-value">{{ total_books|default:"0" }}</h3>
-          <p class="stat-label">Total Books</p>
+          <div class="stat-value">{{ total_books|default:"0" }}</div>
+          <div class="stat-label">Total Books</div>
           {% if books_change %}
-          <span class="stat-change {{ books_change_class }}">{{ books_change }}</span>
+            <span class="stat-change {% if books_change >= 0 %}positive{% else %}negative{% endif %}">
+              {{ books_change }}
+            </span>
           {% endif %}
         </div>
       </div>
@@ -109,10 +95,12 @@
       <div class="stat-card">
         <div class="stat-icon purple">👥</div>
         <div class="stat-content">
-          <h3 class="stat-value">{{ total_members|default:"0" }}</h3>
-          <p class="stat-label">Active Members</p>
+          <div class="stat-value">{{ total_members|default:"0" }}</div>
+          <div class="stat-label">Active Members</div>
           {% if members_change %}
-          <span class="stat-change {{ members_change_class }}">{{ members_change }}</span>
+            <span class="stat-change {% if members_change >= 0 %}positive{% else %}negative{% endif %}">
+              {{ members_change }}
+            </span>
           {% endif %}
         </div>
       </div>
@@ -120,19 +108,22 @@
       <div class="stat-card">
         <div class="stat-icon orange">📖</div>
         <div class="stat-content">
-          <h3 class="stat-value">{{ active_transactions|default:"0" }}</h3>
-          <p class="stat-label">Active Loans</p>
+          <div class="stat-value">{{ active_transactions|default:"0" }}</div>
+          <div class="stat-label">Active Loans</div>
           {% if transactions_change %}
-          <span class="stat-change {{ transactions_change_class }}">{{ transactions_change }}</span>
+            <span class="stat-change {% if transactions_change >= 0 %}positive{% else %}negative{% endif %}">
+              {{ transactions_change }}
+            </span>
           {% endif %}
         </div>
       </div>
+
     </section>
 
-    <!-- Charts & Tables Row -->
-    <section class="dashboard-row">
-      
-      <!-- Recent Libraries -->
+    <!-- Dashboard Row: Libraries + Activity -->
+    <div class="dashboard-row">
+
+      <!-- Recent Libraries Table -->
       <div class="card">
         <div class="card-header">
           <h2 class="card-title">Recent Libraries</h2>
@@ -154,7 +145,11 @@
                 <td>{{ library.name }}</td>
                 <td>{{ library.institute_name }}</td>
                 <td>{{ library.district }}, {{ library.state }}</td>
-                <td><span class="badge {{ library.status_class }}">{{ library.status }}</span></td>
+                <td>
+                  <span class="badge {% if library.status == 'active' %}success{% elif library.status == 'inactive' %}error{% else %}warning{% endif %}">
+                    {{ library.status }}
+                  </span>
+                </td>
               </tr>
               {% empty %}
               <tr>
@@ -166,7 +161,7 @@
         </div>
       </div>
 
-      <!-- Activity Feed -->
+      <!-- Recent Activity -->
       <div class="card">
         <div class="card-header">
           <h2 class="card-title">Recent Activity</h2>
@@ -176,11 +171,11 @@
           <div class="activity-feed">
             {% for activity in recent_activities %}
             <div class="activity-item">
-              <div class="activity-icon {{ activity.icon_class }}">{{ activity.icon }}</div>
+              <div class="activity-icon {{ activity.color|default:'blue' }}">{{ activity.icon }}</div>
               <div class="activity-content">
-                <p class="activity-text"><strong>{{ activity.title }}</strong></p>
-                <p class="activity-detail">{{ activity.description }}</p>
-                <span class="activity-time">{{ activity.timestamp }}</span>
+                <div class="activity-text">{{ activity.title }}</div>
+                <div class="activity-detail">{{ activity.description }}</div>
+                <div class="activity-time">{{ activity.timestamp }}</div>
               </div>
             </div>
             {% empty %}
@@ -190,33 +185,32 @@
         </div>
       </div>
 
-    </section>
+    </div>
 
     <!-- Quick Actions -->
-    <section class="quick-actions">
+    <div class="quick-actions">
       <h2 class="section-title">Quick Actions</h2>
       <div class="actions-grid">
-        <button class="action-btn">
-          <span class="action-icon">➕</span>
+        <a href="#" class="action-btn">
+          <div class="action-icon">➕</div>
           <span class="action-text">Add Library</span>
-        </button>
-        <button class="action-btn">
-          <span class="action-icon">📚</span>
+        </a>
+        <a href="#" class="action-btn">
+          <div class="action-icon">📚</div>
           <span class="action-text">Add Books</span>
-        </button>
-        <button class="action-btn">
-          <span class="action-icon">👤</span>
+        </a>
+        <a href="#" class="action-btn">
+          <div class="action-icon">👤</div>
           <span class="action-text">Add Member</span>
-        </button>
-        <button class="action-btn">
-          <span class="action-icon">📊</span>
+        </a>
+        <a href="#" class="action-btn">
+          <div class="action-icon">📊</div>
           <span class="action-text">Generate Report</span>
-        </button>
+        </a>
       </div>
-    </section>
+    </div>
 
   </main>
-
 </div>
 {% endblock %}
 

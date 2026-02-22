@@ -69,11 +69,27 @@
                 type="text" 
                 id="instituteName" 
                 name="institute_name"
-                placeholder="Institute Name" 
+                placeholder="Institution Name" 
                 required
               />
             </div>
-            <div class="error-message">Institute name is required</div>
+            <div class="error-message">Institution name is required</div>
+          </div>
+          <div class="form-group" id="instituteType-group">
+            <div class="input-wrapper">
+              <div class="input-icon">🏛️</div>
+              <select 
+                id="instituteType" 
+                name="institute_type"
+                required
+              >
+                <option value="" disabled selected>Library Type</option>
+                <option value="private">Institution</option>
+                <option value="government_rural">Government – Rural</option>
+                <option value="government_urban">Government – Urban</option>
+              </select>
+            </div>
+            <div class="error-message">Institution type is required</div>
           </div>
         </div>
       </div>
@@ -89,11 +105,23 @@
                 type="email" 
                 id="instituteEmail" 
                 name="institute_email"
-                placeholder="Institute Email" 
+                placeholder="Official Email" 
                 required
               />
             </div>
             <div class="error-message">Valid email is required</div>
+          </div>
+          <div class="form-group" id="phoneNumber-group">
+            <div class="input-wrapper">
+              <div class="input-icon">📞</div>
+              <input 
+                type="tel" 
+                id="phoneNumber" 
+                name="phone_number"
+                placeholder="Phone Number" 
+              />
+            </div>
+            <div class="error-message">Valid phone number is required</div>
           </div>
           <div class="form-group" id="address-group">
             <div class="input-wrapper">
@@ -198,6 +226,56 @@
               />
             </div>
             <div class="error-message">Books per member must be between 1-50</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin Account Section -->
+      <div class="form-section">
+        <div class="section-title">👤 Admin Account</div>
+        <div class="form-grid">
+          <div class="form-group" id="adminFullName-group">
+            <div class="input-wrapper">
+              <div class="input-icon">🪪</div>
+              <input 
+                type="text" 
+                id="adminFullName" 
+                name="admin_full_name"
+                placeholder="Full Name" 
+                required
+              />
+            </div>
+            <div class="error-message">Full name is required</div>
+          </div>
+
+
+          <div class="form-group" id="adminPassword-group">
+            <div class="input-wrapper">
+              <div class="input-icon">🔒</div>
+              <input 
+                type="password" 
+                id="adminPassword" 
+                name="admin_password"
+                placeholder="Password" 
+                required
+                autocomplete="new-password"
+              />
+            </div>
+            <div class="error-message">Password must be at least 8 characters</div>
+          </div>
+          <div class="form-group" id="adminConfirmPassword-group">
+            <div class="input-wrapper">
+              <div class="input-icon">🔐</div>
+              <input 
+                type="password" 
+                id="adminConfirmPassword" 
+                name="admin_confirm_password"
+                placeholder="Confirm Password" 
+                required
+                autocomplete="new-password"
+              />
+            </div>
+            <div class="error-message">Passwords do not match</div>
           </div>
         </div>
       </div>

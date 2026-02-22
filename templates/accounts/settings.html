@@ -1,0 +1,435 @@
+{% comment %} {% extends 'base.html' %} {% endcomment %}
+{% load static %}
+
+{% comment %} {% block title %}Settings - Dooars Granthika{% endblock %} {% endcomment %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/accounts/settings.css' %}" />
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-wrapper">
+
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-container">
+        <img src="{% static 'assets/IMG/logo2.png' %}" alt="Logo" />
+      </div>
+      <span class="logo-text">Dooars Granthika</span>
+    </div>
+    <ul class="sidebar-nav">
+      <li><a class="nav-item" href="{% url 'accounts:admin_dashboard' %}"><span class="nav-icon">📊</span> Dashboard</a></li>
+      <li><a class="nav-item" href="#"><span class="nav-icon">🏛️</span> Libraries</a></li>
+      <li><a class="nav-item" href="#"><span class="nav-icon">📚</span> Books</a></li>
+      <li><a class="nav-item" href="#"><span class="nav-icon">👥</span> Members</a></li>
+      <li><a class="nav-item" href="#"><span class="nav-icon">📖</span> Transactions</a></li>
+      <li><a class="nav-item" href="#"><span class="nav-icon">📈</span> Reports</a></li>
+      <li><a class="nav-item active" href="{% url 'accounts:settings' %}"><span class="nav-icon">⚙️</span> Settings</a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <a class="nav-item logout" href="{% url 'accounts:signout' %}">
+        <span class="nav-icon">🚪</span> Logout
+      </a>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="page-title">
+        <h1>Settings</h1>
+        <p class="subtitle">Manage your account and system preferences</p>
+      </div>
+      <div class="top-bar-actions">
+        <div class="user-profile">
+          <div class="user-info">
+            <span class="user-name">
+              {% if user.get_full_name %}{{ user.get_full_name }}{% else %}{{ user.username }}{% endif %}
+            </span>
+            <span class="user-role">{{ user.profile.role|default:"Administrator" }}</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Settings Layout -->
+    <div class="settings-layout">
+
+      <!-- Tab Nav -->
+      <nav class="settings-nav" id="settings-nav">
+        <button class="settings-tab active" data-tab="profile">
+          <span class="tab-icon">👤</span>
+          <span class="tab-label">Profile</span>
+        </button>
+        <button class="settings-tab" data-tab="security">
+          <span class="tab-icon">🔒</span>
+          <span class="tab-label">Security</span>
+        </button>
+        <button class="settings-tab" data-tab="system">
+          <span class="tab-icon">🏛️</span>
+          <span class="tab-label">System</span>
+        </button>
+        <button class="settings-tab" data-tab="notifications">
+          <span class="tab-icon">🔔</span>
+          <span class="tab-label">Notifications</span>
+        </button>
+        <button class="settings-tab" data-tab="fine">
+          <span class="tab-icon">💰</span>
+          <span class="tab-label">Fine & Loans</span>
+        </button>
+      </nav>
+
+      <!-- Single Form wraps ALL panels -->
+      <form class="settings-panels"
+            method="POST"
+            action="{% url 'accounts:settings' %}"
+            enctype="multipart/form-data"
+            id="settings-form">
+        {% csrf_token %}
+
+        <!-- Hidden: which tab was active when Save was clicked -->
+        <input type="hidden" name="form_type" id="form_type" value="profile" />
+
+        <!-- ==================
+             PROFILE TAB
+             ================== -->
+        <div class="settings-panel active" id="tab-profile">
+
+          <div class="panel-section">
+            <h2 class="section-heading">Personal Information</h2>
+            <p class="section-desc">Update your name, email and profile photo.</p>
+
+            <div class="avatar-row">
+              <div class="avatar-wrap">
+                {% if user.profile.avatar %}
+                  <img src="{{ user.profile.avatar.url }}" alt="Avatar" class="avatar-img" id="avatar-preview" />
+                {% else %}
+                  <div class="avatar-placeholder" id="avatar-preview">
+                    {{ user.get_full_name|first|upper|default:user.username|first|upper }}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="avatar-actions">
+                <label class="btn btn-secondary" for="avatar-upload">Upload Photo</label>
+                <input type="file" id="avatar-upload" name="avatar" accept="image/*" class="sr-only" />
+                <p class="field-hint">JPG, PNG or GIF · Max 2MB</p>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="field-group">
+                <label class="field-label" for="first_name">First Name</label>
+                <input class="field-input" type="text" id="first_name" name="first_name"
+                       value="{{ user.first_name }}" placeholder="Enter first name" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="last_name">Last Name</label>
+                <input class="field-input" type="text" id="last_name" name="last_name"
+                       value="{{ user.last_name }}" placeholder="Enter last name" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="email">Email Address</label>
+                <input class="field-input" type="email" id="email" name="email"
+                       value="{{ user.email }}" placeholder="Enter email" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="phone">Phone Number</label>
+                <input class="field-input" type="text" id="phone" name="phone"
+                       value="{{ user.profile.phone }}" placeholder="Enter phone number" />
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-footer">
+            <button type="submit" class="btn btn-primary" data-form="profile">Save Changes</button>
+          </div>
+
+        </div><!-- /tab-profile -->
+
+        <!-- ==================
+             SECURITY TAB
+             ================== -->
+        <div class="settings-panel" id="tab-security">
+
+          <div class="panel-section">
+            <h2 class="section-heading">Change Password</h2>
+            <p class="section-desc">Use a strong password at least 8 characters long.</p>
+
+            <div class="form-grid form-grid--single">
+              <div class="field-group">
+                <label class="field-label" for="current_password">Current Password</label>
+                <input class="field-input" type="password" id="current_password"
+                       name="current_password" placeholder="Enter current password" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="new_password">New Password</label>
+                <input class="field-input" type="password" id="new_password"
+                       name="new_password" placeholder="Enter new password" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="confirm_password">Confirm New Password</label>
+                <input class="field-input" type="password" id="confirm_password"
+                       name="confirm_password" placeholder="Confirm new password" />
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <h2 class="section-heading">Login Sessions</h2>
+            <p class="section-desc">Active sessions for your account.</p>
+
+            <div class="session-list">
+              {% for session in active_sessions %}
+              <div class="session-item">
+                <div class="session-icon">{{ session.device_icon }}</div>
+                <div class="session-info">
+                  <div class="session-device">{{ session.device }}</div>
+                  <div class="session-meta">{{ session.location }} · {{ session.last_active }}</div>
+                </div>
+                {% if session.is_current %}
+                  <span class="badge success">Current</span>
+                {% else %}
+                  <button type="submit" class="btn btn-danger-sm"
+                          name="revoke_session_id" value="{{ session.id }}"
+                          data-form="revoke_session">
+                    Revoke
+                  </button>
+                {% endif %}
+              </div>
+              {% empty %}
+              <p class="empty-state">No active sessions found.</p>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="panel-footer">
+            <button type="submit" class="btn btn-primary" data-form="security">Update Password</button>
+          </div>
+
+        </div><!-- /tab-security -->
+
+        <!-- ==================
+             SYSTEM TAB
+             ================== -->
+        <div class="settings-panel" id="tab-system">
+
+          <div class="panel-section">
+            <h2 class="section-heading">Organisation Details</h2>
+            <p class="section-desc">Information shown across the platform.</p>
+
+            <div class="form-grid">
+              <div class="field-group field-group--full">
+                <label class="field-label" for="org_name">Organisation Name</label>
+                <input class="field-input" type="text" id="org_name" name="org_name"
+                       value="{{ system_settings.org_name }}" placeholder="Organisation name" />
+              </div>
+              <div class="field-group field-group--full">
+                <label class="field-label" for="org_address">Address</label>
+                <textarea class="field-input field-textarea" id="org_address" name="org_address"
+                          rows="3" placeholder="Full address">{{ system_settings.org_address }}</textarea>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="org_email">Contact Email</label>
+                <input class="field-input" type="email" id="org_email" name="org_email"
+                       value="{{ system_settings.org_email }}" placeholder="Contact email" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="org_phone">Contact Phone</label>
+                <input class="field-input" type="text" id="org_phone" name="org_phone"
+                       value="{{ system_settings.org_phone }}" placeholder="Contact phone" />
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <h2 class="section-heading">Regional Settings</h2>
+            <p class="section-desc">Timezone, language and date format.</p>
+
+            <div class="form-grid">
+              <div class="field-group">
+                <label class="field-label" for="timezone">Timezone</label>
+                <select class="field-input field-select" id="timezone" name="timezone">
+                  {% for tz in timezone_choices %}
+                    <option value="{{ tz.value }}"
+                      {% if tz.value == system_settings.timezone %}selected{% endif %}>
+                      {{ tz.label }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="language">Language</label>
+                <select class="field-input field-select" id="language" name="language">
+                  {% for lang in language_choices %}
+                    <option value="{{ lang.value }}"
+                      {% if lang.value == system_settings.language %}selected{% endif %}>
+                      {{ lang.label }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="date_format">Date Format</label>
+                <select class="field-input field-select" id="date_format" name="date_format">
+                  {% for fmt in date_format_choices %}
+                    <option value="{{ fmt.value }}"
+                      {% if fmt.value == system_settings.date_format %}selected{% endif %}>
+                      {{ fmt.label }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="currency">Currency</label>
+                <select class="field-input field-select" id="currency" name="currency">
+                  {% for cur in currency_choices %}
+                    <option value="{{ cur.value }}"
+                      {% if cur.value == system_settings.currency %}selected{% endif %}>
+                      {{ cur.label }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-footer">
+            <button type="submit" class="btn btn-primary" data-form="system">Save System Settings</button>
+          </div>
+
+        </div><!-- /tab-system -->
+
+        <!-- ==================
+             NOTIFICATIONS TAB
+             ================== -->
+        <div class="settings-panel" id="tab-notifications">
+
+          <div class="panel-section">
+            <h2 class="section-heading">Email Notifications</h2>
+            <p class="section-desc">Choose which emails you receive.</p>
+
+            <div class="toggle-list">
+              {% for notif in notification_settings %}
+              <div class="toggle-item">
+                <div class="toggle-info">
+                  <div class="toggle-label">{{ notif.label }}</div>
+                  <div class="toggle-desc">{{ notif.description }}</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" name="{{ notif.key }}"
+                         {% if notif.enabled %}checked{% endif %} />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              {% empty %}
+              <p class="empty-state">No notification settings available.</p>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="panel-footer">
+            <button type="submit" class="btn btn-primary" data-form="notifications">Save Preferences</button>
+          </div>
+
+        </div><!-- /tab-notifications -->
+
+        <!-- ==================
+             FINE & LOANS TAB
+             ================== -->
+        <div class="settings-panel" id="tab-fine">
+
+          <div class="panel-section">
+            <h2 class="section-heading">Loan Rules</h2>
+            <p class="section-desc">Default borrowing limits and durations.</p>
+
+            <div class="form-grid">
+              <div class="field-group">
+                <label class="field-label" for="max_books_per_member">Max Books per Member</label>
+                <input class="field-input" type="number" id="max_books_per_member"
+                       name="max_books_per_member" min="1"
+                       value="{{ loan_settings.max_books_per_member }}" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="loan_period_days">Loan Period (days)</label>
+                <input class="field-input" type="number" id="loan_period_days"
+                       name="loan_period_days" min="1"
+                       value="{{ loan_settings.loan_period_days }}" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="renewal_limit">Max Renewals Allowed</label>
+                <input class="field-input" type="number" id="renewal_limit"
+                       name="renewal_limit" min="0"
+                       value="{{ loan_settings.renewal_limit }}" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="renewal_period_days">Renewal Period (days)</label>
+                <input class="field-input" type="number" id="renewal_period_days"
+                       name="renewal_period_days" min="1"
+                       value="{{ loan_settings.renewal_period_days }}" />
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <h2 class="section-heading">Fine Configuration</h2>
+            <p class="section-desc">Late return fines and waiver rules.</p>
+
+            <div class="form-grid">
+              <div class="field-group">
+                <label class="field-label" for="fine_per_day">Fine per Day (₹)</label>
+                <input class="field-input" type="number" id="fine_per_day"
+                       name="fine_per_day" min="0" step="0.50"
+                       value="{{ loan_settings.fine_per_day }}" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="max_fine">Maximum Fine Cap (₹)</label>
+                <input class="field-input" type="number" id="max_fine"
+                       name="max_fine" min="0"
+                       value="{{ loan_settings.max_fine }}" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="grace_period_days">Grace Period (days)</label>
+                <input class="field-input" type="number" id="grace_period_days"
+                       name="grace_period_days" min="0"
+                       value="{{ loan_settings.grace_period_days }}" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="waiver_percentage">Waiver Percentage (%)</label>
+                <input class="field-input" type="number" id="waiver_percentage"
+                       name="waiver_percentage" min="0" max="100"
+                       value="{{ loan_settings.waiver_percentage }}" />
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-footer">
+            <button type="submit" class="btn btn-primary" data-form="fine">Save Loan & Fine Settings</button>
+          </div>
+
+        </div><!-- /tab-fine -->
+
+      </form><!-- /settings-panels (single form) -->
+    </div><!-- /settings-layout -->
+
+    <!-- Toast notifications (Django messages) -->
+    {% if messages %}
+    <div class="toast-container" id="toast-container">
+      {% for message in messages %}
+      <div class="toast toast-{{ message.tags }}">
+        <span class="toast-icon">{% if message.tags == 'success' %}✅{% else %}❌{% endif %}</span>
+        <span class="toast-text">{{ message }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/accounts/settings.js' %}"></script>
+{% endblock %}
