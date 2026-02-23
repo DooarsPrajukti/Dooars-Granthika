@@ -1,219 +1,193 @@
-
+{% extends "dashboard_base.html" %}
 {% load static %}
 
-{% comment %} {% block title %}Admin Dashboard - Dooars Granthika{% endblock %} {% endcomment %}
+{% block title %}Admin Dashboard — Dooars Granthika{% endblock %}
+
+{% block nav_dashboard %}active{% endblock %}
+
+{% block page_heading %}Admin Dashboard{% endblock %}
+{% block page_subheading %}Welcome back, {{ user.get_full_name|default:user.username }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/dashboards/admin_dashboard.css' %}" />
+{# admin_dashboard.css is already loaded by the base — add any page-specific extras here #}
 {% endblock %}
 
 {% block content %}
-<div class="dashboard-wrapper">
 
-  <!-- Sidebar -->
-  <nav class="sidebar">
-    <div class="sidebar-header">
-      <div class="logo-container">
-        <img src="{% static 'assets/IMG/logo2.png' %}" alt="Logo" />
+  <!-- Stats Cards -->
+  <section class="stats-grid">
+
+    <div class="stat-card">
+      <div class="stat-icon blue"><i class="fas fa-landmark"></i></div>
+      <div class="stat-content">
+        <div class="stat-value">{{ total_libraries|default:"0" }}</div>
+        <div class="stat-label">Total Libraries</div>
+        {% if libraries_change %}
+          <span class="stat-change {% if libraries_change >= 0 %}positive{% else %}negative{% endif %}">
+            {{ libraries_change }}
+          </span>
+        {% endif %}
       </div>
-      <span class="logo-text">Dooars Granthika</span>
     </div>
-    <ul class="sidebar-nav">
-      <li><a class="nav-item active" href="#"><span class="nav-icon">📊</span> Dashboard</a></li>
-      <li><a class="nav-item" href="#"><span class="nav-icon">🏛️</span> Libraries</a></li>
-      <li><a class="nav-item" href="#"><span class="nav-icon">📚</span> Books</a></li>
-      <li><a class="nav-item" href="#"><span class="nav-icon">👥</span> Members</a></li>
-      <li><a class="nav-item" href="#"><span class="nav-icon">📖</span> Transactions</a></li>
-      <li><a class="nav-item" href="#"><span class="nav-icon">📈</span> Reports</a></li>
-      <li><a class="nav-item" href="{% url "accounts:settings" %}"><span class="nav-icon">⚙️</span> Settings</a></li>
-    </ul>
-    <div class="sidebar-footer">
-      <a class="nav-item logout" href="{% url 'accounts:signout' %}">
-        <span class="nav-icon">🚪</span> Sign Out
+
+    <div class="stat-card">
+      <div class="stat-icon green"><i class="fas fa-book"></i></div>
+      <div class="stat-content">
+        <div class="stat-value">{{ total_books|default:"0" }}</div>
+        <div class="stat-label">Total Books</div>
+        {% if books_change %}
+          <span class="stat-change {% if books_change >= 0 %}positive{% else %}negative{% endif %}">
+            {{ books_change }}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon purple"><i class="fas fa-users"></i></div>
+      <div class="stat-content">
+        <div class="stat-value">{{ total_members|default:"0" }}</div>
+        <div class="stat-label">Active Members</div>
+        {% if members_change %}
+          <span class="stat-change {% if members_change >= 0 %}positive{% else %}negative{% endif %}">
+            {{ members_change }}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon orange"><i class="fas fa-book-reader"></i></div>
+      <div class="stat-content">
+        <div class="stat-value">{{ active_transactions|default:"0" }}</div>
+        <div class="stat-label">Active Loans</div>
+        {% if transactions_change %}
+          <span class="stat-change {% if transactions_change >= 0 %}positive{% else %}negative{% endif %}">
+            {{ transactions_change }}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+
+  </section>
+
+  <!-- Charts Row -->
+  <div class="charts-row">
+
+    <div class="card chart-card">
+      <div class="card-header">
+        <h2 class="card-title">Monthly Loans</h2>
+        <span class="card-badge">Last 6 months</span>
+      </div>
+      <div class="card-body">
+        {% if monthly_loan_labels and monthly_loan_data %}
+          <canvas id="loansChart" height="220"></canvas>
+        {% else %}
+          <p class="empty-state">No loan data available</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card chart-card">
+      <div class="card-header">
+        <h2 class="card-title">Books by Category</h2>
+        <span class="card-badge">Distribution</span>
+      </div>
+      <div class="card-body chart-doughnut-body">
+        {% if category_labels and category_data %}
+          <canvas id="categoryChart" height="220"></canvas>
+        {% else %}
+          <p class="empty-state">No category data available</p>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Activity + Members Row -->
+  <div class="dashboard-row">
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Recent Activity</h2>
+        <a href="#" class="card-action">View All →</a>
+      </div>
+      <div class="card-body">
+        <div class="activity-feed">
+          {% for activity in recent_activities %}
+          <div class="activity-item">
+            <div class="activity-icon {{ activity.color }}">
+              <i class="fas fa-{{ activity.icon }}"></i>
+            </div>
+            <div class="activity-content">
+              <div class="activity-text">{{ activity.title }}</div>
+              <div class="activity-detail">{{ activity.description }}</div>
+              <div class="activity-time">{{ activity.timestamp }}</div>
+            </div>
+          </div>
+          {% empty %}
+          <p class="empty-state">No recent activity</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">New Members</h2>
+        <span class="card-badge">Last 7 days</span>
+      </div>
+      <div class="card-body">
+        {% if member_day_labels and member_day_data %}
+          <canvas id="membersChart" height="260"></canvas>
+        {% else %}
+          <p class="empty-state">No member data available</p>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="quick-actions">
+    <h2 class="section-title">Quick Actions</h2>
+    <div class="actions-grid">
+      <a href="{% url 'books:book_create' %}" class="action-btn">
+        <div class="action-icon"><i class="fas fa-book"></i></div>
+        <span class="action-text">Add Book</span>
+      </a>
+      <a href="#" class="action-btn">
+        <div class="action-icon"><i class="fas fa-user-plus"></i></div>
+        <span class="action-text">Add Member</span>
+      </a>
+      <a href="#" class="action-btn">
+        <div class="action-icon"><i class="fas fa-chart-line"></i></div>
+        <span class="action-text">Generate Report</span>
       </a>
     </div>
-  </nav>
+  </div>
 
-  <!-- Main Content -->
-  <main class="main-content">
-
-    <!-- Top Bar -->
-    <header class="top-bar">
-      <div class="page-title">
-        <h1>Admin Dashboard</h1>
-        <p class="subtitle">Welcome back, {{ user.get_full_name|default:user.username }}</p>
-      </div>
-      <div class="top-bar-actions">
-        <button class="btn-icon">
-          🔔
-          <span class="notification-badge">3</span>
-        </button>
-        <div class="user-profile">
-          <div class="user-info">
-            <span class="user-name">
-              {% if user.get_full_name %}
-                {{ user.get_full_name }}
-              {% else %}
-                {{ user.username }}
-              {% endif %}
-            </span>
-            <span class="user-role">{{ user.profile.role|default:"Administrator" }}</span>
-          </div>
-        </div>
-      </div>
-    </header>
-
-    <!-- Stats Cards -->
-    <section class="stats-grid">
-
-      <div class="stat-card">
-        <div class="stat-icon blue">🏛️</div>
-        <div class="stat-content">
-          <div class="stat-value">{{ total_libraries|default:"0" }}</div>
-          <div class="stat-label">Total Libraries</div>
-          {% if libraries_change %}
-            <span class="stat-change {% if libraries_change >= 0 %}positive{% else %}negative{% endif %}">
-              {{ libraries_change }}
-            </span>
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon green">📚</div>
-        <div class="stat-content">
-          <div class="stat-value">{{ total_books|default:"0" }}</div>
-          <div class="stat-label">Total Books</div>
-          {% if books_change %}
-            <span class="stat-change {% if books_change >= 0 %}positive{% else %}negative{% endif %}">
-              {{ books_change }}
-            </span>
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon purple">👥</div>
-        <div class="stat-content">
-          <div class="stat-value">{{ total_members|default:"0" }}</div>
-          <div class="stat-label">Active Members</div>
-          {% if members_change %}
-            <span class="stat-change {% if members_change >= 0 %}positive{% else %}negative{% endif %}">
-              {{ members_change }}
-            </span>
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon orange">📖</div>
-        <div class="stat-content">
-          <div class="stat-value">{{ active_transactions|default:"0" }}</div>
-          <div class="stat-label">Active Loans</div>
-          {% if transactions_change %}
-            <span class="stat-change {% if transactions_change >= 0 %}positive{% else %}negative{% endif %}">
-              {{ transactions_change }}
-            </span>
-          {% endif %}
-        </div>
-      </div>
-
-    </section>
-
-    <!-- Dashboard Row: Libraries + Activity -->
-    <div class="dashboard-row">
-
-      <!-- Recent Libraries Table -->
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">Recent Libraries</h2>
-          <a href="#" class="card-action">View All →</a>
-        </div>
-        <div class="card-body">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Library Name</th>
-                <th>Institute</th>
-                <th>Location</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for library in recent_libraries %}
-              <tr>
-                <td>{{ library.name }}</td>
-                <td>{{ library.institute_name }}</td>
-                <td>{{ library.district }}, {{ library.state }}</td>
-                <td>
-                  <span class="badge {% if library.status == 'active' %}success{% elif library.status == 'inactive' %}error{% else %}warning{% endif %}">
-                    {{ library.status }}
-                  </span>
-                </td>
-              </tr>
-              {% empty %}
-              <tr>
-                <td colspan="4" class="empty-state">No libraries registered yet</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Recent Activity -->
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">Recent Activity</h2>
-          <a href="#" class="card-action">View All →</a>
-        </div>
-        <div class="card-body">
-          <div class="activity-feed">
-            {% for activity in recent_activities %}
-            <div class="activity-item">
-              <div class="activity-icon {{ activity.color|default:'blue' }}">{{ activity.icon }}</div>
-              <div class="activity-content">
-                <div class="activity-text">{{ activity.title }}</div>
-                <div class="activity-detail">{{ activity.description }}</div>
-                <div class="activity-time">{{ activity.timestamp }}</div>
-              </div>
-            </div>
-            {% empty %}
-            <p class="empty-state">No recent activity</p>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Quick Actions -->
-    <div class="quick-actions">
-      <h2 class="section-title">Quick Actions</h2>
-      <div class="actions-grid">
-        <a href="#" class="action-btn">
-          <div class="action-icon">➕</div>
-          <span class="action-text">Add Library</span>
-        </a>
-        <a href="#" class="action-btn">
-          <div class="action-icon">📚</div>
-          <span class="action-text">Add Books</span>
-        </a>
-        <a href="#" class="action-btn">
-          <div class="action-icon">👤</div>
-          <span class="action-text">Add Member</span>
-        </a>
-        <a href="#" class="action-btn">
-          <div class="action-icon">📊</div>
-          <span class="action-text">Generate Report</span>
-        </a>
-      </div>
-    </div>
-
-  </main>
-</div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="{% static 'js/dashboard/admin_dashboard.js' %}"></script>
+<script>
+  window.DASHBOARD_DATA = {
+    loansChart: {
+      enabled: {% if monthly_loan_labels and monthly_loan_data %}true{% else %}false{% endif %},
+      labels:  {% if monthly_loan_labels %}{{ monthly_loan_labels|safe }}{% else %}[]{% endif %},
+      data:    {% if monthly_loan_data %}{{ monthly_loan_data|safe }}{% else %}[]{% endif %}
+    },
+    categoryChart: {
+      enabled: {% if category_labels and category_data %}true{% else %}false{% endif %},
+      labels:  {% if category_labels %}{{ category_labels|safe }}{% else %}[]{% endif %},
+      data:    {% if category_data %}{{ category_data|safe }}{% else %}[]{% endif %}
+    },
+    membersChart: {
+      enabled: {% if member_day_labels and member_day_data %}true{% else %}false{% endif %},
+      labels:  {% if member_day_labels %}{{ member_day_labels|safe }}{% else %}[]{% endif %},
+      data:    {% if member_day_data %}{{ member_day_data|safe }}{% else %}[]{% endif %}
+    }
+  };
+</script>
 {% endblock %}

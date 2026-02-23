@@ -1,0 +1,40 @@
+{# ── Partial: book_filters.html ── #}
+
+<div class="filters-bar">
+
+  {# Search #}
+  <div class="search-wrapper">
+    <i class="fas fa-search search-icon"></i>
+    <input
+      type="text"
+      id="bookSearch"
+      class="search-input"
+      placeholder="Search books, authors, ISBN…"
+      autocomplete="off"
+    />
+  </div>
+
+  {# Category Filter — populated from DB via context `categories` #}
+  <select id="categoryFilter" class="filter-select">
+    <option value="">All Categories</option>
+    {% for category in categories %}
+      <option value="{{ category.slug }}" {% if request.GET.category == category.slug %}selected{% endif %}>
+        {{ category.name }}
+      </option>
+    {% endfor %}
+  </select>
+
+  {# Stock Status Filter #}
+  <select id="stockFilter" class="filter-select">
+    <option value="">All Stock Status</option>
+    <option value="available"  {% if request.GET.stock == 'available'  %}selected{% endif %}>Available</option>
+    <option value="low-stock"  {% if request.GET.stock == 'low-stock'  %}selected{% endif %}>Low Stock</option>
+    <option value="out-stock"  {% if request.GET.stock == 'out-stock'  %}selected{% endif %}>Out of Stock</option>
+  </select>
+
+  {# Reset #}
+  <a href="{% url 'books:book_list' %}" class="btn btn-outline btn-sm" data-tooltip="Clear filters">
+    <i class="fas fa-times"></i> Reset
+  </a>
+
+</div>

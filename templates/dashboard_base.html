@@ -1,0 +1,145 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Dooars Granthika{% endblock %}</title>
+
+  <!-- Fonts & Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+  <!-- Global dashboard base styles -->
+  <link rel="stylesheet" href="{% static 'css/dashboards/admin_dashboard.css' %}" />
+
+  <!-- Per-page extra CSS -->
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<div class="dashboard-wrapper">
+
+  <!-- ═══════════════════════════════════════════
+       SIDEBAR
+  ════════════════════════════════════════════ -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-container">
+        <img src="{% static 'assets/IMG/logo2.png' %}" alt="Logo" />
+      </div>
+      <span class="logo-text">Dooars Granthika</span>
+    </div>
+
+    <ul class="sidebar-nav">
+      <li>
+        <a class="nav-item {% block nav_dashboard %}{% endblock %}"
+           href="{% url 'accounts:admin_dashboard' %}">
+          <span class="nav-icon"><i class="fas fa-chart-bar"></i></span> Dashboard
+        </a>
+      </li>
+      <li>
+        <a class="nav-item {% block nav_libraries %}{% endblock %}" href="#">
+          <span class="nav-icon"><i class="fas fa-landmark"></i></span> Libraries
+        </a>
+      </li>
+      <li>
+        <a class="nav-item {% block nav_books %}{% endblock %}"
+           href="{% url 'books:book_list' %}">
+          <span class="nav-icon"><i class="fas fa-book"></i></span> Books
+        </a>
+      </li>
+      <li>
+        <a class="nav-item {% block nav_members %}{% endblock %}" href="#">
+          <span class="nav-icon"><i class="fas fa-users"></i></span> Members
+        </a>
+      </li>
+      <li>
+        <a class="nav-item {% block nav_transactions %}{% endblock %}" href="#">
+          <span class="nav-icon"><i class="fas fa-exchange-alt"></i></span> Transactions
+        </a>
+      </li>
+      <li>
+        <a class="nav-item {% block nav_reports %}{% endblock %}" href="#">
+          <span class="nav-icon"><i class="fas fa-chart-line"></i></span> Reports
+        </a>
+      </li>
+      <li>
+        <a class="nav-item {% block nav_settings %}{% endblock %}"
+           href="{% url 'accounts:settings' %}">
+          <span class="nav-icon"><i class="fas fa-cog"></i></span> Settings
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <a class="nav-item logout" href="{% url 'accounts:signout' %}">
+        <span class="nav-icon"><i class="fas fa-sign-out-alt"></i></span> Sign Out
+      </a>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════
+       MAIN CONTENT
+  ════════════════════════════════════════════ -->
+  <main class="main-content">
+
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="page-title">
+        <h1>{% block page_heading %}Dashboard{% endblock %}</h1>
+        <p class="subtitle">{% block page_subheading %}Welcome back, {{ user.get_full_name|default:user.username }}{% endblock %}</p>
+      </div>
+      <div class="top-bar-actions">
+        <button class="btn-icon" title="Notifications">
+          <i class="fas fa-bell"></i>
+          {% if notification_count %}
+            <span class="notification-badge">{{ notification_count }}</span>
+          {% endif %}
+        </button>
+        <div class="user-profile">
+          {% if library_logo_b64 %}
+            <img src="{{ library_logo_b64 }}" alt="Organisation Logo"
+                 class="avatar-img" id="avatar-preview" />
+          {% else %}
+            <div class="user-info">
+              <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
+              {% if user.profile.role %}
+                <span class="user-role">{{ user.profile.role }}</span>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </header>
+
+    <!-- Django messages (success / error / warning toasts) -->
+    {% if messages %}
+    <div class="messages-container">
+      {% for message in messages %}
+      <div class="message message--{{ message.tags }}">
+        <i class="fas fa-{% if message.tags == 'success' %}check-circle{% elif message.tags == 'error' %}exclamation-circle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>
+        {{ message }}
+        <button class="message-close" onclick="this.parentElement.remove()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Page content -->
+    <div class="content-area">
+      {% block content %}{% endblock %}
+    </div>
+
+  </main>
+</div><!-- /.dashboard-wrapper -->
+
+<!-- ═══════════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% block extra_js %}{% endblock %}
+
+</body>
+</html>

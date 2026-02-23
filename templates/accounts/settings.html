@@ -49,7 +49,7 @@
             <span class="user-name">
               {% if user.get_full_name %}{{ user.get_full_name }}{% else %}{{ user.username }}{% endif %}
             </span>
-            <span class="user-role">{{ user.profile.role|default:"Administrator" }}</span>
+            <span class="user-role">Administrator</span>
           </div>
         </div>
       </div>
@@ -90,7 +90,7 @@
             id="settings-form">
         {% csrf_token %}
 
-        <!-- Hidden: which tab was active when Save was clicked -->
+        <!-- Hidden: which tab was submitted -->
         <input type="hidden" name="form_type" id="form_type" value="profile" />
 
         <!-- ==================
@@ -99,25 +99,30 @@
         <div class="settings-panel active" id="tab-profile">
 
           <div class="panel-section">
-            <h2 class="section-heading">Personal Information</h2>
-            <p class="section-desc">Update your name, email and profile photo.</p>
+            <h2 class="section-heading">Organisation Logo</h2>
+            <p class="section-desc">This logo appears across the platform. JPG, PNG or GIF · Max 2MB.</p>
 
             <div class="avatar-row">
               <div class="avatar-wrap">
-                {% if user.profile.avatar %}
-                  <img src="{{ user.profile.avatar.url }}" alt="Avatar" class="avatar-img" id="avatar-preview" />
+                {% if library_logo_b64 %}
+                  <img src="{{ library_logo_b64 }}" alt="Organisation Logo" class="avatar-img" id="avatar-preview" />
                 {% else %}
                   <div class="avatar-placeholder" id="avatar-preview">
-                    {{ user.get_full_name|first|upper|default:user.username|first|upper }}
+                    {{ library.library_name|first|upper }}
                   </div>
                 {% endif %}
               </div>
               <div class="avatar-actions">
-                <label class="btn btn-secondary" for="avatar-upload">Upload Photo</label>
-                <input type="file" id="avatar-upload" name="avatar" accept="image/*" class="sr-only" />
-                <p class="field-hint">JPG, PNG or GIF · Max 2MB</p>
+                <label class="btn btn-secondary" for="avatar-upload">Upload Logo</label>
+                <input type="file" id="avatar-upload" name="library_logo" accept="image/*" class="sr-only" />
+                <button type="submit" class="btn btn-danger-sm" name="remove_logo" value="1" data-form="profile">Remove Logo</button>
               </div>
             </div>
+          </div>
+
+          <div class="panel-section">
+            <h2 class="section-heading">Personal Information</h2>
+            <p class="section-desc">Update your name and email.</p>
 
             <div class="form-grid">
               <div class="field-group">
@@ -137,8 +142,8 @@
               </div>
               <div class="field-group">
                 <label class="field-label" for="phone">Phone Number</label>
-                <input class="field-input" type="text" id="phone" name="phone"
-                       value="{{ user.profile.phone }}" placeholder="Enter phone number" />
+                <input class="field-input" type="text" id="phone" name="phone_number"
+                       value="{{ library.phone_number }}" placeholder="Enter phone number" />
               </div>
             </div>
           </div>
@@ -222,76 +227,52 @@
 
             <div class="form-grid">
               <div class="field-group field-group--full">
-                <label class="field-label" for="org_name">Organisation Name</label>
-                <input class="field-input" type="text" id="org_name" name="org_name"
+                <label class="field-label" for="library_name">Organisation Name</label>
+                <input class="field-input" type="text" id="library_name" name="library_name"
                        value="{{ system_settings.org_name }}" placeholder="Organisation name" />
               </div>
               <div class="field-group field-group--full">
-                <label class="field-label" for="org_address">Address</label>
-                <textarea class="field-input field-textarea" id="org_address" name="org_address"
+                <label class="field-label" for="address">Address</label>
+                <textarea class="field-input field-textarea" id="address" name="address"
                           rows="3" placeholder="Full address">{{ system_settings.org_address }}</textarea>
               </div>
               <div class="field-group">
-                <label class="field-label" for="org_email">Contact Email</label>
-                <input class="field-input" type="email" id="org_email" name="org_email"
+                <label class="field-label" for="institute_email">Contact Email</label>
+                <input class="field-input" type="email" id="institute_email" name="institute_email"
                        value="{{ system_settings.org_email }}" placeholder="Contact email" />
               </div>
               <div class="field-group">
                 <label class="field-label" for="org_phone">Contact Phone</label>
-                <input class="field-input" type="text" id="org_phone" name="org_phone"
+                <input class="field-input" type="text" id="org_phone" name="phone_number"
                        value="{{ system_settings.org_phone }}" placeholder="Contact phone" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="district">District</label>
+                <input class="field-input" type="text" id="district" name="district"
+                       value="{{ system_settings.district }}" placeholder="District" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="state">State</label>
+                <input class="field-input" type="text" id="state" name="state"
+                       value="{{ system_settings.state }}" placeholder="State" />
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="country">Country</label>
+                <input class="field-input" type="text" id="country" name="country"
+                       value="{{ system_settings.country }}" placeholder="Country" />
               </div>
             </div>
           </div>
 
           <div class="panel-section">
-            <h2 class="section-heading">Regional Settings</h2>
-            <p class="section-desc">Timezone, language and date format.</p>
+            <h2 class="section-heading">Appearance</h2>
+            <p class="section-desc">Customise the look of your dashboard.</p>
 
             <div class="form-grid">
               <div class="field-group">
-                <label class="field-label" for="timezone">Timezone</label>
-                <select class="field-input field-select" id="timezone" name="timezone">
-                  {% for tz in timezone_choices %}
-                    <option value="{{ tz.value }}"
-                      {% if tz.value == system_settings.timezone %}selected{% endif %}>
-                      {{ tz.label }}
-                    </option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="language">Language</label>
-                <select class="field-input field-select" id="language" name="language">
-                  {% for lang in language_choices %}
-                    <option value="{{ lang.value }}"
-                      {% if lang.value == system_settings.language %}selected{% endif %}>
-                      {{ lang.label }}
-                    </option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="date_format">Date Format</label>
-                <select class="field-input field-select" id="date_format" name="date_format">
-                  {% for fmt in date_format_choices %}
-                    <option value="{{ fmt.value }}"
-                      {% if fmt.value == system_settings.date_format %}selected{% endif %}>
-                      {{ fmt.label }}
-                    </option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="currency">Currency</label>
-                <select class="field-input field-select" id="currency" name="currency">
-                  {% for cur in currency_choices %}
-                    <option value="{{ cur.value }}"
-                      {% if cur.value == system_settings.currency %}selected{% endif %}>
-                      {{ cur.label }}
-                    </option>
-                  {% endfor %}
-                </select>
+                <label class="field-label" for="primary_color">Primary Colour</label>
+                <input class="field-input" type="color" id="primary_color" name="primary_color"
+                       value="{{ system_settings.primary_color }}" />
               </div>
             </div>
           </div>
@@ -365,17 +346,17 @@
                        value="{{ loan_settings.renewal_limit }}" />
               </div>
               <div class="field-group">
-                <label class="field-label" for="renewal_period_days">Renewal Period (days)</label>
-                <input class="field-input" type="number" id="renewal_period_days"
-                       name="renewal_period_days" min="1"
-                       value="{{ loan_settings.renewal_period_days }}" />
+                <label class="field-label" for="grace_period_days">Grace Period (days)</label>
+                <input class="field-input" type="number" id="grace_period_days"
+                       name="grace_period_days" min="0"
+                       value="{{ loan_settings.grace_period_days }}" />
               </div>
             </div>
           </div>
 
           <div class="panel-section">
             <h2 class="section-heading">Fine Configuration</h2>
-            <p class="section-desc">Late return fines and waiver rules.</p>
+            <p class="section-desc">Late return fines.</p>
 
             <div class="form-grid">
               <div class="field-group">
@@ -384,23 +365,68 @@
                        name="fine_per_day" min="0" step="0.50"
                        value="{{ loan_settings.fine_per_day }}" />
               </div>
-              <div class="field-group">
-                <label class="field-label" for="max_fine">Maximum Fine Cap (₹)</label>
-                <input class="field-input" type="number" id="max_fine"
-                       name="max_fine" min="0"
-                       value="{{ loan_settings.max_fine }}" />
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <h2 class="section-heading">Rule Toggles</h2>
+            <p class="section-desc">Enable or disable specific loan behaviours.</p>
+
+            <div class="toggle-list">
+              <div class="toggle-item">
+                <div class="toggle-info">
+                  <div class="toggle-label">Auto Fine</div>
+                  <div class="toggle-desc">Automatically apply fines when a book is overdue.</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" name="auto_fine"
+                         {% if loan_settings.auto_fine %}checked{% endif %} />
+                  <span class="toggle-slider"></span>
+                </label>
               </div>
-              <div class="field-group">
-                <label class="field-label" for="grace_period_days">Grace Period (days)</label>
-                <input class="field-input" type="number" id="grace_period_days"
-                       name="grace_period_days" min="0"
-                       value="{{ loan_settings.grace_period_days }}" />
+              <div class="toggle-item">
+                <div class="toggle-info">
+                  <div class="toggle-label">Allow Renewal</div>
+                  <div class="toggle-desc">Let members renew borrowed books.</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" name="allow_renewal"
+                         {% if loan_settings.allow_renewal %}checked{% endif %} />
+                  <span class="toggle-slider"></span>
+                </label>
               </div>
-              <div class="field-group">
-                <label class="field-label" for="waiver_percentage">Waiver Percentage (%)</label>
-                <input class="field-input" type="number" id="waiver_percentage"
-                       name="waiver_percentage" min="0" max="100"
-                       value="{{ loan_settings.waiver_percentage }}" />
+              <div class="toggle-item">
+                <div class="toggle-info">
+                  <div class="toggle-label">Allow Partial Payment</div>
+                  <div class="toggle-desc">Accept partial fine payments from members.</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" name="allow_partial_payment"
+                         {% if loan_settings.allow_partial_payment %}checked{% endif %} />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="toggle-item">
+                <div class="toggle-info">
+                  <div class="toggle-label">Auto Mark Lost</div>
+                  <div class="toggle-desc">Automatically mark severely overdue books as lost.</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" name="auto_mark_lost"
+                         {% if loan_settings.auto_mark_lost %}checked{% endif %} />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="toggle-item">
+                <div class="toggle-info">
+                  <div class="toggle-label">Allow Advance Booking</div>
+                  <div class="toggle-desc">Let members reserve books before they are available.</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" name="allow_advance_booking"
+                         {% if loan_settings.allow_advance_booking %}checked{% endif %} />
+                  <span class="toggle-slider"></span>
+                </label>
               </div>
             </div>
           </div>

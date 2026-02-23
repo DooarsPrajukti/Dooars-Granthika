@@ -1,0 +1,208 @@
+{% extends "dashboard_base.html" %}
+{% load static %}
+
+{% block title %}{% if form.instance.pk %}Edit Book{% else %}Add New Book{% endif %} — Dooars Granthika{% endblock %}
+{% block nav_books %}active{% endblock %}
+{% block page_heading %}{% if form.instance.pk %}Edit Book{% else %}Add New Book{% endif %}{% endblock %}
+{% block page_subheading %}{% if form.instance.pk %}Update the details for {{ form.instance.title }}{% else %}Fill in the form below to register a new book{% endif %}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/books/books.css' %}" />
+{% endblock %}
+
+{% block content %}
+
+  <nav class="breadcrumb">
+    <a href="{% url 'accounts:admin_dashboard' %}"><i class="fas fa-home"></i> Dashboard</a>
+    <span class="breadcrumb-sep">›</span>
+    <a href="{% url 'books:book_list' %}">Books</a>
+    <span class="breadcrumb-sep">›</span>
+    <span>{% if form.instance.pk %}Edit: {{ form.instance.title }}{% else %}Add New Book{% endif %}</span>
+  </nav>
+
+  <div class="books-page-header animate-in" style="margin-bottom:24px;">
+    <div class="header-text">
+      <h1>
+        <i class="fas fa-{% if form.instance.pk %}pen{% else %}plus-circle{% endif %}"></i>
+        {% if form.instance.pk %}Edit Book{% else %}Add New Book{% endif %}
+      </h1>
+      <p>
+        {% if form.instance.pk %}Update the details for <em>{{ form.instance.title }}</em>
+        {% else %}Fill in the form below to register a new book{% endif %}
+      </p>
+    </div>
+    <div class="header-actions">
+      <a href="{% url 'books:book_list' %}" class="btn btn-ghost btn-sm">
+        <i class="fas fa-times"></i> Cancel
+      </a>
+    </div>
+  </div>
+
+  <div class="card form-card animate-in">
+    <div class="card-header">
+      <span class="card-title">
+        <i class="fas fa-book" style="color:var(--ink-accent);"></i>
+        Book Information
+      </span>
+      <span class="text-sm text-muted">Fields marked <span style="color:var(--red);">*</span> are required</span>
+    </div>
+
+    <div class="card-body">
+      <form id="bookForm" method="POST" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <div class="form-grid">
+
+          <div class="form-divider">
+            <i class="fas fa-info-circle" style="color:var(--ink-accent);"></i>
+            Basic Information
+          </div>
+
+          <div class="form-group full-width">
+            <label class="form-label" for="id_title">Book Title <span class="required">*</span></label>
+            <input type="text" id="id_title" name="title"
+              class="form-control {% if form.title.errors %}is-invalid{% endif %}"
+              placeholder="e.g. The Great Gatsby"
+              value="{{ form.title.value|default:'' }}" required>
+            <div class="invalid-feedback"><i class="fas fa-exclamation-circle"></i>
+              {% if form.title.errors %}{{ form.title.errors|join:", " }}{% else %}Book title is required.{% endif %}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="id_author">Author <span class="required">*</span></label>
+            <input type="text" id="id_author" name="author"
+              class="form-control {% if form.author.errors %}is-invalid{% endif %}"
+              placeholder="e.g. F. Scott Fitzgerald"
+              value="{{ form.author.value|default:'' }}" required>
+            <div class="invalid-feedback"><i class="fas fa-exclamation-circle"></i>
+              {% if form.author.errors %}{{ form.author.errors|join:", " }}{% else %}Author name is required.{% endif %}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="id_isbn">ISBN <span class="required">*</span></label>
+            <input type="text" id="id_isbn" name="isbn"
+              class="form-control {% if form.isbn.errors %}is-invalid{% endif %}"
+              placeholder="e.g. 978-0-7432-7356-5"
+              value="{{ form.isbn.value|default:'' }}" required>
+            <div class="invalid-feedback"><i class="fas fa-exclamation-circle"></i>
+              {% if form.isbn.errors %}{{ form.isbn.errors|join:", " }}{% else %}ISBN is required.{% endif %}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="id_category">Category <span class="required">*</span></label>
+            <select id="id_category" name="category" class="form-control" required>
+              <option value="">— Select Category —</option>
+              {% for category in categories %}
+                <option value="{{ category.pk }}" {% if form.category.value == category.pk %}selected{% endif %}>
+                  {{ category.name }}
+                </option>
+              {% endfor %}
+            </select>
+            <div class="invalid-feedback"><i class="fas fa-exclamation-circle"></i> Please select a category.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="id_publisher">Publisher</label>
+            <input type="text" id="id_publisher" name="publisher"
+              class="form-control" placeholder="e.g. Penguin Books"
+              value="{{ form.publisher.value|default:'' }}">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="id_publication_year">Publication Year</label>
+            <input type="number" id="id_publication_year" name="publication_year"
+              class="form-control" placeholder="e.g. 2020" min="1000" max="2099"
+              value="{{ form.publication_year.value|default:'' }}">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="id_language">Language</label>
+            <select id="id_language" name="language" class="form-control">
+              <option value="">— Select Language —</option>
+              <option value="English"  {% if form.language.value == "English"  %}selected{% endif %}>English</option>
+              <option value="Bengali"  {% if form.language.value == "Bengali"  %}selected{% endif %}>Bengali</option>
+              <option value="Hindi"    {% if form.language.value == "Hindi"    %}selected{% endif %}>Hindi</option>
+              <option value="Sanskrit" {% if form.language.value == "Sanskrit" %}selected{% endif %}>Sanskrit</option>
+              <option value="Nepali"   {% if form.language.value == "Nepali"   %}selected{% endif %}>Nepali</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="id_edition">Edition</label>
+            <input type="text" id="id_edition" name="edition"
+              class="form-control" placeholder="e.g. 3rd Edition"
+              value="{{ form.edition.value|default:'' }}">
+          </div>
+
+          <div class="form-divider">
+            <i class="fas fa-boxes" style="color:var(--ink-accent);"></i>
+            Stock &amp; Location
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="id_total_copies">Total Copies <span class="required">*</span></label>
+            <input type="number" id="id_total_copies" name="total_copies"
+              class="form-control" placeholder="e.g. 10" min="0"
+              value="{{ form.total_copies.value|default:'' }}" required>
+            <div class="invalid-feedback"><i class="fas fa-exclamation-circle"></i> Total copies is required.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="id_available_copies">Available Copies <span class="required">*</span></label>
+            <input type="number" id="id_available_copies" name="available_copies"
+              class="form-control" placeholder="e.g. 7" min="0"
+              value="{{ form.available_copies.value|default:'' }}" required>
+            <div class="invalid-feedback"><i class="fas fa-exclamation-circle"></i> Available copies is required.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="id_shelf_location">Shelf Location</label>
+            <input type="text" id="id_shelf_location" name="shelf_location"
+              class="form-control" placeholder="e.g. A-12-F"
+              value="{{ form.shelf_location.value|default:'' }}">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="id_cover_image">Cover Image</label>
+            <input type="file" id="id_cover_image" name="cover_image" class="form-control" accept="image/*">
+            {% if form.instance.cover_image %}
+              <div style="margin-top:6px;font-size:.76rem;color:var(--ink-accent);">
+                <i class="fas fa-image"></i> Current: {{ form.instance.cover_image.name }}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="form-divider">
+            <i class="fas fa-align-left" style="color:var(--ink-accent);"></i>
+            Description
+          </div>
+
+          <div class="form-group full-width">
+            <label class="form-label" for="id_description">Book Description</label>
+            <textarea id="id_description" name="description"
+              class="form-control" placeholder="A brief description of the book…"
+              rows="4">{{ form.description.value|default:'' }}</textarea>
+          </div>
+
+          <div class="form-actions">
+            <a href="{% url 'books:book_list' %}" class="btn btn-outline">
+              <i class="fas fa-times"></i> Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save"></i>
+              {% if form.instance.pk %}Update Book{% else %}Save Book{% endif %}
+            </button>
+          </div>
+
+        </div>
+      </form>
+    </div>
+  </div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/books/books.js' %}"></script>
+{% endblock %}

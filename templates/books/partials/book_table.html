@@ -1,0 +1,67 @@
+<div class="books-table-wrap">
+  <table class="books-table">
+    <thead>
+      <tr>
+        <th data-sort="sn">#<span class="sort-icon">▲</span></th>
+        <th data-sort="title">Book Title <span class="sort-icon">▲</span></th>
+        <th data-sort="author">Author <span class="sort-icon">▲</span></th>
+        <th data-sort="isbn">ISBN <span class="sort-icon">▲</span></th>
+        <th data-sort="category">Category <span class="sort-icon">▲</span></th>
+        <th data-sort="total">Total Copies <span class="sort-icon">▲</span></th>
+        <th data-sort="available">Available <span class="sort-icon">▲</span></th>
+        <th data-sort="status">Stock Status <span class="sort-icon">▲</span></th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="booksTableBody">
+      {% for book in books %}
+      <tr>
+        <td class="text-muted text-sm">{{ forloop.counter }}</td>
+        <td class="book-title-cell">{{ book.title }}</td>
+        <td>{{ book.author }}</td>
+        <td class="text-muted text-sm">{{ book.isbn }}</td>
+        <td data-category="{{ book.category.slug }}">{{ book.category.name }}</td>
+        <td>{{ book.total_copies }}</td>
+        <td><strong>{{ book.available_copies }}</strong></td>
+        <td>
+          {% if book.available_copies == 0 %}
+            <span class="badge badge-out-stock">Out of Stock</span>
+          {% elif book.available_copies <= 3 %}
+            <span class="badge badge-low-stock">Low Stock</span>
+          {% else %}
+            <span class="badge badge-available">Available</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="action-btns">
+            <a href="{% url 'books:book_detail' book.pk %}" class="action-btn action-btn-view" data-tooltip="View">
+              <i class="fas fa-eye"></i>
+            </a>
+            <a href="{% url 'books:book_update' book.pk %}" class="action-btn action-btn-edit" data-tooltip="Edit">
+              <i class="fas fa-pen"></i>
+            </a>
+            <a href="{% url 'books:book_delete' book.pk %}" class="action-btn action-btn-delete" data-tooltip="Delete">
+              <i class="fas fa-trash"></i>
+            </a>
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="9">
+          <div class="empty-state">
+            <i class="fas fa-book-open"></i>
+            <h3>No books found</h3>
+            <p class="text-sm">Try adjusting your search or filters.</p>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div id="noResults" class="empty-state no-results-hidden">
+    <i class="fas fa-search"></i>
+    <h3>No matching books</h3>
+    <p class="text-sm">No books match your search query.</p>
+  </div>
+</div>

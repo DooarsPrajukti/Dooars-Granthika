@@ -1,3 +1,4 @@
+import base64
 from datetime import timedelta
 from django.shortcuts import render, redirect
 from django.contrib.auth.models import User
@@ -180,10 +181,20 @@ def admin_dashboard(request):
 
     library = request.user.library
 
+    # Build base64 logo data-URI
+    library_logo_b64 = None
+    if library.library_logo:
+        mime = library.library_logo_mime or "image/png"
+        encoded = base64.b64encode(bytes(library.library_logo)).decode("utf-8")
+        library_logo_b64 = f"data:{mime};base64,{encoded}"
+
     return render(
         request,
         "dashboards/admin_dashboard.html",
-        {"library": library},
+        {
+            "library": library,
+            "library_logo_b64": library_logo_b64,
+        },
     )
 
 
@@ -226,7 +237,12 @@ def settings_view(request):
             library.address        = request.POST.get("address",        library.address).strip()
 
             if "library_logo" in request.FILES:
-                library.library_logo = request.FILES["library_logo"]
+                logo_file = request.FILES["library_logo"]
+                library.library_logo      = logo_file.read()
+                library.library_logo_mime = logo_file.content_type
+            elif request.POST.get("remove_logo") == "1":
+                library.library_logo      = None
+                library.library_logo_mime = None
 
             library.save()
             messages.success(request, "Profile updated successfully.")
@@ -378,6 +394,13 @@ def settings_view(request):
         "allow_advance_booking": rules.allow_advance_booking,
     })
 
+    # ── Build base64 logo data-URI for template ────────────────
+    library_logo_b64 = None
+    if library.library_logo:
+        mime = library.library_logo_mime or "image/png"
+        encoded = base64.b64encode(bytes(library.library_logo)).decode("utf-8")
+        library_logo_b64 = f"data:{mime};base64,{encoded}"
+
     context = {
         # Raw instances
         "library":               library,
@@ -391,6 +414,9 @@ def settings_view(request):
         "system_settings":       system_settings,
         "loan_settings":         loan_settings,
         "notification_settings": notification_list,
+
+        # Logo as base64 data-URI (blob from MySQL)
+        "library_logo_b64":      library_logo_b64,
 
         # Active sessions — wire up your own queryset here if needed
         "active_sessions":       [],

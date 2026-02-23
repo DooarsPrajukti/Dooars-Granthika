@@ -32,9 +32,15 @@ class Library(models.Model):
         db_index=True
     )
 
-    # 📷 Logo
-    library_logo = models.ImageField(
-        upload_to="library_logos/",
+    # 📷 Logo (stored as binary blob in MySQL)
+    library_logo = models.BinaryField(
+        blank=True,
+        null=True
+    )
+
+    # MIME type so we know how to render it (e.g. image/png, image/jpeg)
+    library_logo_mime = models.CharField(
+        max_length=50,
         blank=True,
         null=True
     )
