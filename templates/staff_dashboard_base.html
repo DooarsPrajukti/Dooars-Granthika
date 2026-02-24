@@ -1,0 +1,165 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Dooars Granthika{% endblock %}</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="{% static 'css/dashboards/staff_dashboard_base.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/dashboards/notifications.css' %}" />
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ══════════════════════════════════
+       SIDEBAR
+  ══════════════════════════════════ -->
+  <nav class="sidebar">
+
+    <div class="sidebar-brand">
+      <div class="brand-mark"><i class="fas fa-book-open"></i></div>
+      <div class="brand-text">
+        <span class="brand-name">Dooars</span>
+        <span class="brand-sub">Granthika</span>
+      </div>
+    </div>
+
+    <span class="sidebar-label">Navigation</span>
+
+    <ul class="sidebar-nav">
+      <li>
+        <a class="nav-link {% block nav_staff_dashboard %}{% endblock %}" href="{% url 'accounts:staff_dashboard' %}">
+          <span class="nav-link__icon"><i class="fas fa-chart-pie"></i></span>
+          <span class="nav-link__text">Dashboard</span>
+        </a>
+      </li>
+      <li>
+        <a class="nav-link {% block nav_books %}{% endblock %}" href="{% url 'books:book_list' %}">
+          <span class="nav-link__icon"><i class="fas fa-book"></i></span>
+          <span class="nav-link__text">Books</span>
+        </a>
+      </li>
+      <li>
+        <a class="nav-link {% block nav_members %}{% endblock %}" href="#">
+          <span class="nav-link__icon"><i class="fas fa-users"></i></span>
+          <span class="nav-link__text">Members</span>
+        </a>
+      </li>
+      <li>
+        <a class="nav-link {% block nav_transactions %}{% endblock %}" href="#">
+          <span class="nav-link__icon"><i class="fas fa-arrow-right-arrow-left"></i></span>
+          <span class="nav-link__text">Transactions</span>
+        </a>
+      </li>
+      <li>
+        <a class="nav-link {% block nav_reports %}{% endblock %}" href="#">
+          <span class="nav-link__icon"><i class="fas fa-chart-line"></i></span>
+          <span class="nav-link__text">Reports</span>
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <div class="staff-chip">
+        <div class="staff-chip__avatar">
+          {{ user.get_full_name|default:user.username|slice:":2"|upper }}
+        </div>
+        <div class="staff-chip__info">
+          <span class="staff-chip__name">{{ user.get_full_name|default:user.username }}</span>
+          <span class="staff-chip__role">{{ user.profile.role|default:"Staff" }}</span>
+        </div>
+      </div>
+      <a class="signout-link" href="{% url 'accounts:signout' %}">
+        <i class="fas fa-arrow-right-from-bracket"></i>
+        <span>Sign Out</span>
+      </a>
+    </div>
+
+  </nav>
+
+  <!-- ══════════════════════════════════
+       MAIN
+  ══════════════════════════════════ -->
+  <div class="main-wrap">
+
+    {% block topbar %}{% endblock %}
+
+    <!-- Notification Panel -->
+    <div class="notif-overlay" id="notifOverlay"></div>
+    <div class="notif-panel" id="notifPanel" role="dialog" aria-label="Notifications" aria-hidden="true">
+      <div class="notif-panel__header">
+        <div class="notif-panel__title">
+          <i class="fas fa-bell"></i> Notifications
+          {% if notification_count %}<span class="notif-panel__count" id="notifPanelCount">{{ notification_count }}</span>{% endif %}
+        </div>
+        <div class="notif-panel__actions">
+          <button class="notif-action-btn" id="markAllReadBtn" title="Mark all read"><i class="fas fa-check-double"></i></button>
+          <a href="#" class="notif-action-btn"><i class="fas fa-external-link-alt"></i></a>
+          <button class="notif-action-btn notif-action-btn--close" id="notifCloseBtn"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+      <div class="notif-panel__tabs">
+        <button class="notif-tab notif-tab--active" data-tab="all">All</button>
+        <button class="notif-tab" data-tab="unread">Unread</button>
+        <button class="notif-tab" data-tab="overdue">Overdue</button>
+        <button class="notif-tab" data-tab="system">System</button>
+      </div>
+      <div class="notif-panel__body" id="notifPanelBody">
+        {% if notifications %}
+          {% for notif in notifications %}
+          <div class="notif-item {% if not notif.is_read %}notif-item--unread{% endif %}" data-id="{{ notif.pk }}" data-type="{{ notif.notif_type|default:'system' }}">
+            <div class="notif-item__dot"></div>
+            <div class="notif-item__icon notif-item__icon--{{ notif.level|default:'info' }}"><i class="fas fa-{{ notif.icon|default:'bell' }}"></i></div>
+            <div class="notif-item__body">
+              <div class="notif-item__title">{{ notif.title }}</div>
+              <div class="notif-item__desc">{{ notif.description }}</div>
+              <div class="notif-item__meta">
+                <span class="notif-item__time">{{ notif.created_at|timesince }} ago</span>
+                {% if notif.notif_type %}<span class="notif-item__tag notif-item__tag--{{ notif.notif_type }}">{{ notif.notif_type }}</span>{% endif %}
+              </div>
+            </div>
+            <button class="notif-item__dismiss" data-id="{{ notif.pk }}"><i class="fas fa-times"></i></button>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="notif-empty" id="notifEmpty">
+            <div class="notif-empty__icon"><i class="fas fa-bell-slash"></i></div>
+            <div class="notif-empty__text">All caught up!</div>
+            <div class="notif-empty__sub">No new notifications.</div>
+          </div>
+        {% endif %}
+      </div>
+      <div class="notif-panel__footer">
+        {% comment %} <a href="{% url 'accounts:notifications' %}" class="notif-view-all">View all <i class="fas fa-arrow-right"></i></a> {% endcomment %}
+      </div>
+    </div>
+
+    {% if messages %}
+    <div class="toast-stack">
+      {% for message in messages %}
+      <div class="toast toast--{{ message.tags }}">
+        <i class="fas fa-{% if message.tags == 'success' %}check-circle{% elif message.tags == 'error' %}exclamation-circle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>
+        <span>{{ message }}</span>
+        <button class="toast-close" onclick="this.closest('.toast').remove()"><i class="fas fa-times"></i></button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="page-body">{% block content %}{% endblock %}</div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{% static 'js/dashboard/notifications.js' %}"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -446,3 +446,9 @@ class _Proxy:
     def __init__(self, data: dict):
         for k, v in data.items():
             setattr(self, k, v)
+
+
+
+
+def staff_dashboard(request):
+    return render(request, 'dashboards/staff_dashboard.html')

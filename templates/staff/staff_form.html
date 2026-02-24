@@ -1,0 +1,152 @@
+{% extends 'dashboard_base.html' %}
+{% load static %}
+
+{% block title %}{{ action }} Staff – Dooars Granthika{% endblock %}
+
+{% block nav_staff %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/staff/staff.css' %}" />
+{% endblock %}
+
+{% block topbar %}
+<header class="top-bar">
+  <div class="page-title">
+    <a href="{% url 'staff:staff_list' %}" class="back-link">
+      <i class="fas fa-arrow-left"></i> Staff
+    </a>
+    <h1>{{ action }} Staff Member</h1>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="form-page">
+  <form method="POST" enctype="multipart/form-data" class="staff-form" id="staff-form">
+    {% csrf_token %}
+
+    <!-- Photo -->
+    <div class="panel-section">
+      <h2 class="section-heading">Photo</h2>
+      <div class="avatar-row">
+        <div class="avatar-wrap">
+          {% if staff.photo_b64 %}
+            <img src="{{ staff.photo_b64 }}" alt="Photo" class="avatar-img" id="photo-preview" />
+          {% else %}
+            <div class="avatar-placeholder" id="photo-preview">
+              {% if staff %}{{ staff.initials }}{% else %}<i class="fas fa-user"></i>{% endif %}
+            </div>
+          {% endif %}
+        </div>
+        <div class="avatar-actions">
+          <label class="btn btn-secondary" for="photo-upload">
+            {% if staff.photo_b64 %}Change Photo{% else %}Upload Photo{% endif %}
+          </label>
+          <input type="file" name="photo_upload" id="photo-upload" accept="image/*" class="sr-only" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Personal Information -->
+    <div class="panel-section">
+      <h2 class="section-heading">Personal Information</h2>
+      <div class="form-grid">
+
+        <div class="field-group">
+          <label class="field-label" for="id_first_name">First Name <span class="required">*</span></label>
+          <input type="text" name="first_name" id="id_first_name" class="field-input"
+                 value="{{ staff.first_name|default:'' }}" placeholder="First name" />
+          {% if form.first_name.errors %}<div class="field-error">{{ form.first_name.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="id_last_name">Last Name <span class="required">*</span></label>
+          <input type="text" name="last_name" id="id_last_name" class="field-input"
+                 value="{{ staff.last_name|default:'' }}" placeholder="Last name" />
+          {% if form.last_name.errors %}<div class="field-error">{{ form.last_name.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="id_email">Email Address <span class="required">*</span></label>
+          <input type="email" name="email" id="id_email" class="field-input"
+                 value="{{ staff.email|default:'' }}" placeholder="Email address" />
+          {% if form.email.errors %}<div class="field-error">{{ form.email.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="id_phone_number">Phone Number</label>
+          <input type="text" name="phone_number" id="id_phone_number" class="field-input"
+                 value="{{ staff.phone_number|default:'' }}" placeholder="Phone number" />
+        </div>
+
+        <div class="field-group field-group--full">
+          <label class="field-label" for="id_address">Address</label>
+          <textarea name="address" id="id_address" class="field-input field-textarea"
+                    rows="3" placeholder="Address">{{ staff.address|default:'' }}</textarea>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Employment Details -->
+    <div class="panel-section">
+      <h2 class="section-heading">Employment Details</h2>
+      <div class="form-grid">
+
+        <div class="field-group">
+          <label class="field-label" for="id_role">Role <span class="required">*</span></label>
+          <select name="role" id="id_role" class="field-input">
+            {% for val, label in form.fields.role.choices %}
+            <option value="{{ val }}" {% if staff.role == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          {% if form.role.errors %}<div class="field-error">{{ form.role.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="id_status">Status <span class="required">*</span></label>
+          <select name="status" id="id_status" class="field-input">
+            {% for val, label in form.fields.status.choices %}
+            <option value="{{ val }}" {% if staff.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="id_date_joined">Date Joined <span class="required">*</span></label>
+          <input type="date" name="date_joined" id="id_date_joined" class="field-input"
+                 value="{{ staff.date_joined|date:'Y-m-d'|default:'' }}" />
+          {% if form.date_joined.errors %}<div class="field-error">{{ form.date_joined.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="id_date_left">Date Left</label>
+          <input type="date" name="date_left" id="id_date_left" class="field-input"
+                 value="{{ staff.date_left|date:'Y-m-d'|default:'' }}" />
+        </div>
+
+        <div class="field-group field-group--full">
+          <label class="field-label" for="id_notes">Notes</label>
+          <textarea name="notes" id="id_notes" class="field-input field-textarea"
+                    rows="3" placeholder="Any additional notes">{{ staff.notes|default:'' }}</textarea>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="panel-footer">
+      <a href="{% url 'staff:staff_list' %}" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-primary">
+        <i class="fas fa-save"></i>
+        {% if action == 'Add' %}Add Staff Member{% else %}Save Changes{% endif %}
+      </button>
+    </div>
+
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/staff/staff.js' %}"></script>
+{% endblock %}
