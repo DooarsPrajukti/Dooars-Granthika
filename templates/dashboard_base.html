@@ -38,8 +38,8 @@
         </a>
       </li>
       <li>
-        <a class="nav-item {% block nav_libraries %}{% endblock %}" href="#">
-          <span class="nav-icon"><i class="fas fa-landmark"></i></span> Libraries
+        <a class="nav-item {% block nav_staff %}{% endblock %}" href="#">
+          <span class="nav-icon"><i class="fas fa-user-tie"></i></span> Staff
         </a>
       </li>
       <li>
@@ -83,34 +83,9 @@
   ════════════════════════════════════════════ -->
   <main class="main-content">
 
-    <!-- Top Bar -->
-    <header class="top-bar">
-      <div class="page-title">
-        <h1>{% block page_heading %}Dashboard{% endblock %}</h1>
-        <p class="subtitle">{% block page_subheading %}Welcome back, {{ user.get_full_name|default:user.username }}{% endblock %}</p>
-      </div>
-      <div class="top-bar-actions">
-        <button class="btn-icon" title="Notifications">
-          <i class="fas fa-bell"></i>
-          {% if notification_count %}
-            <span class="notification-badge">{{ notification_count }}</span>
-          {% endif %}
-        </button>
-        <div class="user-profile">
-          {% if library_logo_b64 %}
-            <img src="{{ library_logo_b64 }}" alt="Organisation Logo"
-                 class="avatar-img" id="avatar-preview" />
-          {% else %}
-            <div class="user-info">
-              <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
-              {% if user.profile.role %}
-                <span class="user-role">{{ user.profile.role }}</span>
-              {% endif %}
-            </div>
-          {% endif %}
-        </div>
-      </div>
-    </header>
+    {% comment %} {# ── Top bar block — empty by default (hidden on all pages).
+         Pages that need it override this block with the topbar HTML. ── #} {% endcomment %}
+    {% block topbar %}{% endblock %}
 
     <!-- Django messages (success / error / warning toasts) -->
     {% if messages %}

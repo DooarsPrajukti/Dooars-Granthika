@@ -5,12 +5,40 @@
 
 {% block nav_dashboard %}active{% endblock %}
 
-{% block page_heading %}Admin Dashboard{% endblock %}
-{% block page_subheading %}Welcome back, {{ user.get_full_name|default:user.username }}{% endblock %}
-
 {% block extra_css %}
 {# admin_dashboard.css is already loaded by the base — add any page-specific extras here #}
 {% endblock %}
+
+{% block topbar %}
+<header class="top-bar">
+  <div class="page-title">
+    <h1>Admin Dashboard</h1>
+    <p class="subtitle">Welcome back, {{ user.get_full_name|default:user.username }}</p>
+  </div>
+  <div class="top-bar-actions">
+    <button class="btn-icon" title="Notifications">
+      <i class="fas fa-bell"></i>
+      {% if notification_count %}
+        <span class="notification-badge">{{ notification_count }}</span>
+      {% endif %}
+    </button>
+    <div class="user-profile">
+      {% if library_logo_b64 %}
+        <img src="{{ library_logo_b64 }}" alt="Organisation Logo"
+             class="avatar-img" id="avatar-preview" />
+      {% else %}
+        <div class="user-info">
+          <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
+          {% if user.profile.role %}
+            <span class="user-role">{{ user.profile.role }}</span>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</header>
+{% endblock %}
+
 
 {% block content %}
 
@@ -168,6 +196,7 @@
   </div>
 
 {% endblock %}
+
 
 {% block extra_js %}
 <script src="{% static 'js/dashboard/admin_dashboard.js' %}"></script>

@@ -6,6 +6,7 @@ URL names used in templates (must match urls.py exactly):
   books:book_list        books:book_detail     books:book_create
   books:book_update      books:book_delete     books:stock_dashboard
   books:export_books     books:export_books_excel  books:update_stock
+  books:import_books_excel  books:download_import_template  books:book_cover
 
 Context variables consumed by each template are noted above each view.
 """
@@ -14,14 +15,11 @@ import io
 from datetime import date
 
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse_lazy
-from django.views.generic import (
-    CreateView, DeleteView, DetailView, ListView, UpdateView,
-)
 
 from .forms import BookForm
 from .models import Book, Category
@@ -33,6 +31,16 @@ LOW_STOCK_THRESHOLD = 3
 # ─────────────────────────────────────────────────────────────
 # Internal helpers
 # ─────────────────────────────────────────────────────────────
+
+def _user_books(user):
+    """Base queryset scoped to the logged-in user."""
+    return Book.objects.select_related("category").filter(owner=user)
+
+
+def _user_categories(user):
+    """Categories scoped to the logged-in user."""
+    return Category.objects.filter(owner=user)
+
 
 def _filter_books(qs, request):
     """
@@ -73,18 +81,19 @@ def _filter_books(qs, request):
 #   books, categories, page_obj, paginator
 # ─────────────────────────────────────────────────────────────
 
+@login_required
 def book_list(request):
-    qs = Book.objects.select_related("category").all()
+    qs = _user_books(request.user)
     qs = _filter_books(qs, request)
 
     paginator = Paginator(qs, 20)
     page_obj  = paginator.get_page(request.GET.get("page"))
 
     return render(request, "books/book_list.html", {
-        "books":      page_obj,          # page_obj IS iterable like a queryset
+        "books":      page_obj,
         "page_obj":   page_obj,
         "paginator":  paginator,
-        "categories": Category.objects.all(),
+        "categories": _user_categories(request.user),
     })
 
 
@@ -93,29 +102,134 @@ def book_list(request):
 # book_detail.html needs:  book
 # ─────────────────────────────────────────────────────────────
 
+@login_required
 def book_detail(request, pk):
-    book = get_object_or_404(Book.objects.select_related("category"), pk=pk)
+    book = get_object_or_404(_user_books(request.user), pk=pk)
     return render(request, "books/book_detail.html", {"book": book})
 
 
 # ─────────────────────────────────────────────────────────────
 # Book Create
-# book_form.html needs:  form, categories
+# book_form.html needs:  form, categories, import_form, import_step
 # ─────────────────────────────────────────────────────────────
 
+@login_required
 def book_create(request):
-    if request.method == "POST":
-        form = BookForm(request.POST, request.FILES)
+    from .forms import ExcelImportForm, parse_excel_rows
+
+    form_type = request.POST.get("form_type", "manual") if request.method == "POST" else "manual"
+
+    # ── Excel upload: parse & store preview in session ────────
+    if request.method == "POST" and form_type == "import_upload":
+        import_form = ExcelImportForm(request.POST, request.FILES)
+        if import_form.is_valid():
+            results = parse_excel_rows(import_form.cleaned_data["excel_file"], request.user)
+            if not results:
+                messages.error(request, "The file appears to be empty.")
+            else:
+                session_rows = []
+                for r in results:
+                    d = dict(r["data"])
+                    cat = d.get("category")
+                    d["category_pk"]       = cat.pk   if cat else None
+                    d["category_name"]     = cat.name if cat else ""
+                    d["_category_created"] = d.get("_category_created", False)
+                    d.pop("category", None)
+                    session_rows.append({
+                        "row":    r["row"],
+                        "data":   d,
+                        "status": r["status"],
+                        "errors": r["errors"],
+                        "book_pk": r["book"].pk if r["book"] else None,
+                    })
+                request.session["import_preview"] = session_rows
+                new_c = sum(1 for r in results if r["status"] == "new")
+                dup_c = sum(1 for r in results if r["status"] == "duplicate")
+                err_c = sum(1 for r in results if r["status"] == "error")
+                return render(request, "books/book_form.html", {
+                    "form":             BookForm(user=request.user),
+                    "categories":       _user_categories(request.user),
+                    "import_form":      import_form,
+                    "import_step":      "preview",
+                    "import_rows":      session_rows,
+                    "import_new_count": new_c,
+                    "import_dup_count": dup_c,
+                    "import_err_count": err_c,
+                })
+        # Form invalid — re-render upload tab with errors
+        return render(request, "books/book_form.html", {
+            "form":        BookForm(user=request.user),
+            "categories":  _user_categories(request.user),
+            "import_form": import_form,
+            "import_step": None,
+        })
+
+    # ── Excel confirm: bulk create / update ──────────────────
+    if request.method == "POST" and form_type == "import_confirm":
+        session_rows  = request.session.pop("import_preview", [])
+        selected_rows = set(request.POST.getlist("selected_rows"))
+        created = updated = skipped = 0
+
+        for r in session_rows:
+            if str(r["row"]) not in selected_rows or r["status"] == "error":
+                skipped += 1
+                continue
+            d   = r["data"]
+            cat = Category.objects.filter(pk=d.get("category_pk")).first() if d.get("category_pk") else None
+            total = int(d.get("total_copies") or 1)
+            defaults = {
+                "title":            d.get("title", ""),
+                "author":           d.get("author", ""),
+                "category":         cat,
+                "publisher":        d.get("publisher", ""),
+                "publication_year": d.get("publication_year") or None,
+                "language":         d.get("language", ""),
+                "edition":          d.get("edition", ""),
+                "shelf_location":   d.get("shelf_location", ""),
+                "total_copies":     total,
+                "available_copies": total,
+                "description":      d.get("description", ""),
+            }
+            if r["status"] == "duplicate":
+                Book.objects.filter(owner=request.user, isbn=d["isbn"]).update(**defaults)
+                updated += 1
+            else:
+                Book.objects.create(owner=request.user, isbn=d["isbn"], **defaults)
+                created += 1
+
+        parts = []
+        if created: parts.append(f"{created} book{'s' if created != 1 else ''} imported")
+        if updated: parts.append(f"{updated} updated")
+        if skipped: parts.append(f"{skipped} skipped")
+        messages.success(request, " · ".join(parts) + ".")
+        return redirect("books:book_list")
+
+    # ── Manual entry POST ─────────────────────────────────────
+    if request.method == "POST" and form_type == "manual":
+        form = BookForm(request.POST, request.FILES, user=request.user)
         if form.is_valid():
-            book = form.save()
-            messages.success(request, f"{book.title} was added successfully.")
+            book          = form.save(commit=False)
+            book.owner    = request.user
+            book.category = form.cleaned_data["category"]
+            img = form.cleaned_data.get("cover_image")
+            if img:
+                book.cover_image     = img["data"]
+                book.cover_mime_type = img["mime"]
+            book.save()
+            if hasattr(form, "_created_category"):
+                messages.info(request, f'New category "{form._created_category}" was created.')
+            elif hasattr(form, "_reused_category"):
+                messages.info(request, f'Existing category "{form._reused_category}" was reused.')
+            messages.success(request, f'"{book.title}" was added successfully.')
             return redirect("books:book_detail", pk=book.pk)
     else:
-        form = BookForm()
+        form = BookForm(user=request.user)
 
     return render(request, "books/book_form.html", {
-        "form":       form,
-        "categories": Category.objects.all(),
+        "form":        form,
+        "categories":  _user_categories(request.user),
+        "import_form": ExcelImportForm(),
+        "import_step": None,
     })
 
 
@@ -124,20 +238,34 @@ def book_create(request):
 # book_form.html needs:  form, categories
 # ─────────────────────────────────────────────────────────────
 
+@login_required
 def book_update(request, pk):
-    book = get_object_or_404(Book, pk=pk)
+    book = get_object_or_404(Book, pk=pk, owner=request.user)
     if request.method == "POST":
-        form = BookForm(request.POST, request.FILES, instance=book)
+        form = BookForm(request.POST, request.FILES, instance=book, user=request.user)
         if form.is_valid():
-            form.save()
-            messages.success(request, f"{book.title} was updated successfully.")
+            updated          = form.save(commit=False)
+            updated.category = form.cleaned_data["category"]
+            img = form.cleaned_data.get("cover_image")
+            if img:
+                updated.cover_image     = img["data"]
+                updated.cover_mime_type = img["mime"]
+            else:
+                updated.cover_image     = book.cover_image
+                updated.cover_mime_type = book.cover_mime_type
+            updated.save()
+            if hasattr(form, "_created_category"):
+                messages.info(request, f'New category "{form._created_category}" was created.')
+            elif hasattr(form, "_reused_category"):
+                messages.info(request, f'Existing category "{form._reused_category}" was reused.')
+            messages.success(request, f'"{book.title}" was updated successfully.')
             return redirect("books:book_detail", pk=book.pk)
     else:
-        form = BookForm(instance=book)
+        form = BookForm(instance=book, user=request.user)
 
     return render(request, "books/book_form.html", {
         "form":       form,
-        "categories": Category.objects.all(),
+        "categories": _user_categories(request.user),
     })
 
 
@@ -146,8 +274,9 @@ def book_update(request, pk):
 # book_delete.html needs:  book
 # ─────────────────────────────────────────────────────────────
 
+@login_required
 def book_delete(request, pk):
-    book = get_object_or_404(Book, pk=pk)
+    book = get_object_or_404(Book, pk=pk, owner=request.user)
     if request.method == "POST":
         title = book.title
         book.delete()
@@ -168,23 +297,23 @@ def book_delete(request, pk):
 #   low_stock_list, low_threshold
 # ─────────────────────────────────────────────────────────────
 
+@login_required
 def stock_dashboard(request):
-    all_books = Book.objects.select_related("category").all()
+    all_books = _user_books(request.user)
 
-    total_books       = all_books.count()
-    available_books   = all_books.filter(available_copies__gt=LOW_STOCK_THRESHOLD).count()
-    low_stock_count   = all_books.filter(
-                            available_copies__gt=0,
-                            available_copies__lte=LOW_STOCK_THRESHOLD,
-                        ).count()
+    total_books        = all_books.count()
+    low_stock_count    = all_books.filter(
+                             available_copies__gt=0,
+                             available_copies__lte=LOW_STOCK_THRESHOLD,
+                         ).count()
     out_of_stock_count = all_books.filter(available_copies=0).count()
+    available_books    = total_books - low_stock_count - out_of_stock_count
 
     def pct(n):
         return round(n / total_books * 100) if total_books else 0
 
-    # Per-category stats for the progress bars
     category_stats = []
-    for cat in Category.objects.all():
+    for cat in _user_categories(request.user):
         cat_qs    = all_books.filter(category=cat)
         total     = cat_qs.count()
         available = cat_qs.filter(available_copies__gt=0).count()
@@ -195,12 +324,10 @@ def stock_dashboard(request):
             "pct":       round(available / total * 100) if total else 0,
         })
 
-    # Most-issued: books where issued_copies (total − available) is highest
-    # Achieved by ordering ascending on available_copies (proxy for most issued)
     most_issued_qs = all_books.order_by("available_copies")[:5]
     most_issued = []
     for b in most_issued_qs:
-        b.issue_count = b.issued_copies   # attach attribute expected by template
+        b.issue_count = b.issued_copies
         most_issued.append(b)
 
     recent_books   = all_books.order_by("-created_at")[:5]
@@ -233,8 +360,9 @@ def stock_dashboard(request):
 #   categories  (for filter strip)
 # ─────────────────────────────────────────────────────────────
 
+@login_required
 def export_books(request):
-    qs = Book.objects.select_related("category").all()
+    qs = _user_books(request.user)
     qs = _filter_books(qs, request)
 
     total_count   = qs.count()
@@ -251,13 +379,13 @@ def export_books(request):
     issued_sum    = total_sum - available_sum
 
     return render(request, "books/book_export.html", {
-        "preview_books":       preview_books,
-        "preview_more":        preview_more,
-        "total_count":         total_count,
-        "total_copies_sum":    total_sum,
+        "preview_books":        preview_books,
+        "preview_more":         preview_more,
+        "total_count":          total_count,
+        "total_copies_sum":     total_sum,
         "available_copies_sum": available_sum,
-        "issued_copies_sum":   issued_sum,
-        "categories":          Category.objects.all(),
+        "issued_copies_sum":    issued_sum,
+        "categories":           _user_categories(request.user),
     })
 
 
@@ -265,22 +393,19 @@ def export_books(request):
 # Excel download
 # ─────────────────────────────────────────────────────────────
 
+@login_required
 def export_books_excel(request):
     try:
         import openpyxl
         from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
         from openpyxl.utils import get_column_letter
     except ImportError:
-        messages.error(
-            request,
-            "openpyxl is not installed. Run: pip install openpyxl",
-        )
+        messages.error(request, "openpyxl is not installed. Run: pip install openpyxl")
         return redirect("books:export_books")
 
-    qs = Book.objects.select_related("category").all()
+    qs = _user_books(request.user)
     qs = _filter_books(qs, request)
 
-    # ── Style constants ───────────────────────────────────────
     HEADER_FILL  = PatternFill("solid", fgColor="0A1628")
     HEADER_FONT  = Font(color="FFFFFF", bold=True, size=9)
     TOTALS_FILL  = PatternFill("solid", fgColor="1E3A5F")
@@ -336,7 +461,6 @@ def export_books_excel(request):
         ws.append(row_data)
         r = ws.max_row
 
-        # Colour-code the "Available" cell (column 10)
         avail_cell = ws.cell(row=r, column=10)
         if book.available_copies == 0:
             avail_cell.fill = RED_FILL
@@ -350,7 +474,6 @@ def export_books_excel(request):
 
     last_data = ws.max_row
 
-    # Totals row
     ws.append(
         ["", "TOTALS", "", "", "", "", "", "",
          f"=SUM(I2:I{last_data})",
@@ -381,13 +504,10 @@ def export_books_excel(request):
         ws2.column_dimensions[get_column_letter(ci)].width = w
     ws2.freeze_panes = "A2"
 
-    for cat in Category.objects.all():
+    for cat in _user_categories(request.user):
         cat_qs    = qs.filter(category=cat)
         total     = cat_qs.count()
-        agg       = cat_qs.aggregate(
-                        tc=Sum("total_copies"),
-                        ac=Sum("available_copies"),
-                    )
+        agg       = cat_qs.aggregate(tc=Sum("total_copies"), ac=Sum("available_copies"))
         tc        = agg["tc"] or 0
         ac        = agg["ac"] or 0
         available = cat_qs.filter(available_copies__gt=0).count()
@@ -397,7 +517,6 @@ def export_books_excel(request):
         for ci in range(1, 6):
             ws2.cell(row=r, column=ci).border = BORDER
 
-    # ── Respond ───────────────────────────────────────────────
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -412,10 +531,247 @@ def export_books_excel(request):
 
 
 # ─────────────────────────────────────────────────────────────
-# Stock bulk-upload (placeholder — wire up your upload template here)
+# Stock bulk-upload
 # ─────────────────────────────────────────────────────────────
 
+@login_required
 def update_stock(request):
     return render(request, "books/book_stock_update.html", {
-        "categories": Category.objects.all(),
+        "categories": _user_categories(request.user),
     })
+
+
+# ─────────────────────────────────────────────────────────────
+# Cover image — serve blob stored in the DB
+# ─────────────────────────────────────────────────────────────
+
+@login_required
+def book_cover(request, pk):
+    """Serve the binary cover image for a book owned by the current user."""
+    book = get_object_or_404(Book, pk=pk, owner=request.user)
+    if not book.cover_image:
+        from django.http import Http404
+        raise Http404("No cover image.")
+    return HttpResponse(
+        bytes(book.cover_image),
+        content_type=book.cover_mime_type or "image/jpeg",
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Excel Import — two-step: preview then confirm
+# ─────────────────────────────────────────────────────────────
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from .models import Book, Category
+
+
+@login_required
+def import_books_excel(request):
+    """
+    GET  → show upload form
+    POST (step=upload)   → parse file, store preview in session, show preview
+    POST (step=confirm)  → read session data, bulk-create/update, redirect to list
+    """
+    from .forms import ExcelImportForm, parse_excel_rows
+
+    step = request.POST.get("step", "upload")
+
+    # ─────────────────────────────────────────────
+    # STEP 1 → Upload & Preview
+    # ─────────────────────────────────────────────
+    if request.method == "POST" and step == "upload":
+        form = ExcelImportForm(request.POST, request.FILES)
+
+        if form.is_valid():
+            results = parse_excel_rows(
+                form.cleaned_data["excel_file"],
+                request.user
+            )
+
+            if not results:
+                messages.error(request, "The file appears to be empty.")
+                return render(request, "books/book_import.html", {
+                    "form": form,
+                    "step": "upload"
+                })
+
+            session_rows = []
+
+            for r in results:
+                d = dict(r["data"])
+
+                cat = d.get("category")
+                d["category_pk"] = cat.pk if cat else None
+                d["category_name"] = cat.name if cat else ""
+
+                d.pop("category", None)
+                d.pop("_category_created", None)
+
+                session_rows.append({
+                    "row": r["row"],
+                    "data": d,
+                    "status": r["status"],
+                    "errors": r["errors"],
+                    "book_pk": r["book"].pk if r["book"] else None,
+                    "book_title": str(r["book"]) if r["book"] else "",
+                })
+
+            request.session["import_preview"] = session_rows
+
+            return render(request, "books/book_import.html", {
+                "step": "preview",
+                "rows": session_rows,
+                "new_count": sum(1 for r in results if r["status"] == "new"),
+                "dup_count": sum(1 for r in results if r["status"] == "duplicate"),
+                "err_count": sum(1 for r in results if r["status"] == "error"),
+                "form": ExcelImportForm(),
+            })
+
+        return render(request, "books/book_import.html", {
+            "form": form,
+            "step": "upload"
+        })
+
+    # ─────────────────────────────────────────────
+    # STEP 2 → Confirm & Save
+    # ─────────────────────────────────────────────
+    if request.method == "POST" and step == "confirm":
+
+        session_rows = request.session.pop("import_preview", [])
+
+        if not session_rows:
+            messages.error(request, "Session expired. Please re-upload the file.")
+            return redirect("books:import_books_excel")
+
+        selected_rows = set(request.POST.getlist("selected_rows"))
+
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+
+        for r in session_rows:
+
+            if str(r["row"]) not in selected_rows or r["status"] == "error":
+                skipped_count += 1
+                continue
+
+            d = r["data"]
+
+            # ───────── SAFE TOTAL COPIES CONVERSION ─────────
+            raw_total = d.get("total_copies")
+
+            try:
+                total = int(raw_total)
+                if total < 1:
+                    total = 1
+            except (TypeError, ValueError):
+                total = 1
+
+            # DEBUG PRINT (REMOVE AFTER TESTING)
+            print("Excel Total:", raw_total)
+            print("Saving Total:", total)
+
+            cat = None
+            if d.get("category_pk"):
+                cat = Category.objects.filter(pk=d["category_pk"]).first()
+
+            defaults = {
+                "title": d.get("title", ""),
+                "author": d.get("author", ""),
+                "category": cat,
+                "publisher": d.get("publisher", ""),
+                "publication_year": d.get("publication_year") or None,
+                "language": d.get("language", ""),
+                "edition": d.get("edition", ""),
+                "shelf_location": d.get("shelf_location", ""),
+                "total_copies": total,
+                "available_copies": total,  # ALWAYS equal on import
+                "description": d.get("description", ""),
+            }
+
+            if r["status"] == "duplicate":
+                Book.objects.filter(
+                    owner=request.user,
+                    isbn=d["isbn"]
+                ).update(**defaults)
+                updated_count += 1
+            else:
+                Book.objects.create(
+                    owner=request.user,
+                    isbn=d["isbn"],
+                    **defaults
+                )
+                created_count += 1
+
+        parts = []
+        if created_count:
+            parts.append(f"{created_count} imported")
+        if updated_count:
+            parts.append(f"{updated_count} updated")
+        if skipped_count:
+            parts.append(f"{skipped_count} skipped")
+
+        messages.success(request, " · ".join(parts) + ".")
+        return redirect("books:book_list")
+
+    # ─────────────────────────────────────────────
+    # GET → Upload Page
+    # ─────────────────────────────────────────────
+    return render(request, "books/book_import.html", {
+        "form": ExcelImportForm(),
+        "step": "upload",
+    })
+
+# ─────────────────────────────────────────────────────────────
+# Download blank import template
+# ─────────────────────────────────────────────────────────────
+
+@login_required
+def download_import_template(request):
+    """Serve a blank .xlsx template the user can fill in."""
+    try:
+        import openpyxl
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        messages.error(request, "openpyxl is not installed.")
+        return redirect("books:import_books_excel")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Books"
+
+    headers = [
+        "Title", "Author", "ISBN", "Category", "Publisher",
+        "Publication Year", "Language", "Edition",
+        "Total Copies", "Available Copies", "Shelf Location", "Description",
+    ]
+    col_widths = [28, 22, 20, 18, 22, 16, 12, 14, 13, 16, 16, 36]
+
+    HEADER_FILL = PatternFill("solid", fgColor="0A1628")
+    HEADER_FONT = Font(color="FFFFFF", bold=True, size=10)
+    CENTER      = Alignment(horizontal="center", vertical="center")
+
+    ws.append(headers)
+    ws.row_dimensions[1].height = 22
+    for ci, w in enumerate(col_widths, 1):
+        cell           = ws.cell(row=1, column=ci)
+        cell.fill      = HEADER_FILL
+        cell.font      = HEADER_FONT
+        cell.alignment = CENTER
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    resp = HttpResponse(
+        buf.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    resp["Content-Disposition"] = 'attachment; filename="book_import_template.xlsx"'
+    return resp

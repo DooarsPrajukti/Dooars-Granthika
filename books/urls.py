@@ -16,4 +16,10 @@ urlpatterns = [
     path("export/",           views.export_books,         name="export_books"),
     path("export/excel/",     views.export_books_excel,   name="export_books_excel"),
     path("stock/update/",     views.update_stock,         name="update_stock"),
+
+    # ── Cover image (blob served from DB) ─────────────────────
+    path("<int:pk>/cover/",   views.book_cover,           name="book_cover"),
+    # ── Import ────────────────────────────────────────────────
+    path("import/",           views.import_books_excel,       name="import_books_excel"),
+    path("import/template/",  views.download_import_template, name="download_import_template"),
 ]

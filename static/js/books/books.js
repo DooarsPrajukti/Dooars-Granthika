@@ -137,29 +137,102 @@ function initStagger() {
 function initFormValidation() {
   var form = document.getElementById("bookForm");
   if (!form) return;
+
+  var totalEl     = document.getElementById("id_total_copies");
+  var availEl     = document.getElementById("id_available_copies");
+  var issuedHint  = document.getElementById("issuedCopiesHint");
+  var issuedCount = document.getElementById("issuedCopiesCount");
+
+  /* Keep available's max and the issued-copies hint in sync whenever
+     either copies field changes. */
+  function syncCopies() {
+    if (!totalEl || !availEl) return;
+
+    var total = parseInt(totalEl.value, 10);
+    var avail = parseInt(availEl.value, 10);
+
+    // Update the browser-enforced max so the up-arrow can't go past total
+    if (!isNaN(total) && total >= 0) {
+      availEl.max = total;
+    } else {
+      availEl.removeAttribute("max");
+    }
+
+    // Show issued-copies hint
+    if (!isNaN(total) && !isNaN(avail) && total >= 0 && avail >= 0) {
+      var issued = Math.max(0, total - avail);
+      if (issuedCount) issuedCount.textContent = issued;
+      if (issuedHint)  issuedHint.style.display = issued > 0 ? "block" : "none";
+    } else {
+      if (issuedHint) issuedHint.style.display = "none";
+    }
+
+    // Re-validate available if it was already marked invalid
+    if (availEl.classList.contains("is-invalid")) validateCopies();
+  }
+
+  function validateCopies() {
+    if (!totalEl || !availEl) return true;
+    var total = parseInt(totalEl.value, 10);
+    var avail = parseInt(availEl.value, 10);
+    var ok = !isNaN(avail) && avail >= 0 && (isNaN(total) || avail <= total);
+    availEl.classList.toggle("is-invalid", !ok);
+    availEl.classList.toggle("is-valid",    ok);
+    return ok;
+  }
+
+  if (totalEl) {
+    totalEl.addEventListener("input", syncCopies);
+    totalEl.addEventListener("change", syncCopies);
+  }
+  if (availEl) {
+    availEl.addEventListener("input", syncCopies);
+    availEl.addEventListener("change", syncCopies);
+    availEl.addEventListener("blur", validateCopies);
+  }
+
+  // Run once on page load so the hint/max are set when editing an existing book
+  syncCopies();
+
   var fields = form.querySelectorAll("[required]");
   fields.forEach(function(f) {
     f.addEventListener("blur",  function() { validate(f); });
     f.addEventListener("input", function() { if (f.classList.contains("is-invalid")) validate(f); });
   });
+
   form.addEventListener("submit", function(e) {
-    e.preventDefault();
     var ok = true;
     fields.forEach(function(f) { if (!validate(f)) ok = false; });
-    if (ok) {
-      var btn = form.querySelector("[type=submit]");
-      if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…'; btn.disabled = true; }
-      setTimeout(function() {
-        if (btn) { btn.innerHTML = '<i class="fas fa-check"></i> Saved!'; btn.style.background = "#22c55e"; }
-        setTimeout(function() { form.submit(); }, 500);
-      }, 900);
+    if (!validateCopies()) ok = false;
+
+    if (!ok) {
+      e.preventDefault();
+      // Scroll to first error
+      var first = form.querySelector(".is-invalid");
+      if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    // Valid — show spinner and let the form submit normally (no fake delay)
+    var btn = form.querySelector("[type=submit]");
+    if (btn) {
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+      btn.disabled  = true;
     }
   });
 }
+
 function validate(f) {
-  var v = f.value.trim();
+  var v  = f.value.trim();
   var ok = v.length > 0;
-  if (f.type === "number" && ok) ok = !isNaN(v) && parseFloat(v) >= 0;
+  if (f.type === "number" && ok) {
+    var num = parseFloat(v);
+    ok = !isNaN(num) && num >= 0;
+    // also honour the browser max attribute
+    if (ok && f.max !== "" && !isNaN(parseFloat(f.max))) {
+      ok = num <= parseFloat(f.max);
+    }
+  }
   f.classList.toggle("is-invalid", !ok);
   f.classList.toggle("is-valid",   ok);
   return ok;

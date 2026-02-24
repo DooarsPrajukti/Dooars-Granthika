@@ -25,20 +25,25 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
-    list_display         = (
+    list_display = (
+        "book_id",                                          # ← new
         "title", "author", "isbn", "category",
         "total_copies", "available_copies", "stock_badge",
         "shelf_location", "created_at",
     )
-    list_filter          = ("category", "language")
-    search_fields        = ("title", "author", "isbn", "publisher")
-    readonly_fields      = ("created_at", "updated_at", "issued_copies_display", "cover_preview")
-    list_per_page        = 25
-    date_hierarchy       = "created_at"
-    ordering             = ("-created_at",)
-    list_select_related  = ("category",)
+    list_filter         = ("category", "language")
+    search_fields       = ("book_id", "title", "author", "isbn", "publisher")  # ← book_id searchable
+    readonly_fields     = ("book_id", "created_at", "updated_at",              # ← book_id read-only
+                           "issued_copies_display", "cover_preview")
+    list_per_page       = 25
+    date_hierarchy      = "created_at"
+    ordering            = ("-created_at",)
+    list_select_related = ("category",)
 
     fieldsets = (
+        ("Identification", {
+            "fields": ("book_id",),                         # ← shown at the top, read-only
+        }),
         ("Basic Information", {
             "fields": (
                 "title", "author", "isbn", "category",
@@ -63,9 +68,9 @@ class BookAdmin(admin.ModelAdmin):
     @admin.display(description="Stock Status")
     def stock_badge(self, obj):
         colours = {
-            "out-stock":  ("#ef4444", "Out of Stock"),
-            "low-stock":  ("#f97316", "Low Stock"),
-            "available":  ("#22c55e", "Available"),
+            "out-stock": ("#ef4444", "Out of Stock"),
+            "low-stock": ("#f97316", "Low Stock"),
+            "available": ("#22c55e", "Available"),
         }
         colour, label = colours.get(obj.stock_status, ("#6b7280", "Unknown"))
         return format_html(
@@ -79,7 +84,7 @@ class BookAdmin(admin.ModelAdmin):
         if obj.cover_image:
             return format_html(
                 '<img src="{}" style="max-height:120px;border-radius:6px;" />',
-                obj.cover_image.url,
+                obj.cover_image_b64,
             )
         return "—"
 

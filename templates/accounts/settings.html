@@ -1,459 +1,420 @@
-{% comment %} {% extends 'base.html' %} {% endcomment %}
+{% extends 'dashboard_base.html' %}
 {% load static %}
 
-{% comment %} {% block title %}Settings - Dooars Granthika{% endblock %} {% endcomment %}
+{% block title %}Settings - Dooars Granthika{% endblock %}
+
+{% block nav_settings %}active{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/accounts/settings.css' %}" />
 {% endblock %}
 
-{% block content %}
-<div class="dashboard-wrapper">
-
-  <!-- Sidebar -->
-  <nav class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <div class="logo-container">
-        <img src="{% static 'assets/IMG/logo2.png' %}" alt="Logo" />
+{% block topbar %}
+<header class="top-bar">
+  <div class="page-title">
+    <h1>Settings</h1>
+    <p class="subtitle">Manage your account and system preferences</p>
+  </div>
+  <div class="top-bar-actions">
+    <div class="user-profile">
+      <div class="user-info">
+        <span class="user-name">
+          {% if user.get_full_name %}{{ user.get_full_name }}{% else %}{{ user.username }}{% endif %}
+        </span>
+        <span class="user-role">Administrator</span>
       </div>
-      <span class="logo-text">Dooars Granthika</span>
     </div>
-    <ul class="sidebar-nav">
-      <li><a class="nav-item" href="{% url 'accounts:admin_dashboard' %}"><span class="nav-icon">📊</span> Dashboard</a></li>
-      <li><a class="nav-item" href="#"><span class="nav-icon">🏛️</span> Libraries</a></li>
-      <li><a class="nav-item" href="#"><span class="nav-icon">📚</span> Books</a></li>
-      <li><a class="nav-item" href="#"><span class="nav-icon">👥</span> Members</a></li>
-      <li><a class="nav-item" href="#"><span class="nav-icon">📖</span> Transactions</a></li>
-      <li><a class="nav-item" href="#"><span class="nav-icon">📈</span> Reports</a></li>
-      <li><a class="nav-item active" href="{% url 'accounts:settings' %}"><span class="nav-icon">⚙️</span> Settings</a></li>
-    </ul>
-    <div class="sidebar-footer">
-      <a class="nav-item logout" href="{% url 'accounts:signout' %}">
-        <span class="nav-icon">🚪</span> Logout
-      </a>
-    </div>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+
+<!-- Settings Layout -->
+<div class="settings-layout">
+
+  <!-- Tab Nav -->
+  <nav class="settings-nav" id="settings-nav">
+    <button class="settings-tab active" data-tab="profile">
+      <span class="tab-icon"><i class="fas fa-user"></i></span>
+      <span class="tab-label">Profile</span>
+    </button>
+    <button class="settings-tab" data-tab="security">
+      <span class="tab-icon"><i class="fas fa-lock"></i></span>
+      <span class="tab-label">Security</span>
+    </button>
+    <button class="settings-tab" data-tab="system">
+      <span class="tab-icon"><i class="fas fa-landmark"></i></span>
+      <span class="tab-label">System</span>
+    </button>
+    <button class="settings-tab" data-tab="notifications">
+      <span class="tab-icon"><i class="fas fa-bell"></i></span>
+      <span class="tab-label">Notifications</span>
+    </button>
+    <button class="settings-tab" data-tab="fine">
+      <span class="tab-icon"><i class="fas fa-coins"></i></span>
+      <span class="tab-label">Fine & Loans</span>
+    </button>
   </nav>
 
-  <!-- Main Content -->
-  <main class="main-content">
+  <!-- Single Form wraps ALL panels -->
+  <form class="settings-panels"
+        method="POST"
+        action="{% url 'accounts:settings' %}"
+        enctype="multipart/form-data"
+        id="settings-form">
+    {% csrf_token %}
 
-    <!-- Top Bar -->
-    <header class="top-bar">
-      <div class="page-title">
-        <h1>Settings</h1>
-        <p class="subtitle">Manage your account and system preferences</p>
-      </div>
-      <div class="top-bar-actions">
-        <div class="user-profile">
-          <div class="user-info">
-            <span class="user-name">
-              {% if user.get_full_name %}{{ user.get_full_name }}{% else %}{{ user.username }}{% endif %}
-            </span>
-            <span class="user-role">Administrator</span>
+    <!-- Hidden: which tab was submitted -->
+    <input type="hidden" name="form_type" id="form_type" value="profile" />
+
+    <!-- ==================
+         PROFILE TAB
+         ================== -->
+    <div class="settings-panel active" id="tab-profile">
+
+      <div class="panel-section">
+        <h2 class="section-heading">Organisation Logo</h2>
+        <p class="section-desc">This logo appears across the platform. JPG, PNG or GIF · Max 2MB.</p>
+
+        <div class="avatar-row">
+          <div class="avatar-wrap">
+            {% if library_logo_b64 %}
+              <img src="{{ library_logo_b64 }}" alt="Organisation Logo" class="avatar-img" id="avatar-preview" />
+            {% else %}
+              <div class="avatar-placeholder" id="avatar-preview">
+                {{ library.library_name|first|upper }}
+              </div>
+            {% endif %}
+          </div>
+          <div class="avatar-actions">
+            <label class="btn btn-secondary" for="avatar-upload">Upload Logo</label>
+            <input type="file" id="avatar-upload" name="library_logo" accept="image/*" class="sr-only" />
+            <button type="submit" class="btn btn-danger-sm" name="remove_logo" value="1" data-form="profile">Remove Logo</button>
           </div>
         </div>
       </div>
-    </header>
 
-    <!-- Settings Layout -->
-    <div class="settings-layout">
+      <div class="panel-section">
+        <h2 class="section-heading">Personal Information</h2>
+        <p class="section-desc">Update your name and email.</p>
 
-      <!-- Tab Nav -->
-      <nav class="settings-nav" id="settings-nav">
-        <button class="settings-tab active" data-tab="profile">
-          <span class="tab-icon">👤</span>
-          <span class="tab-label">Profile</span>
-        </button>
-        <button class="settings-tab" data-tab="security">
-          <span class="tab-icon">🔒</span>
-          <span class="tab-label">Security</span>
-        </button>
-        <button class="settings-tab" data-tab="system">
-          <span class="tab-icon">🏛️</span>
-          <span class="tab-label">System</span>
-        </button>
-        <button class="settings-tab" data-tab="notifications">
-          <span class="tab-icon">🔔</span>
-          <span class="tab-label">Notifications</span>
-        </button>
-        <button class="settings-tab" data-tab="fine">
-          <span class="tab-icon">💰</span>
-          <span class="tab-label">Fine & Loans</span>
-        </button>
-      </nav>
-
-      <!-- Single Form wraps ALL panels -->
-      <form class="settings-panels"
-            method="POST"
-            action="{% url 'accounts:settings' %}"
-            enctype="multipart/form-data"
-            id="settings-form">
-        {% csrf_token %}
-
-        <!-- Hidden: which tab was submitted -->
-        <input type="hidden" name="form_type" id="form_type" value="profile" />
-
-        <!-- ==================
-             PROFILE TAB
-             ================== -->
-        <div class="settings-panel active" id="tab-profile">
-
-          <div class="panel-section">
-            <h2 class="section-heading">Organisation Logo</h2>
-            <p class="section-desc">This logo appears across the platform. JPG, PNG or GIF · Max 2MB.</p>
-
-            <div class="avatar-row">
-              <div class="avatar-wrap">
-                {% if library_logo_b64 %}
-                  <img src="{{ library_logo_b64 }}" alt="Organisation Logo" class="avatar-img" id="avatar-preview" />
-                {% else %}
-                  <div class="avatar-placeholder" id="avatar-preview">
-                    {{ library.library_name|first|upper }}
-                  </div>
-                {% endif %}
-              </div>
-              <div class="avatar-actions">
-                <label class="btn btn-secondary" for="avatar-upload">Upload Logo</label>
-                <input type="file" id="avatar-upload" name="library_logo" accept="image/*" class="sr-only" />
-                <button type="submit" class="btn btn-danger-sm" name="remove_logo" value="1" data-form="profile">Remove Logo</button>
-              </div>
-            </div>
+        <div class="form-grid">
+          <div class="field-group">
+            <label class="field-label" for="first_name">First Name</label>
+            <input class="field-input" type="text" id="first_name" name="first_name"
+                   value="{{ user.first_name }}" placeholder="Enter first name" />
           </div>
-
-          <div class="panel-section">
-            <h2 class="section-heading">Personal Information</h2>
-            <p class="section-desc">Update your name and email.</p>
-
-            <div class="form-grid">
-              <div class="field-group">
-                <label class="field-label" for="first_name">First Name</label>
-                <input class="field-input" type="text" id="first_name" name="first_name"
-                       value="{{ user.first_name }}" placeholder="Enter first name" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="last_name">Last Name</label>
-                <input class="field-input" type="text" id="last_name" name="last_name"
-                       value="{{ user.last_name }}" placeholder="Enter last name" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="email">Email Address</label>
-                <input class="field-input" type="email" id="email" name="email"
-                       value="{{ user.email }}" placeholder="Enter email" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="phone">Phone Number</label>
-                <input class="field-input" type="text" id="phone" name="phone_number"
-                       value="{{ library.phone_number }}" placeholder="Enter phone number" />
-              </div>
-            </div>
+          <div class="field-group">
+            <label class="field-label" for="last_name">Last Name</label>
+            <input class="field-input" type="text" id="last_name" name="last_name"
+                   value="{{ user.last_name }}" placeholder="Enter last name" />
           </div>
-
-          <div class="panel-footer">
-            <button type="submit" class="btn btn-primary" data-form="profile">Save Changes</button>
+          <div class="field-group">
+            <label class="field-label" for="email">Email Address</label>
+            <input class="field-input" type="email" id="email" name="email"
+                   value="{{ user.email }}" placeholder="Enter email" />
           </div>
-
-        </div><!-- /tab-profile -->
-
-        <!-- ==================
-             SECURITY TAB
-             ================== -->
-        <div class="settings-panel" id="tab-security">
-
-          <div class="panel-section">
-            <h2 class="section-heading">Change Password</h2>
-            <p class="section-desc">Use a strong password at least 8 characters long.</p>
-
-            <div class="form-grid form-grid--single">
-              <div class="field-group">
-                <label class="field-label" for="current_password">Current Password</label>
-                <input class="field-input" type="password" id="current_password"
-                       name="current_password" placeholder="Enter current password" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="new_password">New Password</label>
-                <input class="field-input" type="password" id="new_password"
-                       name="new_password" placeholder="Enter new password" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="confirm_password">Confirm New Password</label>
-                <input class="field-input" type="password" id="confirm_password"
-                       name="confirm_password" placeholder="Confirm new password" />
-              </div>
-            </div>
+          <div class="field-group">
+            <label class="field-label" for="phone">Phone Number</label>
+            <input class="field-input" type="text" id="phone" name="phone_number"
+                   value="{{ library.phone_number }}" placeholder="Enter phone number" />
           </div>
-
-          <div class="panel-section">
-            <h2 class="section-heading">Login Sessions</h2>
-            <p class="section-desc">Active sessions for your account.</p>
-
-            <div class="session-list">
-              {% for session in active_sessions %}
-              <div class="session-item">
-                <div class="session-icon">{{ session.device_icon }}</div>
-                <div class="session-info">
-                  <div class="session-device">{{ session.device }}</div>
-                  <div class="session-meta">{{ session.location }} · {{ session.last_active }}</div>
-                </div>
-                {% if session.is_current %}
-                  <span class="badge success">Current</span>
-                {% else %}
-                  <button type="submit" class="btn btn-danger-sm"
-                          name="revoke_session_id" value="{{ session.id }}"
-                          data-form="revoke_session">
-                    Revoke
-                  </button>
-                {% endif %}
-              </div>
-              {% empty %}
-              <p class="empty-state">No active sessions found.</p>
-              {% endfor %}
-            </div>
-          </div>
-
-          <div class="panel-footer">
-            <button type="submit" class="btn btn-primary" data-form="security">Update Password</button>
-          </div>
-
-        </div><!-- /tab-security -->
-
-        <!-- ==================
-             SYSTEM TAB
-             ================== -->
-        <div class="settings-panel" id="tab-system">
-
-          <div class="panel-section">
-            <h2 class="section-heading">Organisation Details</h2>
-            <p class="section-desc">Information shown across the platform.</p>
-
-            <div class="form-grid">
-              <div class="field-group field-group--full">
-                <label class="field-label" for="library_name">Organisation Name</label>
-                <input class="field-input" type="text" id="library_name" name="library_name"
-                       value="{{ system_settings.org_name }}" placeholder="Organisation name" />
-              </div>
-              <div class="field-group field-group--full">
-                <label class="field-label" for="address">Address</label>
-                <textarea class="field-input field-textarea" id="address" name="address"
-                          rows="3" placeholder="Full address">{{ system_settings.org_address }}</textarea>
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="institute_email">Contact Email</label>
-                <input class="field-input" type="email" id="institute_email" name="institute_email"
-                       value="{{ system_settings.org_email }}" placeholder="Contact email" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="org_phone">Contact Phone</label>
-                <input class="field-input" type="text" id="org_phone" name="phone_number"
-                       value="{{ system_settings.org_phone }}" placeholder="Contact phone" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="district">District</label>
-                <input class="field-input" type="text" id="district" name="district"
-                       value="{{ system_settings.district }}" placeholder="District" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="state">State</label>
-                <input class="field-input" type="text" id="state" name="state"
-                       value="{{ system_settings.state }}" placeholder="State" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="country">Country</label>
-                <input class="field-input" type="text" id="country" name="country"
-                       value="{{ system_settings.country }}" placeholder="Country" />
-              </div>
-            </div>
-          </div>
-
-          <div class="panel-section">
-            <h2 class="section-heading">Appearance</h2>
-            <p class="section-desc">Customise the look of your dashboard.</p>
-
-            <div class="form-grid">
-              <div class="field-group">
-                <label class="field-label" for="primary_color">Primary Colour</label>
-                <input class="field-input" type="color" id="primary_color" name="primary_color"
-                       value="{{ system_settings.primary_color }}" />
-              </div>
-            </div>
-          </div>
-
-          <div class="panel-footer">
-            <button type="submit" class="btn btn-primary" data-form="system">Save System Settings</button>
-          </div>
-
-        </div><!-- /tab-system -->
-
-        <!-- ==================
-             NOTIFICATIONS TAB
-             ================== -->
-        <div class="settings-panel" id="tab-notifications">
-
-          <div class="panel-section">
-            <h2 class="section-heading">Email Notifications</h2>
-            <p class="section-desc">Choose which emails you receive.</p>
-
-            <div class="toggle-list">
-              {% for notif in notification_settings %}
-              <div class="toggle-item">
-                <div class="toggle-info">
-                  <div class="toggle-label">{{ notif.label }}</div>
-                  <div class="toggle-desc">{{ notif.description }}</div>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" name="{{ notif.key }}"
-                         {% if notif.enabled %}checked{% endif %} />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-              {% empty %}
-              <p class="empty-state">No notification settings available.</p>
-              {% endfor %}
-            </div>
-          </div>
-
-          <div class="panel-footer">
-            <button type="submit" class="btn btn-primary" data-form="notifications">Save Preferences</button>
-          </div>
-
-        </div><!-- /tab-notifications -->
-
-        <!-- ==================
-             FINE & LOANS TAB
-             ================== -->
-        <div class="settings-panel" id="tab-fine">
-
-          <div class="panel-section">
-            <h2 class="section-heading">Loan Rules</h2>
-            <p class="section-desc">Default borrowing limits and durations.</p>
-
-            <div class="form-grid">
-              <div class="field-group">
-                <label class="field-label" for="max_books_per_member">Max Books per Member</label>
-                <input class="field-input" type="number" id="max_books_per_member"
-                       name="max_books_per_member" min="1"
-                       value="{{ loan_settings.max_books_per_member }}" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="loan_period_days">Loan Period (days)</label>
-                <input class="field-input" type="number" id="loan_period_days"
-                       name="loan_period_days" min="1"
-                       value="{{ loan_settings.loan_period_days }}" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="renewal_limit">Max Renewals Allowed</label>
-                <input class="field-input" type="number" id="renewal_limit"
-                       name="renewal_limit" min="0"
-                       value="{{ loan_settings.renewal_limit }}" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="grace_period_days">Grace Period (days)</label>
-                <input class="field-input" type="number" id="grace_period_days"
-                       name="grace_period_days" min="0"
-                       value="{{ loan_settings.grace_period_days }}" />
-              </div>
-            </div>
-          </div>
-
-          <div class="panel-section">
-            <h2 class="section-heading">Fine Configuration</h2>
-            <p class="section-desc">Late return fines.</p>
-
-            <div class="form-grid">
-              <div class="field-group">
-                <label class="field-label" for="fine_per_day">Fine per Day (₹)</label>
-                <input class="field-input" type="number" id="fine_per_day"
-                       name="fine_per_day" min="0" step="0.50"
-                       value="{{ loan_settings.fine_per_day }}" />
-              </div>
-            </div>
-          </div>
-
-          <div class="panel-section">
-            <h2 class="section-heading">Rule Toggles</h2>
-            <p class="section-desc">Enable or disable specific loan behaviours.</p>
-
-            <div class="toggle-list">
-              <div class="toggle-item">
-                <div class="toggle-info">
-                  <div class="toggle-label">Auto Fine</div>
-                  <div class="toggle-desc">Automatically apply fines when a book is overdue.</div>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" name="auto_fine"
-                         {% if loan_settings.auto_fine %}checked{% endif %} />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-              <div class="toggle-item">
-                <div class="toggle-info">
-                  <div class="toggle-label">Allow Renewal</div>
-                  <div class="toggle-desc">Let members renew borrowed books.</div>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" name="allow_renewal"
-                         {% if loan_settings.allow_renewal %}checked{% endif %} />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-              <div class="toggle-item">
-                <div class="toggle-info">
-                  <div class="toggle-label">Allow Partial Payment</div>
-                  <div class="toggle-desc">Accept partial fine payments from members.</div>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" name="allow_partial_payment"
-                         {% if loan_settings.allow_partial_payment %}checked{% endif %} />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-              <div class="toggle-item">
-                <div class="toggle-info">
-                  <div class="toggle-label">Auto Mark Lost</div>
-                  <div class="toggle-desc">Automatically mark severely overdue books as lost.</div>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" name="auto_mark_lost"
-                         {% if loan_settings.auto_mark_lost %}checked{% endif %} />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-              <div class="toggle-item">
-                <div class="toggle-info">
-                  <div class="toggle-label">Allow Advance Booking</div>
-                  <div class="toggle-desc">Let members reserve books before they are available.</div>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" name="allow_advance_booking"
-                         {% if loan_settings.allow_advance_booking %}checked{% endif %} />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="panel-footer">
-            <button type="submit" class="btn btn-primary" data-form="fine">Save Loan & Fine Settings</button>
-          </div>
-
-        </div><!-- /tab-fine -->
-
-      </form><!-- /settings-panels (single form) -->
-    </div><!-- /settings-layout -->
-
-    <!-- Toast notifications (Django messages) -->
-    {% if messages %}
-    <div class="toast-container" id="toast-container">
-      {% for message in messages %}
-      <div class="toast toast-{{ message.tags }}">
-        <span class="toast-icon">{% if message.tags == 'success' %}✅{% else %}❌{% endif %}</span>
-        <span class="toast-text">{{ message }}</span>
+        </div>
       </div>
-      {% endfor %}
-    </div>
-    {% endif %}
 
-  </main>
-</div>
+      <div class="panel-footer">
+        <button type="submit" class="btn btn-primary" data-form="profile">Save Changes</button>
+      </div>
+
+    </div><!-- /tab-profile -->
+
+    <!-- ==================
+         SECURITY TAB
+         ================== -->
+    <div class="settings-panel" id="tab-security">
+
+      <div class="panel-section">
+        <h2 class="section-heading">Change Password</h2>
+        <p class="section-desc">Use a strong password at least 8 characters long.</p>
+
+        <div class="form-grid form-grid--single">
+          <div class="field-group">
+            <label class="field-label" for="current_password">Current Password</label>
+            <input class="field-input" type="password" id="current_password"
+                   name="current_password" placeholder="Enter current password" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="new_password">New Password</label>
+            <input class="field-input" type="password" id="new_password"
+                   name="new_password" placeholder="Enter new password" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="confirm_password">Confirm New Password</label>
+            <input class="field-input" type="password" id="confirm_password"
+                   name="confirm_password" placeholder="Confirm new password" />
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h2 class="section-heading">Login Sessions</h2>
+        <p class="section-desc">Active sessions for your account.</p>
+
+        <div class="session-list">
+          {% for session in active_sessions %}
+          <div class="session-item">
+            <div class="session-icon">{{ session.device_icon }}</div>
+            <div class="session-info">
+              <div class="session-device">{{ session.device }}</div>
+              <div class="session-meta">{{ session.location }} · {{ session.last_active }}</div>
+            </div>
+            {% if session.is_current %}
+              <span class="badge success">Current</span>
+            {% else %}
+              <button type="submit" class="btn btn-danger-sm"
+                      name="revoke_session_id" value="{{ session.id }}"
+                      data-form="revoke_session">
+                Revoke
+              </button>
+            {% endif %}
+          </div>
+          {% empty %}
+          <p class="empty-state">No active sessions found.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="panel-footer">
+        <button type="submit" class="btn btn-primary" data-form="security">Update Password</button>
+      </div>
+
+    </div><!-- /tab-security -->
+
+    <!-- ==================
+         SYSTEM TAB
+         ================== -->
+    <div class="settings-panel" id="tab-system">
+
+      <div class="panel-section">
+        <h2 class="section-heading">Organisation Details</h2>
+        <p class="section-desc">Information shown across the platform.</p>
+
+        <div class="form-grid">
+          <div class="field-group field-group--full">
+            <label class="field-label" for="library_name">Organisation Name</label>
+            <input class="field-input" type="text" id="library_name" name="library_name"
+                   value="{{ system_settings.org_name }}" placeholder="Organisation name" />
+          </div>
+          <div class="field-group field-group--full">
+            <label class="field-label" for="address">Address</label>
+            <textarea class="field-input field-textarea" id="address" name="address"
+                      rows="3" placeholder="Full address">{{ system_settings.org_address }}</textarea>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="institute_email">Contact Email</label>
+            <input class="field-input" type="email" id="institute_email" name="institute_email"
+                   value="{{ system_settings.org_email }}" placeholder="Contact email" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="org_phone">Contact Phone</label>
+            <input class="field-input" type="text" id="org_phone" name="phone_number"
+                   value="{{ system_settings.org_phone }}" placeholder="Contact phone" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="district">District</label>
+            <input class="field-input" type="text" id="district" name="district"
+                   value="{{ system_settings.district }}" placeholder="District" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="state">State</label>
+            <input class="field-input" type="text" id="state" name="state"
+                   value="{{ system_settings.state }}" placeholder="State" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="country">Country</label>
+            <input class="field-input" type="text" id="country" name="country"
+                   value="{{ system_settings.country }}" placeholder="Country" />
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h2 class="section-heading">Appearance</h2>
+        <p class="section-desc">Customise the look of your dashboard.</p>
+
+        <div class="form-grid">
+          <div class="field-group">
+            <label class="field-label" for="primary_color">Primary Colour</label>
+            <input class="field-input" type="color" id="primary_color" name="primary_color"
+                   value="{{ system_settings.primary_color }}" />
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-footer">
+        <button type="submit" class="btn btn-primary" data-form="system">Save System Settings</button>
+      </div>
+
+    </div><!-- /tab-system -->
+
+    <!-- ==================
+         NOTIFICATIONS TAB
+         ================== -->
+    <div class="settings-panel" id="tab-notifications">
+
+      <div class="panel-section">
+        <h2 class="section-heading">Email Notifications</h2>
+        <p class="section-desc">Choose which emails you receive.</p>
+
+        <div class="toggle-list">
+          {% for notif in notification_settings %}
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-label">{{ notif.label }}</div>
+              <div class="toggle-desc">{{ notif.description }}</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" name="{{ notif.key }}"
+                     {% if notif.enabled %}checked{% endif %} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          {% empty %}
+          <p class="empty-state">No notification settings available.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="panel-footer">
+        <button type="submit" class="btn btn-primary" data-form="notifications">Save Preferences</button>
+      </div>
+
+    </div><!-- /tab-notifications -->
+
+    <!-- ==================
+         FINE & LOANS TAB
+         ================== -->
+    <div class="settings-panel" id="tab-fine">
+
+      <div class="panel-section">
+        <h2 class="section-heading">Loan Rules</h2>
+        <p class="section-desc">Default borrowing limits and durations.</p>
+
+        <div class="form-grid">
+          <div class="field-group">
+            <label class="field-label" for="max_books_per_member">Max Books per Member</label>
+            <input class="field-input" type="number" id="max_books_per_member"
+                   name="max_books_per_member" min="1"
+                   value="{{ loan_settings.max_books_per_member }}" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="loan_period_days">Loan Period (days)</label>
+            <input class="field-input" type="number" id="loan_period_days"
+                   name="loan_period_days" min="1"
+                   value="{{ loan_settings.loan_period_days }}" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="renewal_limit">Max Renewals Allowed</label>
+            <input class="field-input" type="number" id="renewal_limit"
+                   name="renewal_limit" min="0"
+                   value="{{ loan_settings.renewal_limit }}" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="grace_period_days">Grace Period (days)</label>
+            <input class="field-input" type="number" id="grace_period_days"
+                   name="grace_period_days" min="0"
+                   value="{{ loan_settings.grace_period_days }}" />
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h2 class="section-heading">Fine Configuration</h2>
+        <p class="section-desc">Late return fines.</p>
+
+        <div class="form-grid">
+          <div class="field-group">
+            <label class="field-label" for="fine_per_day">Fine per Day (₹)</label>
+            <input class="field-input" type="number" id="fine_per_day"
+                   name="fine_per_day" min="0" step="0.50"
+                   value="{{ loan_settings.fine_per_day }}" />
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h2 class="section-heading">Rule Toggles</h2>
+        <p class="section-desc">Enable or disable specific loan behaviours.</p>
+
+        <div class="toggle-list">
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-label">Auto Fine</div>
+              <div class="toggle-desc">Automatically apply fines when a book is overdue.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" name="auto_fine"
+                     {% if loan_settings.auto_fine %}checked{% endif %} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-label">Allow Renewal</div>
+              <div class="toggle-desc">Let members renew borrowed books.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" name="allow_renewal"
+                     {% if loan_settings.allow_renewal %}checked{% endif %} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-label">Allow Partial Payment</div>
+              <div class="toggle-desc">Accept partial fine payments from members.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" name="allow_partial_payment"
+                     {% if loan_settings.allow_partial_payment %}checked{% endif %} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-label">Auto Mark Lost</div>
+              <div class="toggle-desc">Automatically mark severely overdue books as lost.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" name="auto_mark_lost"
+                     {% if loan_settings.auto_mark_lost %}checked{% endif %} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-label">Allow Advance Booking</div>
+              <div class="toggle-desc">Let members reserve books before they are available.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" name="allow_advance_booking"
+                     {% if loan_settings.allow_advance_booking %}checked{% endif %} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-footer">
+        <button type="submit" class="btn btn-primary" data-form="fine">Save Loan & Fine Settings</button>
+      </div>
+
+    </div><!-- /tab-fine -->
+
+  </form><!-- /settings-panels -->
+</div><!-- /settings-layout -->
+
 {% endblock %}
 
 {% block extra_js %}
