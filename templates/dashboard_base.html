@@ -37,11 +37,11 @@
           <span class="nav-icon"><i class="fas fa-chart-bar"></i></span> Dashboard
         </a>
       </li>
-      <li>
+      {% comment %} <li>
         <a class="nav-item {% block nav_staff %}{% endblock %}" href="{% url 'staff:staff_list' %}">
           <span class="nav-icon"><i class="fas fa-user-tie"></i></span> Staff
         </a>
-      </li>
+      </li> {% endcomment %}
       <li>
         <a class="nav-item {% block nav_books %}{% endblock %}"
            href="{% url 'books:book_list' %}">
@@ -49,7 +49,7 @@
         </a>
       </li>
       <li>
-        <a class="nav-item {% block nav_members %}{% endblock %}" href="#">
+        <a class="nav-item {% block nav_members %}{% endblock %}" href="{% url "members:members_list" %}">
           <span class="nav-icon"><i class="fas fa-users"></i></span> Members
         </a>
       </li>

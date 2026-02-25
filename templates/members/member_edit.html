@@ -1,0 +1,261 @@
+{% extends "dashboard_base.html" %}
+{% load static %}
+
+{% block title %}Edit {{ member.full_name }} - Dooars Granthika{% endblock %}
+
+{% block nav_members %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/members/members.css' %}" />
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+  
+  <!-- Form Header -->
+  <div class="form-header">
+    <h2>
+      <i class="fas fa-user-edit"></i> Edit Member: {{ member.full_name }}
+    </h2>
+    <p>Update member information below</p>
+  </div>
+
+  <!-- Form -->
+  <form id="memberForm" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    <!-- Personal Information Section -->
+    <div class="form-section">
+      <div class="form-section-title">
+        <i class="fas fa-user"></i> Personal Information
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="firstName" class="required">First Name</label>
+          <input type="text" id="firstName" name="first_name" class="form-control" required 
+                 value="{{ form.first_name.value|default:member.first_name }}" />
+          {% if form.first_name.errors %}
+            <span class="error-message">{{ form.first_name.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="lastName" class="required">Last Name</label>
+          <input type="text" id="lastName" name="last_name" class="form-control" required 
+                 value="{{ form.last_name.value|default:member.last_name }}" />
+          {% if form.last_name.errors %}
+            <span class="error-message">{{ form.last_name.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="dateOfBirth" class="required">Date of Birth</label>
+          <input type="date" id="dateOfBirth" name="date_of_birth" class="form-control" required 
+                 value="{{ form.date_of_birth.value|default:member.date_of_birth|date:'Y-m-d' }}" />
+          {% if form.date_of_birth.errors %}
+            <span class="error-message">{{ form.date_of_birth.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="gender" class="required">Gender</label>
+          <select id="gender" name="gender" class="form-control" required>
+            <option value="">Select Gender</option>
+            <option value="M" {% if form.gender.value|default:member.gender == 'M' %}selected{% endif %}>Male</option>
+            <option value="F" {% if form.gender.value|default:member.gender == 'F' %}selected{% endif %}>Female</option>
+            <option value="O" {% if form.gender.value|default:member.gender == 'O' %}selected{% endif %}>Other</option>
+          </select>
+          {% if form.gender.errors %}
+            <span class="error-message">{{ form.gender.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group full-width">
+          <label for="address">Address</label>
+          <textarea id="address" name="address" class="form-control" rows="3">{{ form.address.value|default:member.address }}</textarea>
+          {% if form.address.errors %}
+            <span class="error-message">{{ form.address.errors.0 }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Contact Information Section -->
+    <div class="form-section">
+      <div class="form-section-title">
+        <i class="fas fa-phone"></i> Contact Information
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="email" class="required">Email Address</label>
+          <input type="email" id="email" name="email" class="form-control" required 
+                 value="{{ form.email.value|default:member.email }}" />
+          {% if form.email.errors %}
+            <span class="error-message">{{ form.email.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="phone" class="required">Phone Number</label>
+          <input type="tel" id="phone" name="phone" class="form-control" required 
+                 placeholder="10-digit number" maxlength="10"
+                 value="{{ form.phone.value|default:member.phone }}" />
+          {% if form.phone.errors %}
+            <span class="error-message">{{ form.phone.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="alternatePhone">Alternate Phone</label>
+          <input type="tel" id="alternatePhone" name="alternate_phone" class="form-control" 
+                 placeholder="10-digit number" maxlength="10"
+                 value="{{ form.alternate_phone.value|default:member.alternate_phone }}" />
+          {% if form.alternate_phone.errors %}
+            <span class="error-message">{{ form.alternate_phone.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="guardianPhone">Guardian Phone</label>
+          <input type="tel" id="guardianPhone" name="guardian_phone" class="form-control" 
+                 placeholder="10-digit number" maxlength="10"
+                 value="{{ form.guardian_phone.value|default:member.guardian_phone }}" />
+          {% if form.guardian_phone.errors %}
+            <span class="error-message">{{ form.guardian_phone.errors.0 }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Academic Information Section -->
+    <div class="form-section">
+      <div class="form-section-title">
+        <i class="fas fa-graduation-cap"></i> Academic Information
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="department" class="required">Department</label>
+          <select id="department" name="department" class="form-control" required>
+            <option value="">Select Department</option>
+            {% for dept in departments %}
+            <option value="{{ dept.id }}" 
+                    {% if form.department.value|default:member.department.id == dept.id %}selected{% endif %}>
+              {{ dept.name }}
+            </option>
+            {% endfor %}
+          </select>
+          {% if form.department.errors %}
+            <span class="error-message">{{ form.department.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="course" class="required">Course</label>
+          <select id="course" name="course" class="form-control" required>
+            <option value="">Select Course</option>
+            {% for course in courses %}
+            <option value="{{ course.id }}" 
+                    {% if form.course.value|default:member.course.id == course.id %}selected{% endif %}>
+              {{ course.name }}
+            </option>
+            {% endfor %}
+          </select>
+          {% if form.course.errors %}
+            <span class="error-message">{{ form.course.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="year" class="required">Academic Year</label>
+          <select id="year" name="year" class="form-control" required>
+            <option value="">Select Year</option>
+            <option value="1" {% if form.year.value|default:member.year == 1 %}selected{% endif %}>1st Year</option>
+            <option value="2" {% if form.year.value|default:member.year == 2 %}selected{% endif %}>2nd Year</option>
+            <option value="3" {% if form.year.value|default:member.year == 3 %}selected{% endif %}>3rd Year</option>
+            <option value="4" {% if form.year.value|default:member.year == 4 %}selected{% endif %}>4th Year</option>
+          </select>
+          {% if form.year.errors %}
+            <span class="error-message">{{ form.year.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="rollNumber" class="required">Roll Number</label>
+          <input type="text" id="rollNumber" name="roll_number" class="form-control" required 
+                 value="{{ form.roll_number.value|default:member.roll_number }}" />
+          {% if form.roll_number.errors %}
+            <span class="error-message">{{ form.roll_number.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="admissionYear" class="required">Admission Year</label>
+          <input type="number" id="admissionYear" name="admission_year" class="form-control" required 
+                 min="2000" max="2100" value="{{ form.admission_year.value|default:member.admission_year }}" />
+          {% if form.admission_year.errors %}
+            <span class="error-message">{{ form.admission_year.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label for="status" class="required">Status</label>
+          <select id="status" name="status" class="form-control" required>
+            <option value="active" {% if form.status.value|default:member.status == 'active' %}selected{% endif %}>Active</option>
+            <option value="inactive" {% if form.status.value|default:member.status == 'inactive' %}selected{% endif %}>Inactive</option>
+            <option value="passout" {% if form.status.value|default:member.status == 'passout' %}selected{% endif %}>Pass Out</option>
+          </select>
+          {% if form.status.errors %}
+            <span class="error-message">{{ form.status.errors.0 }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Photo Upload Section -->
+    <div class="form-section">
+      <div class="form-section-title">
+        <i class="fas fa-camera"></i> Member Photo
+      </div>
+      
+      {% if member.photo %}
+      <div style="margin-bottom: 1rem;">
+        <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">Current Photo:</p>
+        <img src="{% url 'members:member_photo' member.id %}" alt="{{ member.full_name }}" 
+             style="width: 150px; height: 150px; object-fit: cover; border-radius: 8px; border: 2px solid #e5e7eb;" />
+      </div>
+      {% endif %}
+      
+      <div class="file-input-wrapper">
+        <label for="memberPhoto" class="file-input-label">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <div class="file-input-text">
+            <span>{% if member.photo %}Change photo{% else %}Upload photo{% endif %}</span>
+            <small>JPG, PNG or GIF (MAX. 5MB)</small>
+          </div>
+        </label>
+        <input type="file" id="memberPhoto" name="photo_upload" accept="image/*" />
+        {% if form.photo_upload.errors %}
+          <span class="error-message">{{ form.photo_upload.errors.0 }}</span>
+        {% endif %}
+      </div>
+      <div id="photoPreview" class="image-preview"></div>
+    </div>
+
+    <!-- Form Actions -->
+    <div class="form-actions">
+      <a href="{% url 'members:member_detail' member.id %}" class="btn btn-secondary">
+        <i class="fas fa-times"></i> Cancel
+      </a>
+      <button type="submit" class="btn btn-primary">
+        <i class="fas fa-save"></i> Save Changes
+      </button>
+    </div>
+
+  </form>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/members/members.js' %}"></script>
+{% endblock %}

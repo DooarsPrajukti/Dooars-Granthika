@@ -1,20 +1,17 @@
 /**
  * Admin Dashboard JavaScript
+ * Handles: sidebar toggle, stat animations, tooltips, charts,
+ *          quick-action clicks, notification panel.
  */
 
 document.addEventListener('DOMContentLoaded', function () {
 
-  // Mobile sidebar toggle
   initMobileSidebar();
-
-  // Stats counter animations
   animateStats();
-
-  // Tooltips
   initTooltips();
-
-  // Charts (data injected by Django via window.DASHBOARD_DATA)
   initCharts();
+  initQuickActions();
+  initNotifications();
 
 });
 
@@ -23,11 +20,13 @@ document.addEventListener('DOMContentLoaded', function () {
 // ===========================
 function initMobileSidebar() {
   const sidebar = document.querySelector('.sidebar');
+  if (!sidebar) return;
 
   if (window.innerWidth <= 968) {
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'mobile-sidebar-toggle';
-    toggleBtn.innerHTML = '☰';
+    toggleBtn.innerHTML   = '☰';
+    toggleBtn.setAttribute('aria-label', 'Toggle sidebar');
     toggleBtn.style.cssText = `
       position: fixed;
       top: 20px;
@@ -35,18 +34,19 @@ function initMobileSidebar() {
       z-index: 200;
       width: 44px;
       height: 44px;
-      background: var(--ink-accent);
-      color: white;
+      background: var(--ink-accent, #1a6fd4);
+      color: #fff;
       border: none;
       border-radius: 10px;
       font-size: 20px;
       cursor: pointer;
-      box-shadow: 0 4px 12px rgba(26, 111, 212, 0.3);
+      box-shadow: 0 4px 12px rgba(26,111,212,0.3);
+      transition: opacity 0.2s;
     `;
-
     document.body.appendChild(toggleBtn);
 
-    toggleBtn.addEventListener('click', function () {
+    toggleBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
       sidebar.classList.toggle('open');
     });
 
@@ -62,23 +62,26 @@ function initMobileSidebar() {
 // Animate Stats on Load
 // ===========================
 function animateStats() {
-  const statValues = document.querySelectorAll('.stat-value');
+  // Target both admin-style .stat-value and members-style h3 inside .stat-body
+  const statEls = document.querySelectorAll('.stat-value, .stat-body h3');
 
-  statValues.forEach(stat => {
-    const finalValue = parseInt(stat.textContent) || 0;
-    if (finalValue === 0) return;
+  statEls.forEach(function (el) {
+    const raw = el.textContent.trim().replace(/,/g, '');
+    const finalValue = parseInt(raw, 10);
+    if (isNaN(finalValue) || finalValue === 0) return;
 
-    let currentValue = 0;
-    const increment = Math.ceil(finalValue / 50);
-    const stepTime = 1000 / 50;
+    const steps     = 50;
+    const stepTime  = Math.round(800 / steps);      // ~800 ms total
+    const increment = Math.ceil(finalValue / steps);
+    let   current   = 0;
 
-    const timer = setInterval(() => {
-      currentValue += increment;
-      if (currentValue >= finalValue) {
-        stat.textContent = finalValue;
+    const timer = setInterval(function () {
+      current += increment;
+      if (current >= finalValue) {
+        el.textContent = finalValue.toLocaleString();
         clearInterval(timer);
       } else {
-        stat.textContent = currentValue;
+        el.textContent = current.toLocaleString();
       }
     }, stepTime);
   });
@@ -88,43 +91,55 @@ function animateStats() {
 // Tooltips
 // ===========================
 function initTooltips() {
-  const tooltipElements = document.querySelectorAll('[title]');
+  document.querySelectorAll('[title]').forEach(function (el) {
+    let tooltip = null;
 
-  tooltipElements.forEach(el => {
     el.addEventListener('mouseenter', function () {
       const title = this.getAttribute('title');
       if (!title) return;
 
-      const tooltip = document.createElement('div');
-      tooltip.className = 'custom-tooltip';
+      // Temporarily clear title so the browser default doesn't double-show
+      this.dataset.titleBak = title;
+      this.removeAttribute('title');
+
+      tooltip = document.createElement('div');
+      tooltip.className   = 'custom-tooltip';
       tooltip.textContent = title;
       tooltip.style.cssText = `
-        position: absolute;
-        background: var(--ink-dark);
-        color: white;
-        padding: 8px 12px;
+        position: fixed;
+        background: var(--ink-dark, #0a1628);
+        color: #e8f0f8;
+        padding: 6px 12px;
         border-radius: 6px;
         font-size: 12px;
         font-weight: 500;
         white-space: nowrap;
-        z-index: 1000;
+        z-index: 9999;
         pointer-events: none;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        opacity: 0;
+        transition: opacity 0.15s ease;
       `;
-
       document.body.appendChild(tooltip);
 
-      const rect = this.getBoundingClientRect();
-      tooltip.style.top  = (rect.top - tooltip.offsetHeight - 8 + window.scrollY) + 'px';
-      tooltip.style.left = (rect.left + rect.width / 2 - tooltip.offsetWidth / 2 + window.scrollX) + 'px';
-
-      this._tooltip = tooltip;
+      // Position after render so we have dimensions
+      requestAnimationFrame(function () {
+        const rect = el.getBoundingClientRect();
+        tooltip.style.left = (rect.left + rect.width / 2 - tooltip.offsetWidth / 2) + 'px';
+        tooltip.style.top  = (rect.top  - tooltip.offsetHeight - 8) + 'px';
+        tooltip.style.opacity = '1';
+      });
     });
 
     el.addEventListener('mouseleave', function () {
-      if (this._tooltip) {
-        this._tooltip.remove();
-        this._tooltip = null;
+      // Restore title
+      if (this.dataset.titleBak) {
+        this.setAttribute('title', this.dataset.titleBak);
+        delete this.dataset.titleBak;
+      }
+      if (tooltip) {
+        tooltip.remove();
+        tooltip = null;
       }
     });
   });
@@ -134,14 +149,16 @@ function initTooltips() {
 // Charts
 // ===========================
 function initCharts() {
-
-  // Guard: Chart.js must be loaded
-  if (typeof Chart === 'undefined') return;
+  if (typeof Chart === 'undefined') {
+    console.warn('Chart.js not loaded — skipping charts.');
+    return;
+  }
 
   const data = window.DASHBOARD_DATA || {};
 
+  // Global defaults
   Chart.defaults.font.family = "'Inter', sans-serif";
-  Chart.defaults.color = '#7a8fa9';
+  Chart.defaults.color       = '#7a8fa9';
 
   const tooltipDefaults = {
     backgroundColor: '#0a1628',
@@ -149,6 +166,7 @@ function initCharts() {
     bodyColor:       '#b8cee0',
     padding:         12,
     cornerRadius:    8,
+    displayColors:   true,
   };
 
   // ── 1. Monthly Loans — Line Chart ────────────────────────────
@@ -160,8 +178,8 @@ function initCharts() {
         data: {
           labels: data.loansChart.labels,
           datasets: [{
-            label: 'Loans',
-            data: data.loansChart.data,
+            label:                'Loans',
+            data:                 data.loansChart.data,
             borderColor:          '#1a6fd4',
             backgroundColor:      'rgba(26, 111, 212, 0.08)',
             borderWidth:          2.5,
@@ -179,8 +197,16 @@ function initCharts() {
             tooltip: tooltipDefaults,
           },
           scales: {
-            x: { grid: { color: 'rgba(216,226,239,0.4)' }, border: { dash: [4, 4] } },
-            y: { grid: { color: 'rgba(216,226,239,0.4)' }, border: { dash: [4, 4] }, beginAtZero: true, ticks: { precision: 0 } },
+            x: {
+              grid:   { color: 'rgba(216,226,239,0.4)' },
+              border: { dash: [4, 4] },
+            },
+            y: {
+              grid:         { color: 'rgba(216,226,239,0.4)' },
+              border:       { dash: [4, 4] },
+              beginAtZero:  true,
+              ticks:        { precision: 0 },
+            },
           }
         }
       });
@@ -197,7 +223,7 @@ function initCharts() {
           labels: data.categoryChart.labels,
           datasets: [{
             data:            data.categoryChart.data,
-            backgroundColor: ['#1a6fd4', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#60b4ff'],
+            backgroundColor: ['#1a6fd4','#10b981','#8b5cf6','#f59e0b','#ef4444','#60b4ff','#f093fb','#30cfd0'],
             borderWidth:     2,
             borderColor:     '#ffffff',
             hoverOffset:     8,
@@ -249,7 +275,12 @@ function initCharts() {
           },
           scales: {
             x: { grid: { display: false } },
-            y: { grid: { color: 'rgba(216,226,239,0.4)' }, border: { dash: [4, 4] }, beginAtZero: true, ticks: { precision: 0 } },
+            y: {
+              grid:        { color: 'rgba(216,226,239,0.4)' },
+              border:      { dash: [4, 4] },
+              beginAtZero: true,
+              ticks:       { precision: 0 },
+            },
           }
         }
       });
@@ -260,21 +291,33 @@ function initCharts() {
 // ===========================
 // Quick Action Handlers
 // ===========================
-document.querySelectorAll('.action-btn').forEach(btn => {
-  btn.addEventListener('click', function () {
-    const actionText = this.querySelector('.action-text').textContent;
-    console.log('Action clicked:', actionText);
-    // Wire up your action handlers here
+function initQuickActions() {
+  document.querySelectorAll('.action-btn').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      // If the button is an <a> with a real href, let it navigate naturally.
+      const href = this.getAttribute('href');
+      if (href && href !== '#') return;
+
+      // Fallback for placeholder buttons
+      e.preventDefault();
+      const labelEl = this.querySelector('.action-text');
+      const label   = labelEl ? labelEl.textContent.trim() : 'Action';
+      console.log('Quick action clicked:', label);
+      // Wire up custom logic per action here, e.g.:
+      // if (label === 'Generate Report') openReportModal();
+    });
   });
-});
+}
 
 // ===========================
-// Notification Click Handler
+// Notification Handler
 // ===========================
-const notificationBtn = document.querySelector('.btn-icon[title="Notifications"]');
-if (notificationBtn) {
-  notificationBtn.addEventListener('click', function () {
+function initNotifications() {
+  const btn = document.querySelector('.btn-icon[title="Notifications"]');
+  if (!btn) return;
+
+  btn.addEventListener('click', function () {
     console.log('Notifications clicked');
-    // Add notification panel logic here
+    // Add notification panel / dropdown logic here
   });
 }

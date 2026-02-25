@@ -450,5 +450,5 @@ class _Proxy:
 
 
 
-def staff_dashboard(request):
-    return render(request, 'dashboards/staff_dashboard.html')
+# def staff_dashboard(request):
+#     return render(request, 'dashboards/staff_dashboard.html')

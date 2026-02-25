@@ -10,5 +10,5 @@ urlpatterns = [
     path('admin_dashboard/', views.admin_dashboard, name='admin_dashboard'),
     path('sign_out/', views.view_logout, name='signout'),
     path("settings/", views.settings_view, name="settings"),
-    path('staff_dashboard/', views.staff_dashboard,   name='staff_dashboard'),
+    # path('staff_dashboard/', views.staff_dashboard,   name='staff_dashboard'),
 ]

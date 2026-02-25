@@ -6,7 +6,7 @@
 {% block nav_dashboard %}active{% endblock %}
 
 {% block extra_css %}
-{# admin_dashboard.css is already loaded by the base — add any page-specific extras here #}
+{# admin_dashboard.css already loaded by dashboard_base — members.css folded in too #}
 {% endblock %}
 
 {% block topbar %}
@@ -41,8 +41,13 @@
 
 
 {% block content %}
+<div class="members-dashboard">
 
-  <!-- Stats Cards -->
+  <!-- ═══════════════════════════════════════════════
+       SECTION 1 — Library Overview (Admin)
+  ══════════════════════════════════════════════════ -->
+  <p class="page-section-title"><i class="fas fa-landmark"></i> Library Overview</p>
+
   <section class="stats-grid">
 
     <div class="stat-card">
@@ -99,7 +104,122 @@
 
   </section>
 
-  <!-- Charts Row -->
+  <!-- ═══════════════════════════════════════════════
+       SECTION 2 — Membership Statistics
+  ══════════════════════════════════════════════════ -->
+  <hr class="divider" />
+  <p class="page-section-title"><i class="fas fa-chart-line"></i> Membership Statistics</p>
+
+  <div class="stats-grid">
+
+    <div class="stat-card active">
+      <div class="stat-header">
+        <div class="stat-body">
+          <h3>{{ stats.active_count }}</h3>
+          <p>Active Members</p>
+          <div class="stat-trend up">
+            <i class="fas fa-arrow-up"></i>
+            <span>{{ stats.active_percentage }}%</span>
+          </div>
+        </div>
+        <div class="stat-icon">
+          <i class="fas fa-user-check"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card passout">
+      <div class="stat-header">
+        <div class="stat-body">
+          <h3>{{ stats.passout_count }}</h3>
+          <p>Pass Out Members</p>
+          <div class="stat-trend">
+            <i class="fas fa-minus"></i>
+            <span>{{ stats.passout_percentage }}%</span>
+          </div>
+        </div>
+        <div class="stat-icon">
+          <i class="fas fa-user-graduate"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card inactive">
+      <div class="stat-header">
+        <div class="stat-body">
+          <h3>{{ stats.inactive_count }}</h3>
+          <p>Inactive Members</p>
+          <div class="stat-trend down">
+            <i class="fas fa-arrow-down"></i>
+            <span>{{ stats.inactive_percentage }}%</span>
+          </div>
+        </div>
+        <div class="stat-icon">
+          <i class="fas fa-user-slash"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card clearance">
+      <div class="stat-header">
+        <div class="stat-body">
+          <h3>{{ stats.total_count }}</h3>
+          <p>Total Members</p>
+          <div class="stat-trend up">
+            <i class="fas fa-users"></i>
+            <span>All Time</span>
+          </div>
+        </div>
+        <div class="stat-icon">
+          <i class="fas fa-users"></i>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       SECTION 3 — Quick Actions
+  ══════════════════════════════════════════════════ -->
+  <hr class="divider" />
+
+  <div class="quick-actions">
+    <h2 class="section-title">Quick Actions</h2>
+    <div class="actions-grid">
+      <a href="{% url 'books:book_create' %}" class="action-btn">
+        <div class="action-icon"><i class="fas fa-book"></i></div>
+        <span class="action-text">Add Book</span>
+      </a>
+      <a href="{% url 'members:member_add' %}" class="action-btn secondary">
+        <div class="action-icon"><i class="fas fa-user-plus"></i></div>
+        <span class="action-text">Add Member</span>
+      </a>
+      <a href="{% url 'members:members_list' %}" class="action-btn secondary">
+        <div class="action-icon"><i class="fas fa-list"></i></div>
+        <span class="action-text">All Members</span>
+      </a>
+      <a href="{% url 'members:clearance_check' %}" class="action-btn secondary">
+        <div class="action-icon"><i class="fas fa-clipboard-check"></i></div>
+        <span class="action-text">Check Clearance</span>
+      </a>
+      <a href="{% url 'members:pending_clearance' %}" class="action-btn secondary">
+        <div class="action-icon"><i class="fas fa-clock"></i></div>
+        <span class="action-text">Pending Clearance</span>
+      </a>
+      <a href="#" class="action-btn">
+        <div class="action-icon"><i class="fas fa-chart-line"></i></div>
+        <span class="action-text">Generate Report</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       SECTION 4 — Charts
+  ══════════════════════════════════════════════════ -->
+  <hr class="divider" />
+  <p class="page-section-title"><i class="fas fa-chart-bar"></i> Analytics</p>
+
+  <!-- Row 1: Monthly Loans + Books by Category (Admin charts) -->
   <div class="charts-row">
 
     <div class="card chart-card">
@@ -132,7 +252,26 @@
 
   </div>
 
-  <!-- Activity + Members Row -->
+  <!-- Row 2: Dept Distribution + Status Distribution (Members charts) -->
+  <div class="charts-row-2">
+
+    <div class="chart-panel">
+      <h3 class="chart-panel-title">
+        <i class="fas fa-building"></i> Members by Department
+      </h3>
+      <canvas id="departmentChart"></canvas>
+    </div>
+
+    <div class="chart-panel">
+      <h3 class="chart-panel-title">
+        <i class="fas fa-chart-pie"></i> Member Status Distribution
+      </h3>
+      <canvas id="statusChart"></canvas>
+    </div>
+
+  </div>
+
+  <!-- Row 3: Recent Activity + New Members (Admin charts) -->
   <div class="dashboard-row">
 
     <div class="card">
@@ -176,31 +315,92 @@
 
   </div>
 
-  <!-- Quick Actions -->
-  <div class="quick-actions">
-    <h2 class="section-title">Quick Actions</h2>
-    <div class="actions-grid">
-      <a href="{% url 'books:book_create' %}" class="action-btn">
-        <div class="action-icon"><i class="fas fa-book"></i></div>
-        <span class="action-text">Add Book</span>
-      </a>
-      <a href="#" class="action-btn">
-        <div class="action-icon"><i class="fas fa-user-plus"></i></div>
-        <span class="action-text">Add Member</span>
-      </a>
-      <a href="#" class="action-btn">
-        <div class="action-icon"><i class="fas fa-chart-line"></i></div>
-        <span class="action-text">Generate Report</span>
+  <!-- ═══════════════════════════════════════════════
+       SECTION 5 — Recently Added Members
+  ══════════════════════════════════════════════════ -->
+  <hr class="divider" />
+
+  <div class="members-table-container">
+    <div class="table-header">
+      <h2>Recently Added Members</h2>
+      <a href="{% url 'members:members_list' %}" class="btn-secondary">
+        View All <i class="fas fa-arrow-right"></i>
       </a>
     </div>
+
+    {% if recent_members %}
+    <table class="members-table">
+      <thead>
+        <tr>
+          <th>Member Info</th>
+          <th>Member ID</th>
+          <th>Department</th>
+          <th>Join Date</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for member in recent_members %}
+        <tr>
+          <td>
+            <div class="member-info">
+              {% if member.photo %}
+              <img src="{{ member.photo.url }}" alt="{{ member.full_name }}" class="member-avatar" style="border-radius: 50%; object-fit: cover;" />
+              {% else %}
+              <div class="member-avatar">
+                {{ member.full_name|slice:":1"|upper }}
+              </div>
+              {% endif %}
+              <div class="member-details">
+                <span class="member-name">{{ member.full_name }}</span>
+                <span class="member-id">{{ member.email }}</span>
+              </div>
+            </div>
+          </td>
+          <td><strong>{{ member.member_id }}</strong></td>
+          <td>{{ member.department.name|default:"N/A" }}</td>
+          <td>{{ member.date_joined|date:"M d, Y" }}</td>
+          <td>
+            <span class="status-badge {{ member.status }}">
+              <i class="fas fa-circle"></i>
+              {{ member.get_status_display }}
+            </span>
+          </td>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'members:member_detail' member.id %}" class="action-icon view" title="View Details">
+                <i class="fas fa-eye"></i>
+              </a>
+              <a href="{% url 'members:member_edit' member.id %}" class="action-icon edit" title="Edit">
+                <i class="fas fa-edit"></i>
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">
+        <i class="fas fa-user-plus"></i>
+      </div>
+      <h3>No Members Yet</h3>
+      <p>Start adding members to see them here.</p>
+    </div>
+    {% endif %}
   </div>
 
+</div>
 {% endblock %}
 
 
 {% block extra_js %}
 <script src="{% static 'js/dashboard/admin_dashboard.js' %}"></script>
+<script src="{% static 'js/members/members.js' %}"></script>
 <script>
+  /* ── Admin dashboard chart data ── */
   window.DASHBOARD_DATA = {
     loansChart: {
       enabled: {% if monthly_loan_labels and monthly_loan_data %}true{% else %}false{% endif %},
@@ -218,5 +418,63 @@
       data:    {% if member_day_data %}{{ member_day_data|safe }}{% else %}[]{% endif %}
     }
   };
+
+  /* ── Members dashboard inline charts ── */
+  const deptCtx = document.getElementById('departmentChart');
+  if (deptCtx) {
+    new Chart(deptCtx, {
+      type: 'doughnut',
+      data: {
+        labels: {{ department_labels|safe }},
+        datasets: [{
+          data: {{ department_data|safe }},
+          backgroundColor: [
+            '#667eea','#764ba2','#f093fb','#4facfe',
+            '#43e97b','#fa709a','#fee140','#30cfd0'
+          ],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { padding: 15, font: { size: 12 } }
+          }
+        }
+      }
+    });
+  }
+
+  const statusCtx = document.getElementById('statusChart');
+  if (statusCtx) {
+    new Chart(statusCtx, {
+      type: 'pie',
+      data: {
+        labels: ['Active', 'Pass Out', 'Inactive'],
+        datasets: [{
+          data: [
+            {{ stats.active_count }},
+            {{ stats.passout_count }},
+            {{ stats.inactive_count }}
+          ],
+          backgroundColor: ['#10b981','#f59e0b','#ef4444'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { padding: 15, font: { size: 12 } }
+          }
+        }
+      }
+    });
+  }
 </script>
 {% endblock %}
