@@ -17,13 +17,30 @@ class StaffStatus(models.TextChoices):
 
 
 class Staff(models.Model):
-    # Django user account (created automatically on staff add)
-    user = models.OneToOneField(
-        User, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='staff_profile'
+    # ── Multi-tenant: which admin owns this staff member ──────
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='owned_staff',
+        help_text='The superuser/admin who created this staff member.',
     )
 
-    # Personal details
+    # ── Linked Django login account ───────────────────────────
+    user = models.OneToOneField(
+        User, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='staff_profile',
+    )
+
+    # ── Portal access flag ────────────────────────────────────
+    # 1 = staff can log in to the staff dashboard
+    # 0 = login disabled (mirrors Django User.is_staff)
+    is_staff_user = models.BooleanField(
+        default=True,
+        verbose_name='Portal Access',
+        help_text='1 = can log in to staff dashboard  |  0 = access revoked.',
+    )
+
+    # ── Personal details ──────────────────────────────────────
     first_name   = models.CharField(max_length=100)
     last_name    = models.CharField(max_length=100)
     email        = models.EmailField(unique=True)
@@ -32,28 +49,30 @@ class Staff(models.Model):
 
     # Photo stored as BLOB in MySQL
     photo      = models.BinaryField(null=True, blank=True)
-    photo_mime = models.CharField(max_length=50, blank=True)  # e.g. 'image/jpeg'
+    photo_mime = models.CharField(max_length=50, blank=True)
 
-    # Role & status
-    role   = models.CharField(max_length=20, choices=StaffRole.choices, default=StaffRole.LIBRARIAN)
+    # ── Role & status ─────────────────────────────────────────
+    role   = models.CharField(max_length=20, choices=StaffRole.choices,   default=StaffRole.LIBRARIAN)
     status = models.CharField(max_length=20, choices=StaffStatus.choices, default=StaffStatus.ACTIVE)
 
-    # Employment
+    # ── Employment ────────────────────────────────────────────
     date_joined = models.DateField()
     date_left   = models.DateField(null=True, blank=True)
     notes       = models.TextField(blank=True)
 
-    # Timestamps
+    # ── Timestamps ────────────────────────────────────────────
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['first_name', 'last_name']
-        verbose_name = 'Staff Member'
+        ordering            = ['first_name', 'last_name']
+        verbose_name        = 'Staff Member'
         verbose_name_plural = 'Staff Members'
 
     def __str__(self):
         return self.full_name
+
+    # ── Properties ────────────────────────────────────────────
 
     @property
     def full_name(self):
@@ -72,3 +91,15 @@ class Staff(models.Model):
             mime = self.photo_mime or 'image/jpeg'
             return f"data:{mime};base64,{data}"
         return None
+
+    # ── Helpers ───────────────────────────────────────────────
+
+    def sync_portal_access(self):
+        """
+        Keep Django User.is_staff in sync with self.is_staff_user.
+        1 → User.is_staff = True  (can access staff dashboard)
+        0 → User.is_staff = False (access revoked)
+        """
+        if self.user:
+            self.user.is_staff = self.is_staff_user
+            self.user.save(update_fields=['is_staff'])

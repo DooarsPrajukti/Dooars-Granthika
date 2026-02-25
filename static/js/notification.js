@@ -106,16 +106,16 @@
             position: 'bottom',
             labels: {
               font: { size: 11, family: "'Instrument Sans', sans-serif", weight: '600' },
-              color: '#4a5568',
+              color: '#94a3b8',
               padding: 18,
               usePointStyle: true,
               pointStyleWidth: 8,
             },
           },
           tooltip: {
-            backgroundColor: '#0d1220',
+            backgroundColor: '#0f172a',
             titleColor: '#f0f4ff',
-            bodyColor: '#8b9cbf',
+            bodyColor: '#94a3b8',
             borderColor: 'rgba(255,255,255,0.1)',
             borderWidth: 1,
             padding: 12,
@@ -127,9 +127,9 @@
         scales: {
           y: {
             beginAtZero: true,
-            grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+            grid: { color: 'rgba(15,23,42,0.05)', drawBorder: false },
             ticks: {
-              color: '#4a5568',
+              color: '#94a3b8',
               font: { size: 10, family: "'Fira Code', monospace" },
               stepSize: 1,
               padding: 8,
@@ -139,7 +139,7 @@
           x: {
             grid: { display: false },
             ticks: {
-              color: '#4a5568',
+              color: '#94a3b8',
               font: { size: 11, family: "'Instrument Sans', sans-serif", weight: '500' },
               padding: 6,
             },

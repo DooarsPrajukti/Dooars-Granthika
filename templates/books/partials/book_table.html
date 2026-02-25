@@ -16,7 +16,7 @@
     <tbody id="booksTableBody">
       {% for book in books %}
       <tr>
-        <td class="text-muted text-sm">{{ forloop.counter }}</td>
+        <td class="text-muted text-sm">{{ page_obj.start_index|add:forloop.counter0 }}</td>
         <td class="book-title-cell">{{ book.title }}</td>
         <td>{{ book.author }}</td>
         <td class="text-muted text-sm">{{ book.isbn }}</td>

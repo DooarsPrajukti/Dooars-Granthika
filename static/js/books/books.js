@@ -45,57 +45,33 @@ function initProgressBars() {
   segs.forEach(function(s) { s.style.width = "0%"; io.observe(s); });
 }
 
-/* ── Live Search ── */
-function initSearchFilter() {
-  var inp  = document.getElementById("bookSearch");
-  var rows = document.querySelectorAll(".books-table tbody tr");
-  var noR  = document.getElementById("noResults");
-  if (!inp || !rows.length) return;
-  inp.addEventListener("input", function() {
-    var q = inp.value.toLowerCase().trim();
-    var v = 0;
-    rows.forEach(function(r) {
-      var m = !q || r.textContent.toLowerCase().includes(q);
-      r.style.display = m ? "" : "none";
-      if (m) v++;
-    });
-    if (noR) noR.style.display = v === 0 ? "block" : "none";
-  });
-}
+/* ── Server-side Filters — auto-submit on dropdown change ── */
+function initFilters() {
+  var form = document.getElementById("filtersForm");
+  if (!form) return;
 
-/* ── Category Filter ── */
-function initCategoryFilter() {
-  var sel  = document.getElementById("categoryFilter");
-  var rows = document.querySelectorAll(".books-table tbody tr");
-  if (!sel || !rows.length) return;
-  sel.addEventListener("change", function() {
-    var v = sel.value.toLowerCase();
-    rows.forEach(function(r) {
-      if (!v) { r.style.display = ""; return; }
-      var c = r.querySelector("[data-category]");
-      r.style.display = (c && c.dataset.category.toLowerCase() === v) ? "" : "none";
-    });
+  /* Auto-submit when category or stock dropdowns change */
+  ["categoryFilter", "stockFilter"].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("change", function() {
+        form.submit();
+      });
+    }
   });
-}
 
-/* ── Stock Filter ── */
-function initStockFilter() {
-  var sel  = document.getElementById("stockFilter");
-  var rows = document.querySelectorAll(".books-table tbody tr");
-  if (!sel || !rows.length) return;
-  sel.addEventListener("change", function() {
-    var v = sel.value;
-    rows.forEach(function(r) {
-      if (!v) { r.style.display = ""; return; }
-      var b = r.querySelector(".badge");
-      if (!b) return;
-      var t = b.textContent.trim().toLowerCase();
-      var m = (v === "available" && t.includes("available")) ||
-              (v === "low-stock" && t.includes("low")) ||
-              (v === "out-stock" && t.includes("out"));
-      r.style.display = m ? "" : "none";
+  /* Search: submit on Enter (default form behaviour handles this,
+     but also debounce-submit after 600 ms of inactivity for UX) */
+  var searchInp = document.getElementById("bookSearch");
+  if (searchInp) {
+    var debounceTimer;
+    searchInp.addEventListener("input", function() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function() {
+        form.submit();
+      }, 600);
     });
-  });
+  }
 }
 
 /* ── Table Sort ── */
@@ -143,22 +119,18 @@ function initFormValidation() {
   var issuedHint  = document.getElementById("issuedCopiesHint");
   var issuedCount = document.getElementById("issuedCopiesCount");
 
-  /* Keep available's max and the issued-copies hint in sync whenever
-     either copies field changes. */
   function syncCopies() {
     if (!totalEl || !availEl) return;
 
     var total = parseInt(totalEl.value, 10);
     var avail = parseInt(availEl.value, 10);
 
-    // Update the browser-enforced max so the up-arrow can't go past total
     if (!isNaN(total) && total >= 0) {
       availEl.max = total;
     } else {
       availEl.removeAttribute("max");
     }
 
-    // Show issued-copies hint
     if (!isNaN(total) && !isNaN(avail) && total >= 0 && avail >= 0) {
       var issued = Math.max(0, total - avail);
       if (issuedCount) issuedCount.textContent = issued;
@@ -167,7 +139,6 @@ function initFormValidation() {
       if (issuedHint) issuedHint.style.display = "none";
     }
 
-    // Re-validate available if it was already marked invalid
     if (availEl.classList.contains("is-invalid")) validateCopies();
   }
 
@@ -191,7 +162,6 @@ function initFormValidation() {
     availEl.addEventListener("blur", validateCopies);
   }
 
-  // Run once on page load so the hint/max are set when editing an existing book
   syncCopies();
 
   var fields = form.querySelectorAll("[required]");
@@ -207,13 +177,11 @@ function initFormValidation() {
 
     if (!ok) {
       e.preventDefault();
-      // Scroll to first error
       var first = form.querySelector(".is-invalid");
       if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
 
-    // Valid — show spinner and let the form submit normally (no fake delay)
     var btn = form.querySelector("[type=submit]");
     if (btn) {
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
@@ -228,7 +196,6 @@ function validate(f) {
   if (f.type === "number" && ok) {
     var num = parseFloat(v);
     ok = !isNaN(num) && num >= 0;
-    // also honour the browser max attribute
     if (ok && f.max !== "" && !isNaN(parseFloat(f.max))) {
       ok = num <= parseFloat(f.max);
     }
@@ -257,15 +224,14 @@ function initRefreshBtn() {
     ic.style.transition = "transform .6s ease";
     ic.style.transform = "rotate(360deg)";
     setTimeout(function() { ic.style.transform = ""; ic.style.transition = ""; }, 650);
+    setTimeout(function() { window.location.reload(); }, 300);
   });
 }
 
 document.addEventListener("DOMContentLoaded", function() {
   initCounters();
   initProgressBars();
-  initSearchFilter();
-  initCategoryFilter();
-  initStockFilter();
+  initFilters();
   initTableSort();
   initRowHover();
   initStagger();

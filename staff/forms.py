@@ -10,9 +10,12 @@ class StaffForm(forms.ModelForm):
         model = Staff
         fields = [
             'first_name', 'last_name', 'email', 'phone_number',
-            'role', 'status', 'date_joined', 'date_left',
+            'role', 'status',
+            'date_joined', 'date_left',
             'address', 'notes',
-            # photo and photo_mime are handled manually in the view
+            # owner        → set in the view
+            # is_staff_user → toggled from the detail page only
+            # photo / photo_mime → handled manually in the view
         ]
         widgets = {
             'date_joined': forms.DateInput(attrs={'type': 'date'}),

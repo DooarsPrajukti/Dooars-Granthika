@@ -14,18 +14,24 @@ from core.email_service import send_account_credentials
 # HELPERS
 # ──────────────────────────────────────────────────────────────
 
+def _owned_staff(user):
+    """Base queryset — only staff belonging to the logged-in admin."""
+    return Staff.objects.select_related('user').filter(owner=user)
+
+
 def _save_photo(staff, request):
     """Read uploaded photo file and store binary + mime in the Staff instance."""
     photo_file = request.FILES.get('photo_upload')
     if photo_file:
         staff.photo      = photo_file.read()
-        staff.photo_mime = photo_file.content_type  # e.g. 'image/jpeg'
+        staff.photo_mime = photo_file.content_type
         staff.save(update_fields=['photo', 'photo_mime'])
 
 
 def _create_user_for_staff(staff):
     """
     Create a Django User for the given Staff instance.
+    Sets User.is_staff to match staff.is_staff_user (1 or 0).
     Returns (user, raw_password) so the password can be emailed.
     """
     raw_password = generate_random_password(length=10)
@@ -35,11 +41,12 @@ def _create_user_for_staff(staff):
         username = generate_username(prefix='DG')
 
     user = User.objects.create_user(
-        username=username,
-        email=staff.email,
-        password=raw_password,
-        first_name=staff.first_name,
-        last_name=staff.last_name,
+        username   = username,
+        email      = staff.email,
+        password   = raw_password,
+        first_name = staff.first_name,
+        last_name  = staff.last_name,
+        is_staff   = staff.is_staff_user,  # always True on creation
     )
     staff.user = user
     staff.save(update_fields=['user'])
@@ -52,7 +59,7 @@ def _create_user_for_staff(staff):
 
 @login_required
 def staff_list(request):
-    qs = Staff.objects.select_related('user').all()
+    qs = _owned_staff(request.user)
 
     q = request.GET.get('q', '').strip()
     if q:
@@ -71,12 +78,14 @@ def staff_list(request):
     if role_filter:
         qs = qs.filter(role=role_filter)
 
+    base = _owned_staff(request.user)
+
     context = {
         'staff_list':     qs,
-        'total':          Staff.objects.count(),
-        'active_count':   Staff.objects.filter(status=StaffStatus.ACTIVE).count(),
-        'on_leave_count': Staff.objects.filter(status=StaffStatus.ON_LEAVE).count(),
-        'inactive_count': Staff.objects.filter(status=StaffStatus.INACTIVE).count(),
+        'total':          base.count(),
+        'active_count':   base.filter(status=StaffStatus.ACTIVE).count(),
+        'on_leave_count': base.filter(status=StaffStatus.ON_LEAVE).count(),
+        'inactive_count': base.filter(status=StaffStatus.INACTIVE).count(),
         'search_query':   q,
         'status_filter':  status_filter,
         'role_filter':    role_filter,
@@ -95,7 +104,10 @@ def staff_add(request):
     if request.method == 'POST':
         form = StaffForm(request.POST, request.FILES)
         if form.is_valid():
-            staff = form.save()
+            staff       = form.save(commit=False)
+            staff.owner = request.user          # ← tenant assignment
+            staff.is_staff_user = True          # always enabled on creation
+            staff.save()
 
             # Save photo as BLOB
             _save_photo(staff, request)
@@ -104,9 +116,9 @@ def staff_add(request):
             try:
                 user, raw_password = _create_user_for_staff(staff)
                 email_sent = send_account_credentials(
-                    email=staff.email,
-                    password=raw_password,
-                    Username=user.username,
+                    email    = staff.email,
+                    password = raw_password,
+                    Username = user.username,
                 )
                 if email_sent:
                     messages.success(
@@ -136,7 +148,7 @@ def staff_add(request):
 
 @login_required
 def staff_edit(request, pk):
-    staff = get_object_or_404(Staff, pk=pk)
+    staff = get_object_or_404(Staff, pk=pk, owner=request.user)   # ← tenant guard
 
     if request.method == 'POST':
         form = StaffForm(request.POST, request.FILES, instance=staff)
@@ -146,7 +158,7 @@ def staff_edit(request, pk):
             # Save new photo only if a new file was uploaded
             _save_photo(staff, request)
 
-            # Sync changes to linked Django user
+            # Sync name / email changes to linked Django user
             if staff.user:
                 staff.user.first_name = staff.first_name
                 staff.user.last_name  = staff.last_name
@@ -173,8 +185,27 @@ def staff_edit(request, pk):
 
 @login_required
 def staff_detail(request, pk):
-    staff = get_object_or_404(Staff.objects.select_related('user'), pk=pk)
+    staff = get_object_or_404(
+        Staff.objects.select_related('user'),
+        pk=pk, owner=request.user,              # ← tenant guard
+    )
     return render(request, 'staff/staff_detail.html', {'staff': staff})
+
+
+# ──────────────────────────────────────────────────────────────
+# TOGGLE PORTAL ACCESS  (detail page only)
+# ──────────────────────────────────────────────────────────────
+
+@login_required
+def staff_toggle_access(request, pk):
+    staff = get_object_or_404(Staff, pk=pk, owner=request.user)
+    if request.method == 'POST':
+        staff.is_staff_user = 'is_staff_user' in request.POST
+        staff.save(update_fields=['is_staff_user'])
+        staff.sync_portal_access()
+        status = 'enabled' if staff.is_staff_user else 'revoked'
+        messages.success(request, f'Portal access {status} for {staff.full_name}.')
+    return redirect('staff:staff_detail', pk=pk)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -183,14 +214,12 @@ def staff_detail(request, pk):
 
 @login_required
 def staff_delete(request, pk):
-    staff = get_object_or_404(Staff, pk=pk)
+    staff = get_object_or_404(Staff, pk=pk, owner=request.user)   # ← tenant guard
     if request.method == 'POST':
-        name = staff.full_name
+        name        = staff.full_name
         linked_user = staff.user
         staff.delete()
         if linked_user:
             linked_user.delete()
         messages.success(request, f'{name} has been removed.')
     return redirect('staff:staff_list')
-
-
