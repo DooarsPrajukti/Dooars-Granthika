@@ -379,7 +379,7 @@
             <span>Drag &amp; drop or <label for="memberPhoto" class="photo-browse-link">browse</label></span>
             <small>JPG, PNG or GIF · Max 5 MB</small>
           </div>
-          <input type="file" id="memberPhoto" name="photo" accept="image/*" />
+          <input type="file" id="memberPhoto" name="photo_upload" accept="image/*" />
         </div>
         <div class="photo-preview-box" id="photoPreviewBox">
           <img id="photoPreviewImg" src="" alt="Preview" />
@@ -388,8 +388,8 @@
           </button>
         </div>
       </div>
-      {% if form.photo.errors %}
-        <span class="error-message" style="margin-top:.5rem;display:block;">{{ form.photo.errors.0 }}</span>
+      {% if form.photo_upload.errors %}
+        <span class="error-message" style="margin-top:.5rem;display:block;">{{ form.photo_upload.errors.0 }}</span>
       {% endif %}
     </div>
 

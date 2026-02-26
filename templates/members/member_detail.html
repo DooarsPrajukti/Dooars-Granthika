@@ -229,9 +229,9 @@
         {% for transaction in transactions %}
         <tr>
           <td>
-            <strong>{{ transaction.book.title }}</strong>
+            <strong>{{ transaction.book_title }}</strong>
             <br>
-            <small style="color: #9ca3af;">{{ transaction.book.author }}</small>
+            <small style="color: #9ca3af;">{{ transaction.book_author|default:"" }}</small>
           </td>
           <td>{{ transaction.issue_date|date:"M d, Y" }}</td>
           <td>{{ transaction.due_date|date:"M d, Y" }}</td>

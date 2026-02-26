@@ -378,10 +378,15 @@
       </div>
 
       {% if member.photo %}
-      <div style="margin-bottom:1rem;">
-        <p style="font-size:.875rem;color:#6b7280;margin-bottom:.5rem;">Current Photo:</p>
+      <div style="margin-bottom:1rem;display:flex;align-items:center;gap:1rem;">
         <img src="{% url 'members:member_photo' member.id %}" alt="{{ member.full_name }}"
-             class="current-photo-preview" />
+             class="current-photo-preview"
+             style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:2px solid #e5e7eb;" />
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.875rem;color:#374151;cursor:pointer;">
+          <input type="checkbox" name="clear_photo" id="clearPhoto"
+                 style="width:16px;height:16px;cursor:pointer;" />
+          Remove existing photo
+        </label>
       </div>
       {% endif %}
 
@@ -393,8 +398,8 @@
             <small>JPG, PNG or GIF (MAX. 5MB)</small>
           </div>
         </label>
-        <input type="file" id="memberPhoto" name="photo" accept="image/*" />
-        {% if form.photo.errors %}<span class="error-message">{{ form.photo.errors.0 }}</span>{% endif %}
+        <input type="file" id="memberPhoto" name="photo_upload" accept="image/*" />
+        {% if form.photo_upload.errors %}<span class="error-message">{{ form.photo_upload.errors.0 }}</span>{% endif %}
       </div>
       <div id="photoPreview" class="image-preview"></div>
     </div>
