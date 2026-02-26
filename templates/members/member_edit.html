@@ -6,55 +6,103 @@
 {% block nav_members %}active{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/members/members.css' %}" />
+<link rel="stylesheet" href="{% static 'css/members/member_edit.css' %}" />
+<style>
+.role-selector{display:flex;gap:1rem;flex-wrap:wrap;margin-top:.5rem}
+.role-option{flex:1;min-width:150px;display:flex;flex-direction:column;align-items:center;
+  gap:.4rem;padding:1.25rem 1rem;border:2px solid #e5e7eb;border-radius:12px;cursor:pointer;
+  transition:border-color .2s,background .2s;background:#fff;text-align:center}
+.role-option input[type="radio"]{display:none}
+.role-option i{font-size:1.75rem;color:#6b7280}
+.role-option span{font-weight:600;color:#374151;font-size:.95rem}
+.role-option small{color:#9ca3af;font-size:.8rem}
+.role-option.selected,.role-option:hover{border-color:#3b82f6;background:#eff6ff}
+.role-option.selected i,.role-option:hover i{color:#3b82f6}
+.role-option[data-role="teacher"].selected,.role-option[data-role="teacher"]:hover{border-color:#8b5cf6;background:#f5f3ff}
+.role-option[data-role="teacher"].selected i,.role-option[data-role="teacher"]:hover i{color:#8b5cf6}
+.role-option[data-role="general"].selected,.role-option[data-role="general"]:hover{border-color:#6b7280;background:#f9fafb}
+.role-option[data-role="general"].selected i,.role-option[data-role="general"]:hover i{color:#6b7280}
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="form-container">
-  
+
   <!-- Form Header -->
   <div class="form-header">
-    <h2>
-      <i class="fas fa-user-edit"></i> Edit Member: {{ member.full_name }}
-    </h2>
+    <h2><i class="fas fa-user-edit"></i> Edit Member: {{ member.full_name }}</h2>
     <p>Update member information below</p>
   </div>
 
-  <!-- Form -->
-  <form id="memberForm" method="post" enctype="multipart/form-data">
+  <form id="memberForm" method="post" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
 
-    <!-- Personal Information Section -->
+    <!-- ── 1. Member Role ─────────────────────────────────────── -->
+    <div class="form-section">
+      <div class="form-section-title">
+        <i class="fas fa-user-tag"></i> Member Role
+      </div>
+      <div class="form-group full-width">
+        <label class="required">Role</label>
+        <div class="role-selector" id="roleSelectorGroup">
+          {% with cur=form.role.value|default:member.role %}
+
+          <label class="role-option {% if cur == 'student' or not cur %}selected{% endif %}" data-role="student">
+            <input type="radio" name="role" value="student"
+                   {% if cur == 'student' or not cur %}checked{% endif %} />
+            <i class="fas fa-user-graduate"></i>
+            <span>Student</span>
+            <small>Enrolled academic student</small>
+          </label>
+
+          <label class="role-option {% if cur == 'teacher' %}selected{% endif %}" data-role="teacher">
+            <input type="radio" name="role" value="teacher"
+                   {% if cur == 'teacher' %}checked{% endif %} />
+            <i class="fas fa-chalkboard-teacher"></i>
+            <span>Teacher / Faculty</span>
+            <small>Teaching or research staff</small>
+          </label>
+
+          <label class="role-option {% if cur == 'general' %}selected{% endif %}" data-role="general">
+            <input type="radio" name="role" value="general"
+                   {% if cur == 'general' %}checked{% endif %} />
+            <i class="fas fa-user"></i>
+            <span>General Member</span>
+            <small>Govt / Rural / Urban / Public</small>
+          </label>
+
+          {% endwith %}
+        </div>
+        {% if form.role.errors %}<span class="error-message">{{ form.role.errors.0 }}</span>{% endif %}
+      </div>
+    </div>
+
+    <!-- ── 2. Personal Information ───────────────────────────── -->
     <div class="form-section">
       <div class="form-section-title">
         <i class="fas fa-user"></i> Personal Information
       </div>
       <div class="form-grid">
+
         <div class="form-group">
           <label for="firstName" class="required">First Name</label>
-          <input type="text" id="firstName" name="first_name" class="form-control" required 
+          <input type="text" id="firstName" name="first_name" class="form-control" required
                  value="{{ form.first_name.value|default:member.first_name }}" />
-          {% if form.first_name.errors %}
-            <span class="error-message">{{ form.first_name.errors.0 }}</span>
-          {% endif %}
+          {% if form.first_name.errors %}<span class="error-message">{{ form.first_name.errors.0 }}</span>{% endif %}
         </div>
 
         <div class="form-group">
           <label for="lastName" class="required">Last Name</label>
-          <input type="text" id="lastName" name="last_name" class="form-control" required 
+          <input type="text" id="lastName" name="last_name" class="form-control" required
                  value="{{ form.last_name.value|default:member.last_name }}" />
-          {% if form.last_name.errors %}
-            <span class="error-message">{{ form.last_name.errors.0 }}</span>
-          {% endif %}
+          {% if form.last_name.errors %}<span class="error-message">{{ form.last_name.errors.0 }}</span>{% endif %}
         </div>
 
         <div class="form-group">
           <label for="dateOfBirth" class="required">Date of Birth</label>
-          <input type="date" id="dateOfBirth" name="date_of_birth" class="form-control" required 
+          <input type="date" id="dateOfBirth" name="date_of_birth" class="form-control" required
                  value="{{ form.date_of_birth.value|default:member.date_of_birth|date:'Y-m-d' }}" />
-          {% if form.date_of_birth.errors %}
-            <span class="error-message">{{ form.date_of_birth.errors.0 }}</span>
-          {% endif %}
+          {% if form.date_of_birth.errors %}<span class="error-message">{{ form.date_of_birth.errors.0 }}</span>{% endif %}
         </div>
 
         <div class="form-group">
@@ -65,166 +113,278 @@
             <option value="F" {% if form.gender.value|default:member.gender == 'F' %}selected{% endif %}>Female</option>
             <option value="O" {% if form.gender.value|default:member.gender == 'O' %}selected{% endif %}>Other</option>
           </select>
-          {% if form.gender.errors %}
-            <span class="error-message">{{ form.gender.errors.0 }}</span>
-          {% endif %}
+          {% if form.gender.errors %}<span class="error-message">{{ form.gender.errors.0 }}</span>{% endif %}
         </div>
 
         <div class="form-group full-width">
           <label for="address">Address</label>
-          <textarea id="address" name="address" class="form-control" rows="3">{{ form.address.value|default:member.address }}</textarea>
-          {% if form.address.errors %}
-            <span class="error-message">{{ form.address.errors.0 }}</span>
-          {% endif %}
+          <textarea id="address" name="address" class="form-control" rows="3"
+                    placeholder="House No., Village/Town, District, State, PIN">{{ form.address.value|default:member.address }}</textarea>
+          {% if form.address.errors %}<span class="error-message">{{ form.address.errors.0 }}</span>{% endif %}
         </div>
+
       </div>
     </div>
 
-    <!-- Contact Information Section -->
+    <!-- ── 3. Contact Information ────────────────────────────── -->
     <div class="form-section">
       <div class="form-section-title">
         <i class="fas fa-phone"></i> Contact Information
       </div>
       <div class="form-grid">
+
         <div class="form-group">
           <label for="email" class="required">Email Address</label>
-          <input type="email" id="email" name="email" class="form-control" required 
+          <input type="email" id="email" name="email" class="form-control" required
                  value="{{ form.email.value|default:member.email }}" />
-          {% if form.email.errors %}
-            <span class="error-message">{{ form.email.errors.0 }}</span>
-          {% endif %}
+          {% if form.email.errors %}<span class="error-message">{{ form.email.errors.0 }}</span>{% endif %}
         </div>
 
         <div class="form-group">
           <label for="phone" class="required">Phone Number</label>
-          <input type="tel" id="phone" name="phone" class="form-control" required 
+          <input type="tel" id="phone" name="phone" class="form-control" required
                  placeholder="10-digit number" maxlength="10"
                  value="{{ form.phone.value|default:member.phone }}" />
-          {% if form.phone.errors %}
-            <span class="error-message">{{ form.phone.errors.0 }}</span>
-          {% endif %}
+          {% if form.phone.errors %}<span class="error-message">{{ form.phone.errors.0 }}</span>{% endif %}
         </div>
 
+        <!-- Alternate Phone — all roles -->
         <div class="form-group">
           <label for="alternatePhone">Alternate Phone</label>
-          <input type="tel" id="alternatePhone" name="alternate_phone" class="form-control" 
-                 placeholder="10-digit number" maxlength="10"
+          <input type="tel" id="alternatePhone" name="alternate_phone" class="form-control"
+                 placeholder="Optional alternate 10-digit number" maxlength="10"
                  value="{{ form.alternate_phone.value|default:member.alternate_phone }}" />
-          {% if form.alternate_phone.errors %}
-            <span class="error-message">{{ form.alternate_phone.errors.0 }}</span>
-          {% endif %}
+          {% if form.alternate_phone.errors %}<span class="error-message">{{ form.alternate_phone.errors.0 }}</span>{% endif %}
         </div>
 
-        <div class="form-group">
-          <label for="guardianPhone">Guardian Phone</label>
-          <input type="tel" id="guardianPhone" name="guardian_phone" class="form-control" 
-                 placeholder="10-digit number" maxlength="10"
+        <!-- Guardian Phone — student only -->
+        <div class="form-group" id="guardian-phone-wrapper">
+          <label for="guardianPhone">Guardian / Parent Phone</label>
+          <input type="tel" id="guardianPhone" name="guardian_phone" class="form-control"
+                 placeholder="Parent or guardian 10-digit number" maxlength="10"
                  value="{{ form.guardian_phone.value|default:member.guardian_phone }}" />
-          {% if form.guardian_phone.errors %}
-            <span class="error-message">{{ form.guardian_phone.errors.0 }}</span>
-          {% endif %}
+          {% if form.guardian_phone.errors %}<span class="error-message">{{ form.guardian_phone.errors.0 }}</span>{% endif %}
         </div>
+
       </div>
     </div>
 
-    <!-- Academic Information Section -->
+    <!-- ── 4. Academic / Professional Information ─────────────── -->
     <div class="form-section">
       <div class="form-section-title">
-        <i class="fas fa-graduation-cap"></i> Academic Information
+        <i class="fas fa-graduation-cap"></i>
+        <span id="academicSectionTitle">Academic Information</span>
       </div>
+
+      <div class="form-subsection-label">
+        <i class="fas fa-list-ul"></i> Select or Create
+      </div>
+
+      <!-- Department — all roles -->
+      <div class="form-group--soc">
+        <div class="select-or-create" id="soc-department">
+          <div class="select-or-create__left">
+            <div class="select-or-create__heading">
+              Department <span id="dept-star">*</span>
+            </div>
+            <select name="department" id="department" class="form-control">
+              <option value="">— Select existing department —</option>
+              {% for dept in departments %}
+              <option value="{{ dept.id }}"
+                      {% if form.department.value|default:member.department.id|stringformat:"s" == dept.id|stringformat:"s" %}selected{% endif %}>
+                {{ dept.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="select-or-create__right">
+            <div class="select-or-create__heading">Or create a new department</div>
+            <input type="text" name="new_department" id="new_department" class="form-control"
+                   placeholder="e.g. Computer Science"
+                   value="{{ request.POST.new_department|default:'' }}" />
+            <div class="select-or-create__hint">
+              <i class="fas fa-info-circle"></i>
+              If a matching department already exists it will be reused automatically.
+            </div>
+          </div>
+        </div>
+        {% if form.department.errors %}<span class="error-message">{{ form.department.errors.0 }}</span>{% endif %}
+      </div>
+
+      <!-- Course — student only -->
+      <div class="form-group--soc role-field student-field" id="soc-course-wrapper" style="margin-bottom:1rem;">
+        <div class="select-or-create" id="soc-course">
+          <div class="select-or-create__left">
+            <div class="select-or-create__heading">Course</div>
+            <select name="course" id="course" class="form-control">
+              <option value="">— Select existing course —</option>
+              {% for course in courses %}
+              <option value="{{ course.id }}"
+                      {% if form.course.value|default:member.course.id|stringformat:"s" == course.id|stringformat:"s" %}selected{% endif %}>
+                {{ course.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="select-or-create__right">
+            <div class="select-or-create__heading">Or create a new course</div>
+            <input type="text" name="new_course" id="new_course" class="form-control"
+                   placeholder="e.g. B.Sc. Honours"
+                   value="{{ request.POST.new_course|default:'' }}" />
+            <div class="select-or-create__hint">
+              <i class="fas fa-info-circle"></i>
+              If a matching course already exists it will be reused automatically.
+            </div>
+          </div>
+        </div>
+        {% if form.course.errors %}<span class="error-message">{{ form.course.errors.0 }}</span>{% endif %}
+      </div>
+
+      <!-- Academic Year — student only -->
+      <div class="form-group--soc role-field student-field" id="soc-year-wrapper" style="margin-bottom:1rem;">
+        <div class="select-or-create" id="soc-year">
+          <div class="select-or-create__left">
+            <div class="select-or-create__heading">Academic Year</div>
+            <select name="year" id="year" class="form-control">
+              <option value="">— Select existing year —</option>
+              {% for yr in academic_years %}
+              <option value="{{ yr.id }}"
+                      {% if form.year.value|default:member.year.id|stringformat:"s" == yr.id|stringformat:"s" %}selected{% endif %}>
+                {{ yr.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="select-or-create__right">
+            <div class="select-or-create__heading">Or create a new year</div>
+            <input type="text" name="new_year" id="new_year" class="form-control"
+                   placeholder="e.g. 3rd Year"
+                   value="{{ request.POST.new_year|default:'' }}" />
+            <div class="select-or-create__hint">
+              <i class="fas fa-info-circle"></i>
+              If a matching year already exists it will be reused automatically.
+            </div>
+          </div>
+        </div>
+        {% if form.year.errors %}<span class="error-message">{{ form.year.errors.0 }}</span>{% endif %}
+      </div>
+
+      <!-- Semester — student only -->
+      <div class="form-group--soc role-field student-field" id="soc-semester-wrapper" style="margin-bottom:1rem;">
+        <div class="select-or-create" id="soc-semester">
+          <div class="select-or-create__left">
+            <div class="select-or-create__heading">Semester</div>
+            <select name="semester" id="semester" class="form-control">
+              <option value="">— Select existing semester —</option>
+              {% for sem in semesters %}
+              <option value="{{ sem.id }}"
+                      {% if form.semester.value|default:member.semester.id|stringformat:"s" == sem.id|stringformat:"s" %}selected{% endif %}>
+                {{ sem.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="select-or-create__right">
+            <div class="select-or-create__heading">Or create a new semester</div>
+            <input type="text" name="new_semester" id="new_semester" class="form-control"
+                   placeholder="e.g. Semester 5"
+                   value="{{ request.POST.new_semester|default:'' }}" />
+            <div class="select-or-create__hint">
+              <i class="fas fa-info-circle"></i>
+              If a matching semester already exists it will be reused automatically.
+            </div>
+          </div>
+        </div>
+        {% if form.semester.errors %}<span class="error-message">{{ form.semester.errors.0 }}</span>{% endif %}
+      </div>
+
+      <!-- Area Type — general only -->
+      <div class="form-group role-field general-field" id="area-type-wrapper" style="margin-bottom:1rem;">
+        <label for="areaType">Area Type</label>
+        <select id="areaType" name="area_type" class="form-control">
+          <option value="">— Select area type —</option>
+          {% comment %}
+            area_type is packed inside academic_notes as "[Urban] notes…" by GeneralMemberForm.
+            The form.__init__ parses it back out into self.fields["area_type"].initial.
+            On a validation re-render, request.POST.area_type will be set.
+          {% endcomment %}
+          <option value="urban"      {% if form.area_type.value|default:request.POST.area_type == 'urban'      %}selected{% endif %}>Urban</option>
+          <option value="rural"      {% if form.area_type.value|default:request.POST.area_type == 'rural'      %}selected{% endif %}>Rural</option>
+          <option value="peri_urban" {% if form.area_type.value|default:request.POST.area_type == 'peri_urban' %}selected{% endif %}>Peri-Urban</option>
+          <option value="other"      {% if form.area_type.value|default:request.POST.area_type == 'other'      %}selected{% endif %}>Other</option>
+        </select>
+        <small class="form-hint">Rural / Urban classification for community members.</small>
+      </div>
+
+      <hr class="form-subsection-divider" />
+
+      <div class="form-subsection-label">
+        <i class="fas fa-keyboard"></i> Enter Details
+      </div>
+
       <div class="form-grid">
-        <div class="form-group">
-          <label for="department" class="required">Department</label>
-          <select id="department" name="department" class="form-control" required>
-            <option value="">Select Department</option>
-            {% for dept in departments %}
-            <option value="{{ dept.id }}" 
-                    {% if form.department.value|default:member.department.id == dept.id %}selected{% endif %}>
-              {{ dept.name }}
-            </option>
-            {% endfor %}
-          </select>
-          {% if form.department.errors %}
-            <span class="error-message">{{ form.department.errors.0 }}</span>
-          {% endif %}
-        </div>
 
-        <div class="form-group">
-          <label for="course" class="required">Course</label>
-          <select id="course" name="course" class="form-control" required>
-            <option value="">Select Course</option>
-            {% for course in courses %}
-            <option value="{{ course.id }}" 
-                    {% if form.course.value|default:member.course.id == course.id %}selected{% endif %}>
-              {{ course.name }}
-            </option>
-            {% endfor %}
-          </select>
-          {% if form.course.errors %}
-            <span class="error-message">{{ form.course.errors.0 }}</span>
-          {% endif %}
-        </div>
-
-        <div class="form-group">
-          <label for="year" class="required">Academic Year</label>
-          <select id="year" name="year" class="form-control" required>
-            <option value="">Select Year</option>
-            <option value="1" {% if form.year.value|default:member.year == 1 %}selected{% endif %}>1st Year</option>
-            <option value="2" {% if form.year.value|default:member.year == 2 %}selected{% endif %}>2nd Year</option>
-            <option value="3" {% if form.year.value|default:member.year == 3 %}selected{% endif %}>3rd Year</option>
-            <option value="4" {% if form.year.value|default:member.year == 4 %}selected{% endif %}>4th Year</option>
-          </select>
-          {% if form.year.errors %}
-            <span class="error-message">{{ form.year.errors.0 }}</span>
-          {% endif %}
-        </div>
-
-        <div class="form-group">
-          <label for="rollNumber" class="required">Roll Number</label>
-          <input type="text" id="rollNumber" name="roll_number" class="form-control" required 
+        <!-- Roll Number / Employee ID / Govt ID — label changes by role -->
+        <div class="form-group" id="roll-wrapper">
+          <label for="rollNumber" id="roll-label">Roll Number</label>
+          <input type="text" id="rollNumber" name="roll_number" class="form-control"
+                 placeholder="e.g. CS2024001"
                  value="{{ form.roll_number.value|default:member.roll_number }}" />
-          {% if form.roll_number.errors %}
-            <span class="error-message">{{ form.roll_number.errors.0 }}</span>
-          {% endif %}
+          {% if form.roll_number.errors %}<span class="error-message">{{ form.roll_number.errors.0 }}</span>{% endif %}
         </div>
 
-        <div class="form-group">
-          <label for="admissionYear" class="required">Admission Year</label>
-          <input type="number" id="admissionYear" name="admission_year" class="form-control" required 
-                 min="2000" max="2100" value="{{ form.admission_year.value|default:member.admission_year }}" />
-          {% if form.admission_year.errors %}
-            <span class="error-message">{{ form.admission_year.errors.0 }}</span>
-          {% endif %}
+        <!-- Admission Year — student only -->
+        <div class="form-group role-field student-field" id="admission-wrapper">
+          <label for="admissionYear">Admission Year</label>
+          <input type="number" id="admissionYear" name="admission_year" class="form-control"
+                 min="2000" max="2100"
+                 value="{{ form.admission_year.value|default:member.admission_year }}" />
+          {% if form.admission_year.errors %}<span class="error-message">{{ form.admission_year.errors.0 }}</span>{% endif %}
         </div>
 
         <div class="form-group">
           <label for="status" class="required">Status</label>
           <select id="status" name="status" class="form-control" required>
-            <option value="active" {% if form.status.value|default:member.status == 'active' %}selected{% endif %}>Active</option>
+            <option value="active"   {% if form.status.value|default:member.status == 'active'   %}selected{% endif %}>Active</option>
             <option value="inactive" {% if form.status.value|default:member.status == 'inactive' %}selected{% endif %}>Inactive</option>
-            <option value="passout" {% if form.status.value|default:member.status == 'passout' %}selected{% endif %}>Pass Out</option>
+            <option value="passout"  {% if form.status.value|default:member.status == 'passout'  %}selected{% endif %}>Pass Out</option>
           </select>
-          {% if form.status.errors %}
-            <span class="error-message">{{ form.status.errors.0 }}</span>
-          {% endif %}
+          {% if form.status.errors %}<span class="error-message">{{ form.status.errors.0 }}</span>{% endif %}
         </div>
+
+        <!-- Specialization / Designation / Occupation — label changes by role -->
+        <div class="form-group">
+          <label for="specialization" id="spec-label">Specialization / Subject</label>
+          <input type="text" id="specialization" name="specialization" class="form-control"
+                 placeholder="e.g. Machine Learning, Finance…"
+                 value="{{ form.specialization.value|default:member.specialization }}" />
+          {% if form.specialization.errors %}<span class="error-message">{{ form.specialization.errors.0 }}</span>{% endif %}
+        </div>
+
+        <div class="form-group full-width">
+          <label for="academicNotes" id="notes-label">Notes / Remarks</label>
+          <textarea id="academicNotes" name="academic_notes" class="form-control" rows="2"
+                    placeholder="Any additional information…">{{ form.academic_notes.value|default:member.academic_notes }}</textarea>
+          {% if form.academic_notes.errors %}<span class="error-message">{{ form.academic_notes.errors.0 }}</span>{% endif %}
+        </div>
+
       </div>
     </div>
 
-    <!-- Photo Upload Section -->
+    <!-- ── 5. Photo Upload ───────────────────────────────────── -->
     <div class="form-section">
       <div class="form-section-title">
         <i class="fas fa-camera"></i> Member Photo
       </div>
-      
+
       {% if member.photo %}
-      <div style="margin-bottom: 1rem;">
-        <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">Current Photo:</p>
-        <img src="{% url 'members:member_photo' member.id %}" alt="{{ member.full_name }}" 
-             style="width: 150px; height: 150px; object-fit: cover; border-radius: 8px; border: 2px solid #e5e7eb;" />
+      <div style="margin-bottom:1rem;">
+        <p style="font-size:.875rem;color:#6b7280;margin-bottom:.5rem;">Current Photo:</p>
+        <img src="{% url 'members:member_photo' member.id %}" alt="{{ member.full_name }}"
+             class="current-photo-preview" />
       </div>
       {% endif %}
-      
+
       <div class="file-input-wrapper">
         <label for="memberPhoto" class="file-input-label">
           <i class="fas fa-cloud-upload-alt"></i>
@@ -233,15 +393,13 @@
             <small>JPG, PNG or GIF (MAX. 5MB)</small>
           </div>
         </label>
-        <input type="file" id="memberPhoto" name="photo_upload" accept="image/*" />
-        {% if form.photo_upload.errors %}
-          <span class="error-message">{{ form.photo_upload.errors.0 }}</span>
-        {% endif %}
+        <input type="file" id="memberPhoto" name="photo" accept="image/*" />
+        {% if form.photo.errors %}<span class="error-message">{{ form.photo.errors.0 }}</span>{% endif %}
       </div>
       <div id="photoPreview" class="image-preview"></div>
     </div>
 
-    <!-- Form Actions -->
+    <!-- ── Form Actions ──────────────────────────────────────── -->
     <div class="form-actions">
       <a href="{% url 'members:member_detail' member.id %}" class="btn btn-secondary">
         <i class="fas fa-times"></i> Cancel
@@ -252,10 +410,76 @@
     </div>
 
   </form>
-
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="{% static 'js/members/members.js' %}"></script>
+<script src="{% static 'js/members/member_edit.js' %}"></script>
+<script>
+(function () {
+  var SECTION_TITLES = {
+    student: "Academic Information",
+    teacher: "Professional Information",
+    general: "Additional Information",
+  };
+
+  var ROLE_LABELS = {
+    "roll-label":  { student: "Roll Number",              teacher: "Employee ID",              general: "Government ID" },
+    "spec-label":  { student: "Specialization / Subject", teacher: "Designation / Post",       general: "Occupation" },
+    "notes-label": { student: "Notes / Remarks",          teacher: "Notes / Remarks",          general: "Notes / Remarks" },
+    "dept-star":   { student: "*",                        teacher: "*",                        general: "" },
+  };
+
+  var ROLE_PLACEHOLDERS = {
+    "rollNumber":     { student: "e.g. CS2024001",                  teacher: "e.g. EMP-2024-001",             general: "Aadhaar / Voter ID / PAN…" },
+    "specialization": { student: "e.g. Machine Learning, Finance…", teacher: "e.g. Assistant Professor, HOD…", general: "e.g. Farmer, Govt. Teacher…" },
+  };
+
+  function applyRole(role) {
+    var titleEl = document.getElementById("academicSectionTitle");
+    if (titleEl) titleEl.textContent = SECTION_TITLES[role] || "Academic Information";
+
+    document.querySelectorAll(".student-field").forEach(function (el) {
+      el.style.display = (role === "student") ? "" : "none";
+    });
+
+    document.querySelectorAll(".general-field").forEach(function (el) {
+      el.style.display = (role === "general") ? "" : "none";
+    });
+
+    var guardianWrapper = document.getElementById("guardian-phone-wrapper");
+    if (guardianWrapper) guardianWrapper.style.display = (role === "student") ? "" : "none";
+
+    Object.keys(ROLE_LABELS).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && ROLE_LABELS[id][role] !== undefined) {
+        el.textContent = ROLE_LABELS[id][role];
+      }
+    });
+
+    Object.keys(ROLE_PLACEHOLDERS).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && ROLE_PLACEHOLDERS[id][role]) {
+        el.placeholder = ROLE_PLACEHOLDERS[id][role];
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".role-option").forEach(function (label) {
+      label.addEventListener("click", function () {
+        document.querySelectorAll(".role-option").forEach(function (l) {
+          l.classList.remove("selected");
+        });
+        this.classList.add("selected");
+        applyRole(this.dataset.role);
+      });
+    });
+
+    var checked = document.querySelector('input[name="role"]:checked');
+    if (checked) applyRole(checked.value);
+  });
+})();
+</script>
 {% endblock %}

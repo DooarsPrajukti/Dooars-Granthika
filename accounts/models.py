@@ -12,7 +12,7 @@ from datetime import timedelta
 class Library(models.Model):
 
     INSTITUTE_TYPE_CHOICES = [
-        ("private", "Private Institution"),
+        ("Institution", "Institution"),
         ("government_rural", "Government – Rural"),
         ("government_urban", "Government – Urban"),
     ]
@@ -52,7 +52,7 @@ class Library(models.Model):
     institute_type = models.CharField(
         max_length=50,
         choices=INSTITUTE_TYPE_CHOICES,
-        default="private"
+        default="Institution"
     )
 
     institute_email = models.EmailField(unique=True)

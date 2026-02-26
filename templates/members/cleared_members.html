@@ -6,12 +6,12 @@
 {% block nav_members %}active{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/members/members.css' %}" />
+<link rel="stylesheet" href="{% static 'css/members/cleared_members.css' %}" />
 {% endblock %}
 
 {% block content %}
-<div class="members-list-page">
-  
+<div class="members-list-page cleared-members-page">
+
   <!-- Page Header -->
   <div class="page-header" style="margin-bottom: 2rem;">
     <div>
@@ -61,9 +61,9 @@
           <select id="clearance_date" name="clearance_date" class="filter-select">
             <option value="">All Dates</option>
             <option value="today" {% if request.GET.clearance_date == 'today' %}selected{% endif %}>Today</option>
-            <option value="week" {% if request.GET.clearance_date == 'week' %}selected{% endif %}>This Week</option>
+            <option value="week"  {% if request.GET.clearance_date == 'week'  %}selected{% endif %}>This Week</option>
             <option value="month" {% if request.GET.clearance_date == 'month' %}selected{% endif %}>This Month</option>
-            <option value="year" {% if request.GET.clearance_date == 'year' %}selected{% endif %}>This Year</option>
+            <option value="year"  {% if request.GET.clearance_date == 'year'  %}selected{% endif %}>This Year</option>
           </select>
         </div>
 
@@ -72,7 +72,7 @@
           <select id="member_type" name="member_type" class="filter-select">
             <option value="">All Types</option>
             <option value="passout" {% if request.GET.member_type == 'passout' %}selected{% endif %}>Pass Out</option>
-            <option value="active" {% if request.GET.member_type == 'active' %}selected{% endif %}>Active</option>
+            <option value="active"  {% if request.GET.member_type == 'active'  %}selected{% endif %}>Active</option>
           </select>
         </div>
 
@@ -101,6 +101,7 @@
     </div>
 
     {% if members %}
+    <div class="members-table-wrapper">
     <table class="members-table" id="membersTable">
       <thead>
         <tr>
@@ -119,7 +120,7 @@
           <td>
             <div class="member-info">
               {% if member.photo %}
-              <img src="{{ member.photo.url }}" alt="{{ member.full_name }}" class="member-avatar" style="border-radius: 50%; object-fit: cover;" />
+              <img src="{% url 'members:member_photo' member.id %}" alt="{{ member.full_name }}" class="member-avatar" style="border-radius: 50%; object-fit: cover;" />
               {% else %}
               <div class="member-avatar">
                 {{ member.full_name|slice:":1"|upper }}
@@ -150,8 +151,9 @@
               <a href="{% url 'members:member_detail' member.id %}" class="action-icon view" title="View Details">
                 <i class="fas fa-eye"></i>
               </a>
-              <button class="action-icon" style="color: #10b981;" 
-                      onclick="downloadClearanceCertificate({{ member.id }})" 
+              <!-- downloadClearanceCertificate() defined in cleared_members.js -->
+              <button class="action-icon certificate"
+                      onclick="downloadClearanceCertificate({{ member.id }})"
                       title="Download Certificate">
                 <i class="fas fa-download"></i>
               </button>
@@ -161,8 +163,8 @@
         {% endfor %}
       </tbody>
     </table>
+    </div><!-- /.members-table-wrapper -->
 
-    <!-- Pagination -->
     {% if is_paginated %}
     <div class="pagination-container">
       <div class="pagination-info">
@@ -170,21 +172,19 @@
       </div>
       <ul class="pagination">
         {% if page_obj.has_previous %}
-        <li><a href="?page=1"><i class="fas fa-angle-double-left"></i></a></li>
-        <li><a href="?page={{ page_obj.previous_page_number }}"><i class="fas fa-angle-left"></i></a></li>
+        <li><a href="?page=1{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}"><i class="fas fa-angle-double-left"></i></a></li>
+        <li><a href="?page={{ page_obj.previous_page_number }}{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}"><i class="fas fa-angle-left"></i></a></li>
         {% endif %}
-
         {% for num in page_obj.paginator.page_range %}
           {% if page_obj.number == num %}
           <li class="active"><span>{{ num }}</span></li>
           {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
-          <li><a href="?page={{ num }}">{{ num }}</a></li>
+          <li><a href="?page={{ num }}{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}">{{ num }}</a></li>
           {% endif %}
         {% endfor %}
-
         {% if page_obj.has_next %}
-        <li><a href="?page={{ page_obj.next_page_number }}"><i class="fas fa-angle-right"></i></a></li>
-        <li><a href="?page={{ page_obj.paginator.num_pages }}"><i class="fas fa-angle-double-right"></i></a></li>
+        <li><a href="?page={{ page_obj.next_page_number }}{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}"><i class="fas fa-angle-right"></i></a></li>
+        <li><a href="?page={{ page_obj.paginator.num_pages }}{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}"><i class="fas fa-angle-double-right"></i></a></li>
         {% endif %}
       </ul>
     </div>
@@ -208,10 +208,5 @@
 
 {% block extra_js %}
 <script src="{% static 'js/members/members.js' %}"></script>
-<script>
-  function downloadClearanceCertificate(memberId) {
-    // Open certificate download in new window
-    window.open(`/members/${memberId}/clearance-certificate/`, '_blank');
-  }
-</script>
+<script src="{% static 'js/members/cleared_members.js' %}"></script>
 {% endblock %}

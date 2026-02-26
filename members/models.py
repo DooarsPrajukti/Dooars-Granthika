@@ -8,10 +8,15 @@ Transaction) is scoped to a Django User ("owner") so multiple library
 administrators can share one database instance without seeing each other's data.
 
 Photo Storage Note:
-    ImageField stores only the FILE PATH (varchar) in MySQL — NOT binary/BLOB data.
-    The actual image file is saved to disk at:
-        MEDIA_ROOT/members/photos/<owner_id>/<filename>
-    Ensure settings.py has MEDIA_ROOT and MEDIA_URL configured, and Pillow installed.
+    Member.photo is a BinaryField — the raw image bytes are stored directly
+    in MySQL as a LONGBLOB column.  Member.photo_mime_type records the MIME
+    type (e.g. "image/jpeg") so the photo can be served with the correct
+    Content-Type header.
+
+    Use the `member_photo` view to serve photos:
+        <img src="{% url 'members:member_photo' member.pk %}">
+
+    No MEDIA_ROOT / MEDIA_URL configuration is required for photos.
 """
 
 import os
@@ -167,23 +172,6 @@ class Semester(models.Model):
 # Core Member Model
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _photo_upload_path(instance, filename):
-    """
-    Store member photos in per-owner subfolders to avoid cross-tenant
-    filename collisions.
-
-    Result path:  members/photos/<owner_id>/<filename>
-
-    Django's ImageField stores ONLY this relative path string in the database
-    (a VARCHAR column in MySQL — NOT a BLOB). The actual binary file is written
-    to disk at:  MEDIA_ROOT / members/photos/<owner_id>/<filename>
-    """
-    ext = os.path.splitext(filename)[1].lower()
-    # Sanitise filename to prevent path traversal
-    safe_name = f"member_{instance.pk or 'new'}{ext}"
-    return f"members/photos/{instance.owner_id}/{safe_name}"
-
-
 class Member(models.Model):
     """
     Library member — owner-scoped (multi-tenant).
@@ -195,11 +183,18 @@ class Member(models.Model):
     • `semester`        – FK to Semester (flexible labels).
     • `specialization`  – free-text optional subject/specialization field.
     • `academic_notes`  – free-text additional academic remarks.
-    • `photo`           – ImageField: stores file PATH in DB, not binary data.
-                          Files saved to MEDIA_ROOT/members/photos/<owner_id>/.
+    • `photo`           – BinaryField: stores raw image bytes as LONGBLOB in MySQL.
+                          `photo_mime_type` stores the MIME type for serving.
+                          Serve via the `member_photo` view.
     • `member_id`       – auto-generated on first save if not provided.
     • `inactive_since`  – automatically set/cleared via save() hook.
     """
+
+    ROLE_CHOICES = [
+        ("student", "Student"),
+        ("teacher", "Teacher / Faculty"),
+        ("general", "General Member"),
+    ]
 
     GENDER_CHOICES = [
         ("M", "Male"),
@@ -226,9 +221,19 @@ class Member(models.Model):
         help_text="Library admin who owns this member record.",
     )
 
+    # ── Role ─────────────────────────────────────────────────────────────────
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default="student",
+        help_text="Member role: Student, Teacher/Faculty, or General Member.",
+        db_index=True,
+    )
+
     # ── Identity ─────────────────────────────────────────────────────────────
     member_id = models.CharField(
         max_length=50,
+        blank=True,
         help_text="Unique member ID per owner. Auto-generated if left blank.",
     )
     first_name = models.CharField(max_length=100)
@@ -261,18 +266,16 @@ class Member(models.Model):
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES)
     address = models.TextField(blank=True, null=True)
 
-    # ── Photo ─────────────────────────────────────────────────────────────────
-    # IMPORTANT: ImageField stores the file PATH (varchar) in MySQL, NOT a BLOB.
-    # Binary image data lives on disk (or cloud storage) at MEDIA_ROOT/<path>.
-    # Requires Pillow: pip install Pillow
-    photo = models.ImageField(
-        upload_to=_photo_upload_path,
+    # ── Cover image stored as binary blob ─────────────────────────────────────
+    # MySQL stores this as LONGBLOB (up to 4 GB — more than enough for photos).
+    # In Python, reading this field returns a `memoryview`; cast with bytes().
+    # Serve via the `member_photo` view: {% url 'members:member_photo' member.pk %}
+    photo           = models.BinaryField(null=True, blank=True)
+    photo_mime_type = models.CharField(
+        max_length=50,
         blank=True,
-        null=True,
-        help_text=(
-            "Member passport photo. "
-            "Stored as a file on disk; DB column holds the file path only."
-        ),
+        default="image/jpeg",
+        help_text="MIME type of the stored photo (e.g. image/jpeg, image/png).",
     )
 
     # ── Academic information ──────────────────────────────────────────────────
@@ -415,13 +418,29 @@ class Member(models.Model):
         dob = self.date_of_birth
         return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
+    @property
+    def passout_year(self):
+        """
+        Expected graduation year: admission_year + course.duration.
+        Returns None if either value is missing.
+        """
+        if self.admission_year and self.course_id and self.course:
+            return self.admission_year + self.course.duration
+        return None
+
     # ── Save hook ─────────────────────────────────────────────────────────────
 
     def save(self, *args, **kwargs):
         # Auto-generate member_id on first save if not provided
         if not self.member_id:
             timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
-            self.member_id = f"MEM-{self.owner_id}-{timestamp}"
+            prefix_map = {
+                "teacher": "TCH",
+                "general": "GEN",
+                "student": "STU",
+            }
+            prefix = prefix_map.get(self.role, "MEM")
+            self.member_id = f"{prefix}-{self.owner_id}-{timestamp}"
 
         # Manage inactive_since timestamp automatically
         if self.status == "inactive":

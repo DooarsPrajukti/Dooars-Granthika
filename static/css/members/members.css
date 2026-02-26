@@ -224,8 +224,15 @@
 .members-table-container {
   background: white;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: hidden;          /* keeps rounded corners */
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Inner wrapper enables horizontal scroll on narrow viewports
+   without losing the border-radius on the outer card */
+.members-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table-header {
@@ -275,19 +282,27 @@
 
 .members-table th {
   text-align: left;
-  padding: 1rem 1.5rem;
-  font-size: 0.875rem;
+  padding: 1rem 1rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: #6b7280;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .members-table td {
-  padding: 1rem 1.5rem;
+  padding: 1rem 1rem;
   border-top: 1px solid #e5e7eb;
-  font-size: 0.9375rem;
+  font-size: 0.9rem;
   color: #374151;
+}
+
+/* Actions column — always visible, never squeezed */
+.members-table th:last-child,
+.members-table td:last-child {
+  min-width: 100px;
+  white-space: nowrap;
 }
 
 .members-table tbody tr { transition: background-color 0.2s ease; }
@@ -483,8 +498,11 @@ textarea.form-control {
 
 .file-input-wrapper input[type="file"] {
   position: absolute;
+  inset: 0;
   opacity: 0;
-  pointer-events: none;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
 }
 
 .image-preview        { margin-top: 1rem; display: none; }
@@ -1033,4 +1051,285 @@ textarea.form-control {
   .form-container         { padding: 1.5rem; }
   .form-actions           { flex-direction: column; }
   .btn                    { width: 100%; justify-content: center; }
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   11. ACADEMIC INFORMATION — SELECT-OR-CREATE
+       Used in Section 03 (Department, Course, Year, Semester)
+       and Section 04 (Member Photo)
+   ─────────────────────────────────────────────────────────────────── */
+
+/* ── Wrapper for each SOC row ── */
+.form-group--soc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+/* ── Two-column panel ── */
+.select-or-create {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: white;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.select-or-create:focus-within {
+  border-color: #1a6fd4;
+  box-shadow: 0 0 0 3px rgba(26, 111, 212, 0.08);
+}
+
+/* ── Left panel (select existing) ── */
+.select-or-create__left {
+  padding: 1rem 1.25rem 1.1rem;
+  border-right: 1px solid #e5e7eb;
+  transition: background 0.2s ease;
+}
+
+/* ── Right panel (create new) ── */
+.select-or-create__right {
+  padding: 1rem 1.25rem 1.1rem;
+  position: relative;
+  transition: background 0.2s ease;
+}
+
+/* "OR" badge between panels */
+.select-or-create__right::before {
+  content: "OR";
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #e5e7eb;
+  color: #6b7280;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── Panel headings ── */
+.select-or-create__heading {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Required star — JS toggles .hidden to show/hide */
+.select-or-create__heading .star        { color: #ef4444; }
+.select-or-create__heading .star.hidden { display: none; }
+
+/* ── Controls inside panels ── */
+.select-or-create .form-control {
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.9375rem;
+  width: 100%;
+  background: white;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.select-or-create .form-control:focus {
+  border-color: #1a6fd4;
+  box-shadow: 0 0 0 3px rgba(26, 111, 212, 0.1);
+  outline: none;
+}
+
+/* ── Active-side highlight (set by JS) ── */
+.select-or-create__left.soc-active  { background: #eff6ff; }
+.select-or-create__right.soc-active { background: #f0fdf4; }
+
+/* ── Hint text below the create input ── */
+.select-or-create__hint {
+  margin-top: 0.45rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  line-height: 1.4;
+}
+.select-or-create__hint i {
+  color: #1a6fd4;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   12. ACADEMIC INFORMATION — SUBSECTION LABELS & DIVIDER
+   ─────────────────────────────────────────────────────────────────── */
+
+.form-subsection-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+  margin-bottom: 1rem;
+}
+.form-subsection-label i {
+  color: #1a6fd4;
+  font-size: 0.875rem;
+}
+
+.form-subsection-divider {
+  border: none;
+  border-top: 1px dashed #e5e7eb;
+  margin: 1.5rem 0 1.25rem;
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   13. MEMBER PHOTO — DRAG & DROP UPLOAD
+   ─────────────────────────────────────────────────────────────────── */
+
+.photo-upload-area {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+/* Drop zone */
+.photo-upload-zone {
+  flex: 1;
+  min-width: 260px;
+  border: 2px dashed #d1d5db;
+  border-radius: 10px;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  position: relative;
+}
+.photo-upload-zone:hover,
+.photo-upload-zone.drag-over {
+  border-color: #1a6fd4;
+  background: #eff6ff;
+}
+
+/* File input covers the entire drop zone — clicks open picker, pointer-events MUST be auto */
+.photo-upload-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.photo-upload-icon {
+  font-size: 2.25rem;
+  color: #1a6fd4;
+}
+
+.photo-upload-text span {
+  font-size: 0.9375rem;
+  color: #374151;
+}
+.photo-upload-text small {
+  display: block;
+  font-size: 0.8125rem;
+  color: #9ca3af;
+  margin-top: 0.25rem;
+}
+
+/* Inline "browse" link inside the zone label */
+.photo-browse-link {
+  color: #1a6fd4;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  position: relative;
+  z-index: 2;
+}
+
+/* Preview box (shown once a file is chosen) */
+.photo-preview-box {
+  position: relative;
+  display: none;
+  width: 130px;
+  height: 130px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid #e5e7eb;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+.photo-preview-box.show { display: block; }
+
+.photo-preview-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Remove button overlaid on the preview */
+.photo-remove-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  font-size: 0.7rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+.photo-remove-btn:hover { background: #ef4444; }
+
+/* ───────────────────────────────────────────────────────────────────
+   14. RESPONSIVE — sections 03 & 04
+   ─────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  /* Stack select-or-create panels vertically */
+  .select-or-create {
+    grid-template-columns: 1fr;
+  }
+  .select-or-create__left {
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  /* Hide the "OR" badge on mobile (no room) */
+  .select-or-create__right::before {
+    display: none;
+  }
+  /* Stack photo upload area */
+  .photo-upload-area {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .photo-upload-zone {
+    min-width: unset;
+  }
+  .photo-preview-box {
+    align-self: center;
+  }
 }

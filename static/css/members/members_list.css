@@ -1,0 +1,50 @@
+/* ═══════════════════════════════════════════════════════════════════
+   MEMBERS LIST PAGE — page-specific styles
+   Imports the shared master stylesheet, then adds overrides.
+   ═══════════════════════════════════════════════════════════════════ */
+
+@import url("members.css");
+
+/* ── 6-column filter grid (status / dept / course / year / sem / actions) ── */
+.members-list-page .filters-grid {
+  grid-template-columns: repeat(5, 1fr) auto;
+}
+
+@media (max-width: 1280px) {
+  .members-list-page .filters-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .members-list-page .filters-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Make the full-width quick-actions strip stand out slightly ── */
+.members-list-page .quick-actions {
+  background: white;
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Dense table for 9 columns — tighten padding so Actions is always visible ── */
+.members-list-page .members-table th,
+.members-list-page .members-table td {
+  padding: 0.875rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+/* Member Info cell — keep avatar + name readable */
+.members-list-page .members-table td:first-child {
+  min-width: 180px;
+}
+
+/* Actions column — guaranteed space for 3 icon buttons */
+.members-list-page .members-table th:last-child,
+.members-list-page .members-table td:last-child {
+  min-width: 110px;
+  text-align: center;
+}

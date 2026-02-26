@@ -3,12 +3,18 @@ members/views.py
 ────────────────
 All views for the members app.
 Every queryset is filtered by `owner=request.user` (multi-tenancy).
+
+Photo serving
+─────────────
+Member photos are stored as binary blobs (BinaryField) in MySQL.
+Use the `member_photo` view to serve them:
+    <img src="{% url 'members:member_photo' member.pk %}">
 """
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse, HttpResponse, FileResponse
+from django.http import JsonResponse, HttpResponse
 from django.db.models import Q, Count, Sum
 from django.utils import timezone
 from django.core.paginator import Paginator
@@ -16,7 +22,21 @@ from datetime import timedelta
 import json
 
 from .models import Member, Department, Course, AcademicYear, Semester, Transaction
-from .forms import MemberForm, DepartmentForm, CourseForm, AcademicYearForm, SemesterForm
+from .forms import (
+    MemberForm, DepartmentForm, CourseForm, AcademicYearForm, SemesterForm,
+    StudentMemberForm, TeacherMemberForm, GeneralMemberForm,
+)
+
+# Map role string → role-specific form class
+_ROLE_FORM_MAP = {
+    "student": StudentMemberForm,
+    "teacher": TeacherMemberForm,
+    "general": GeneralMemberForm,
+}
+
+def _get_role_form(role):
+    """Return the appropriate role form class, defaulting to StudentMemberForm."""
+    return _ROLE_FORM_MAP.get(role, StudentMemberForm)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -26,16 +46,16 @@ from .forms import MemberForm, DepartmentForm, CourseForm, AcademicYearForm, Sem
 def _owner_ctx(request):
     """Return the four lookup querysets that every list page needs."""
     return {
-        "departments": Department.objects.filter(owner=request.user),
-        "courses": Course.objects.filter(owner=request.user),
+        "departments":   Department.objects.filter(owner=request.user),
+        "courses":       Course.objects.filter(owner=request.user),
         "academic_years": AcademicYear.objects.filter(owner=request.user),
-        "semesters": Semester.objects.filter(owner=request.user),
+        "semesters":     Semester.objects.filter(owner=request.user),
     }
 
 
 def _paginate(qs_or_list, request, per_page=20):
     paginator = Paginator(qs_or_list, per_page)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    page_obj  = paginator.get_page(request.GET.get("page"))
     return page_obj
 
 
@@ -48,20 +68,20 @@ def members_dashboard(request):
     """High-level statistics dashboard – owner isolated."""
     members = Member.objects.filter(owner=request.user)
 
-    total = members.count()
-    active = members.filter(status="active").count()
-    passout = members.filter(status="passout").count()
+    total    = members.count()
+    active   = members.filter(status="active").count()
+    passout  = members.filter(status="passout").count()
     inactive = members.filter(status="inactive").count()
 
     def pct(n):
         return round(n / total * 100, 1) if total else 0
 
     stats = {
-        "total_count": total,
-        "active_count": active,
-        "passout_count": passout,
-        "inactive_count": inactive,
-        "active_percentage": pct(active),
+        "total_count":        total,
+        "active_count":       active,
+        "passout_count":      passout,
+        "inactive_count":     inactive,
+        "active_percentage":  pct(active),
         "passout_percentage": pct(passout),
         "inactive_percentage": pct(inactive),
     }
@@ -76,10 +96,10 @@ def members_dashboard(request):
 
     context = {
         **stats,
-        "stats": stats,
-        "recent_members": recent_members,
+        "stats":             stats,
+        "recent_members":    recent_members,
         "department_labels": json.dumps([d.name for d in departments]),
-        "department_data": json.dumps([d.member_count for d in departments]),
+        "department_data":   json.dumps([d.member_count for d in departments]),
     }
     return render(request, "members/members_dashboard.html", context)
 
@@ -98,6 +118,10 @@ def members_list(request):
     status = request.GET.get("status")
     if status:
         members = members.filter(status=status)
+
+    role = request.GET.get("role")
+    if role:
+        members = members.filter(role=role)
 
     dept = request.GET.get("department")
     if dept:
@@ -130,8 +154,8 @@ def members_list(request):
 
     context = {
         **_owner_ctx(request),
-        "members": page_obj,
-        "page_obj": page_obj,
+        "members":      page_obj,
+        "page_obj":     page_obj,
         "is_paginated": page_obj.has_other_pages(),
     }
     return render(request, "members/members_list.html", context)
@@ -169,8 +193,8 @@ def members_active(request):
 
     context = {
         **_owner_ctx(request),
-        "members": page_obj,
-        "page_obj": page_obj,
+        "members":      page_obj,
+        "page_obj":     page_obj,
         "is_paginated": page_obj.has_other_pages(),
     }
     return render(request, "members/members_active.html", context)
@@ -199,8 +223,8 @@ def members_inactive(request):
 
     context = {
         **_owner_ctx(request),
-        "members": page_obj,
-        "page_obj": page_obj,
+        "members":      page_obj,
+        "page_obj":     page_obj,
         "is_paginated": page_obj.has_other_pages(),
     }
     return render(request, "members/members_inactive.html", context)
@@ -219,7 +243,17 @@ def members_passout(request):
 
     passout_year = request.GET.get("passout_year")
     if passout_year:
-        members = members.filter(admission_year=int(passout_year))
+        try:
+            from django.db.models import F, ExpressionWrapper, IntegerField
+            py = int(passout_year)
+            members = members.annotate(
+                computed_passout_year=ExpressionWrapper(
+                    F("admission_year") + F("course__duration"),
+                    output_field=IntegerField(),
+                )
+            ).filter(computed_passout_year=py)
+        except (ValueError, TypeError):
+            pass
 
     clearance = request.GET.get("clearance")
     if clearance:
@@ -227,18 +261,28 @@ def members_passout(request):
 
     page_obj = _paginate(members, request)
 
+    # Build distinct passout years for the filter dropdown
+    from django.db.models import F, ExpressionWrapper, IntegerField
     passout_years = (
         Member.objects.filter(owner=request.user, status="passout")
-        .values_list("admission_year", flat=True)
+        .exclude(admission_year__isnull=True)
+        .exclude(course__isnull=True)
+        .annotate(
+            passout_yr=ExpressionWrapper(
+                F("admission_year") + F("course__duration"),
+                output_field=IntegerField(),
+            )
+        )
+        .values_list("passout_yr", flat=True)
         .distinct()
-        .order_by("-admission_year")
+        .order_by("-passout_yr")
     )
 
     context = {
         **_owner_ctx(request),
-        "members": page_obj,
-        "page_obj": page_obj,
-        "is_paginated": page_obj.has_other_pages(),
+        "members":       page_obj,
+        "page_obj":      page_obj,
+        "is_paginated":  page_obj.has_other_pages(),
         "passout_years": passout_years,
     }
     return render(request, "members/members_passout.html", context)
@@ -257,7 +301,7 @@ def member_detail(request, pk):
     ).order_by("-issue_date")[:10]
 
     context = {
-        "member": member,
+        "member":       member,
         "transactions": transactions,
     }
     return render(request, "members/member_detail.html", context)
@@ -267,10 +311,15 @@ def member_detail(request, pk):
 def member_add(request):
     """
     Add a new member.
-    Supports select-or-create for Department, Course, AcademicYear, Semester.
+    Uses the role-specific form (StudentMemberForm / TeacherMemberForm /
+    GeneralMemberForm) so each role only validates and saves its relevant
+    fields.  Supports select-or-create for Department, Course, AcademicYear,
+    Semester.
     """
     if request.method == "POST":
-        form = MemberForm(request.POST, request.FILES, user=request.user)
+        role      = request.POST.get("role", "student")
+        FormClass = _get_role_form(role)
+        form      = FormClass(request.POST, request.FILES, user=request.user)
         if form.is_valid():
             member = form.save_with_create()
             messages.success(
@@ -280,7 +329,7 @@ def member_add(request):
         else:
             messages.error(request, "Please correct the errors below.")
     else:
-        form = MemberForm(user=request.user)
+        form = StudentMemberForm(user=request.user)
 
     context = {
         **_owner_ctx(request),
@@ -291,11 +340,17 @@ def member_add(request):
 
 @login_required
 def member_edit(request, pk):
-    """Edit an existing member."""
+    """
+    Edit an existing member.
+    The role-specific form is chosen based on the submitted role (POST) or the
+    member's current role (GET), so each role only validates its own fields.
+    """
     member = get_object_or_404(Member, pk=pk, owner=request.user)
 
     if request.method == "POST":
-        form = MemberForm(
+        role      = request.POST.get("role", member.role)
+        FormClass = _get_role_form(role)
+        form      = FormClass(
             request.POST, request.FILES, instance=member, user=request.user
         )
         if form.is_valid():
@@ -307,11 +362,12 @@ def member_edit(request, pk):
         else:
             messages.error(request, "Please correct the errors below.")
     else:
-        form = MemberForm(instance=member, user=request.user)
+        FormClass = _get_role_form(member.role)
+        form = FormClass(instance=member, user=request.user)
 
     context = {
         **_owner_ctx(request),
-        "form": form,
+        "form":   form,
         "member": member,
     }
     return render(request, "members/member_edit.html", context)
@@ -333,11 +389,24 @@ def member_delete(request, pk):
 
 @login_required
 def member_photo(request, pk):
-    """Serve member photo – owner isolated."""
+    """
+    Serve a member's photo stored as a binary blob in MySQL.
+
+    BinaryField returns a memoryview in Python; we cast it to bytes before
+    passing it to HttpResponse.
+
+    Template usage:
+        <img src="{% url 'members:member_photo' member.pk %}">
+    """
     member = get_object_or_404(Member, pk=pk, owner=request.user)
-    if member.photo:
-        return FileResponse(member.photo.open(), content_type="image/jpeg")
-    return HttpResponse(status=404)
+
+    if not member.photo:
+        return HttpResponse(status=404)
+
+    return HttpResponse(
+        bytes(member.photo),
+        content_type=member.photo_mime_type or "image/jpeg",
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -349,8 +418,8 @@ def member_reactivate(request, pk):
     """Reactivate an inactive member."""
     if request.method == "POST":
         member = get_object_or_404(Member, pk=pk, owner=request.user)
-        member.status = "active"
-        member.inactive_since = None
+        member.status        = "active"
+        member.inactive_since  = None
         member.inactive_reason = None
         member.save()
         messages.success(
@@ -379,8 +448,8 @@ def member_mark_cleared(request, pk):
 
         if pending_books == 0 and pending_fines == 0:
             member.clearance_status = "cleared"
-            member.clearance_date = timezone.now()
-            member.cleared_by = request.user
+            member.clearance_date   = timezone.now()
+            member.cleared_by       = request.user
             member.save()
             messages.success(
                 request, f"Member {member.full_name} marked as cleared!"
@@ -429,9 +498,7 @@ def clearance_check(request):
             )
 
             if not member:
-                return JsonResponse(
-                    {"success": False, "message": "Member not found"}
-                )
+                return JsonResponse({"success": False, "message": "Member not found"})
 
             pending_books = Transaction.objects.filter(
                 member=member,
@@ -447,20 +514,20 @@ def clearance_check(request):
             )
 
             payload = {
-                "member_id": member.member_id,
-                "full_name": member.full_name,
-                "email": member.email,
-                "phone": member.phone,
-                "department": member.department.name if member.department else None,
-                "status": member.status,
+                "member_id":        member.member_id,
+                "full_name":        member.full_name,
+                "email":            member.email,
+                "phone":            member.phone,
+                "department":       member.department.name if member.department else None,
+                "role":             member.get_role_display(),
+                "status":           member.status,
                 "clearance_status": member.clearance_status,
-                "pending_books": pending_books,
-                "pending_fines": float(pending_fines),
-                "is_cleared": pending_books == 0 and float(pending_fines) == 0,
-                "clearance_date": (
+                "pending_books":    pending_books,
+                "pending_fines":    float(pending_fines),
+                "is_cleared":       pending_books == 0 and float(pending_fines) == 0,
+                "clearance_date":   (
                     member.clearance_date.strftime("%d %b %Y")
-                    if member.clearance_date
-                    else None
+                    if member.clearance_date else None
                 ),
             }
             return JsonResponse({"success": True, "data": payload})
@@ -501,8 +568,8 @@ def cleared_members(request):
 
     context = {
         **_owner_ctx(request),
-        "members": page_obj,
-        "page_obj": page_obj,
+        "members":      page_obj,
+        "page_obj":     page_obj,
         "is_paginated": page_obj.has_other_pages(),
     }
     return render(request, "members/cleared_members.html", context)
@@ -517,7 +584,7 @@ def pending_clearance(request):
 
     # Annotate pending data in Python (avoids complex ORM across tenant-scoped
     # Transaction rows)
-    members_list = []
+    pending_members = []
     for member in base_qs:
         pending_books = Transaction.objects.filter(
             member=member, owner=request.user, status__in=["issued", "overdue"]
@@ -544,41 +611,40 @@ def pending_clearance(request):
                 .order_by("issue_date")
                 .first()
             )
-            member.pending_books = pending_books
-            member.total_fine = pending_fines
-            member.pending_damages = 0
-            member.pending_lost = lost_items
-            member.days_pending = (
+            member.pending_books    = pending_books
+            member.total_fine       = pending_fines
+            member.pending_damages  = 0
+            member.pending_lost     = lost_items
+            member.days_pending     = (
                 (timezone.now().date() - oldest.issue_date.date()).days
-                if oldest
-                else 0
+                if oldest else 0
             )
-            members_list.append(member)
+            pending_members.append(member)
 
     # Department filter (post-annotation)
     dept_filter = request.GET.get("department")
     if dept_filter:
-        members_list = [
-            m for m in members_list if m.department_id == int(dept_filter)
+        pending_members = [
+            m for m in pending_members if m.department_id == int(dept_filter)
         ]
 
     # Aggregate stats
     stats = {
-        "unreturned_books": sum(m.pending_books for m in members_list),
-        "total_fines": sum(float(m.total_fine) for m in members_list),
-        "overdue_books": Transaction.objects.filter(
+        "unreturned_books": sum(m.pending_books for m in pending_members),
+        "total_fines":      sum(float(m.total_fine) for m in pending_members),
+        "overdue_books":    Transaction.objects.filter(
             owner=request.user, status="overdue"
         ).count(),
     }
 
-    page_obj = _paginate(members_list, request)
+    page_obj = _paginate(pending_members, request)
 
     context = {
         **_owner_ctx(request),
-        "members": page_obj,
-        "page_obj": page_obj,
+        "members":      page_obj,
+        "page_obj":     page_obj,
         "is_paginated": page_obj.has_other_pages(),
-        "stats": stats,
+        "stats":        stats,
     }
     return render(request, "members/pending_clearance.html", context)
 
@@ -587,7 +653,7 @@ def pending_clearance(request):
 def clearance_certificate(request, pk):
     """
     Generate a clearance certificate PDF.
-    Requires reportlab (pip install reportlab) – stub provided below.
+    Requires reportlab (pip install reportlab) – stub provided as fallback.
     """
     member = get_object_or_404(
         Member, pk=pk, owner=request.user, clearance_status="cleared"
@@ -599,7 +665,7 @@ def clearance_certificate(request, pk):
         import io
 
         buf = io.BytesIO()
-        c = canvas.Canvas(buf, pagesize=A4)
+        c   = canvas.Canvas(buf, pagesize=A4)
         width, height = A4
 
         c.setFont("Helvetica-Bold", 20)
@@ -620,8 +686,7 @@ def clearance_certificate(request, pk):
 
         c.setFont("Helvetica-Oblique", 11)
         c.drawCentredString(
-            width / 2,
-            150,
+            width / 2, 150,
             "This certificate confirms that the above member has cleared all library obligations.",
         )
         c.save()
@@ -648,7 +713,6 @@ def clearance_certificate(request, pk):
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Department / Course / AcademicYear / Semester management
-# (Optional CRUD endpoints – useful for settings pages)
 # ──────────────────────────────────────────────────────────────────────────────
 
 @login_required

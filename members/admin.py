@@ -92,6 +92,7 @@ class MemberAdmin(OwnerScopedMixin, admin.ModelAdmin):
     list_display = [
         "member_id",
         "full_name",
+        "role_badge",
         "email",
         "phone",
         "department",
@@ -103,6 +104,7 @@ class MemberAdmin(OwnerScopedMixin, admin.ModelAdmin):
         "date_joined",
     ]
     list_filter = [
+        "role",
         "status",
         "clearance_status",
         "gender",
@@ -133,6 +135,7 @@ class MemberAdmin(OwnerScopedMixin, admin.ModelAdmin):
             {
                 "fields": (
                     "member_id",
+                    "role",
                     "first_name",
                     "last_name",
                     "email",
@@ -198,10 +201,23 @@ class MemberAdmin(OwnerScopedMixin, admin.ModelAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     # ── Display helpers ───────────────────────────────────────────────────────
+    # NOTE: full_name is a @property on the Member model — no need to redefine
+    # it here. Django admin resolves it automatically from list_display.
 
-    @admin.display(description="Full Name")
-    def full_name(self, obj):
-        return obj.full_name
+    @admin.display(description="Role")
+    def role_badge(self, obj):
+        colors = {
+            "student": "#3b82f6",
+            "teacher": "#8b5cf6",
+            "general": "#6b7280",
+        }
+        color = colors.get(obj.role, "#6b7280")
+        return format_html(
+            '<span style="background:{};color:white;padding:3px 10px;'
+            'border-radius:12px;font-size:11px;font-weight:600">{}</span>',
+            color,
+            obj.get_role_display(),
+        )
 
     @admin.display(description="Status")
     def status_badge(self, obj):

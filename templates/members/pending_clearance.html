@@ -6,12 +6,12 @@
 {% block nav_members %}active{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/members/members.css' %}" />
+<link rel="stylesheet" href="{% static 'css/members/pending_clearance.css' %}" />
 {% endblock %}
 
 {% block content %}
-<div class="members-list-page">
-  
+<div class="members-list-page pending-clearance-page">
+
   <!-- Page Header -->
   <div class="page-header" style="margin-bottom: 2rem;">
     <div>
@@ -80,6 +80,8 @@
   </div>
 
   <!-- Filters Section -->
+  {# csrf_token is needed here so JS can read it for the reminder fetch() #}
+  {% csrf_token %}
   <div class="filters-section">
     <form id="filterForm" method="get">
       <div class="filters-grid">
@@ -99,10 +101,10 @@
           <label for="issue_type">Issue Type</label>
           <select id="issue_type" name="issue_type" class="filter-select">
             <option value="">All Issues</option>
-            <option value="books" {% if request.GET.issue_type == 'books' %}selected{% endif %}>Unreturned Books</option>
-            <option value="fines" {% if request.GET.issue_type == 'fines' %}selected{% endif %}>Pending Fines</option>
+            <option value="books"   {% if request.GET.issue_type == 'books'   %}selected{% endif %}>Unreturned Books</option>
+            <option value="fines"   {% if request.GET.issue_type == 'fines'   %}selected{% endif %}>Pending Fines</option>
             <option value="damages" {% if request.GET.issue_type == 'damages' %}selected{% endif %}>Damage Claims</option>
-            <option value="lost" {% if request.GET.issue_type == 'lost' %}selected{% endif %}>Lost Items</option>
+            <option value="lost"    {% if request.GET.issue_type == 'lost'    %}selected{% endif %}>Lost Items</option>
           </select>
         </div>
 
@@ -110,9 +112,9 @@
           <label for="priority">Priority</label>
           <select id="priority" name="priority" class="filter-select">
             <option value="">All Priorities</option>
-            <option value="high" {% if request.GET.priority == 'high' %}selected{% endif %}>High</option>
+            <option value="high"   {% if request.GET.priority == 'high'   %}selected{% endif %}>High</option>
             <option value="medium" {% if request.GET.priority == 'medium' %}selected{% endif %}>Medium</option>
-            <option value="low" {% if request.GET.priority == 'low' %}selected{% endif %}>Low</option>
+            <option value="low"    {% if request.GET.priority == 'low'    %}selected{% endif %}>Low</option>
           </select>
         </div>
 
@@ -141,6 +143,7 @@
     </div>
 
     {% if members %}
+    <div class="members-table-wrapper">
     <table class="members-table" id="membersTable">
       <thead>
         <tr>
@@ -159,7 +162,7 @@
           <td>
             <div class="member-info">
               {% if member.photo %}
-              <img src="{{ member.photo.url }}" alt="{{ member.full_name }}" class="member-avatar" style="border-radius: 50%; object-fit: cover;" />
+              <img src="{% url 'members:member_photo' member.id %}" alt="{{ member.full_name }}" class="member-avatar" style="border-radius: 50%; object-fit: cover;" />
               {% else %}
               <div class="member-avatar">
                 {{ member.full_name|slice:":1"|upper }}
@@ -174,21 +177,15 @@
           <td><strong>{{ member.member_id }}</strong></td>
           <td>{{ member.department.name|default:"N/A" }}</td>
           <td>
-            <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+            <div class="pending-items-cell">
               {% if member.pending_books > 0 %}
-              <span style="font-size: 0.875rem;">
-                <i class="fas fa-book" style="color: #ef4444;"></i> {{ member.pending_books }} book(s)
-              </span>
+              <span><i class="fas fa-book" style="color: #ef4444;"></i> {{ member.pending_books }} book(s)</span>
               {% endif %}
               {% if member.pending_damages > 0 %}
-              <span style="font-size: 0.875rem;">
-                <i class="fas fa-exclamation-triangle" style="color: #f59e0b;"></i> {{ member.pending_damages }} damage(s)
-              </span>
+              <span><i class="fas fa-exclamation-triangle" style="color: #f59e0b;"></i> {{ member.pending_damages }} damage(s)</span>
               {% endif %}
               {% if member.pending_lost > 0 %}
-              <span style="font-size: 0.875rem;">
-                <i class="fas fa-times-circle" style="color: #8b5cf6;"></i> {{ member.pending_lost }} lost item(s)
-              </span>
+              <span><i class="fas fa-times-circle" style="color: #8b5cf6;"></i> {{ member.pending_lost }} lost item(s)</span>
               {% endif %}
             </div>
           </td>
@@ -196,7 +193,7 @@
             <strong style="color: #ef4444;">₹{{ member.total_fine|default:"0" }}</strong>
           </td>
           <td>
-            <span style="{% if member.days_pending > 30 %}color: #ef4444;{% elif member.days_pending > 15 %}color: #f59e0b;{% else %}color: #6b7280;{% endif %}">
+            <span class="{% if member.days_pending > 30 %}days-high{% elif member.days_pending > 15 %}days-medium{% else %}days-low{% endif %}">
               {{ member.days_pending }} days
             </span>
           </td>
@@ -205,13 +202,14 @@
               <a href="{% url 'members:member_detail' member.id %}" class="action-icon view" title="View Details">
                 <i class="fas fa-eye"></i>
               </a>
-              <button class="action-icon" style="color: #3b82f6;" 
-                      onclick="sendReminder({{ member.id }})" 
+              <!-- sendReminder() and markCleared() are defined in pending_clearance.js -->
+              <button class="action-icon reminder"
+                      onclick="sendReminder({{ member.id }})"
                       title="Send Reminder">
                 <i class="fas fa-bell"></i>
               </button>
-              <button class="action-icon" style="color: #10b981;" 
-                      onclick="markCleared({{ member.id }})" 
+              <button class="action-icon mark-cleared"
+                      onclick="markCleared({{ member.id }})"
                       title="Mark as Cleared">
                 <i class="fas fa-check"></i>
               </button>
@@ -221,8 +219,8 @@
         {% endfor %}
       </tbody>
     </table>
+    </div><!-- /.members-table-wrapper -->
 
-    <!-- Pagination -->
     {% if is_paginated %}
     <div class="pagination-container">
       <div class="pagination-info">
@@ -230,21 +228,19 @@
       </div>
       <ul class="pagination">
         {% if page_obj.has_previous %}
-        <li><a href="?page=1"><i class="fas fa-angle-double-left"></i></a></li>
-        <li><a href="?page={{ page_obj.previous_page_number }}"><i class="fas fa-angle-left"></i></a></li>
+        <li><a href="?page=1{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}"><i class="fas fa-angle-double-left"></i></a></li>
+        <li><a href="?page={{ page_obj.previous_page_number }}{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}"><i class="fas fa-angle-left"></i></a></li>
         {% endif %}
-
         {% for num in page_obj.paginator.page_range %}
           {% if page_obj.number == num %}
           <li class="active"><span>{{ num }}</span></li>
           {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
-          <li><a href="?page={{ num }}">{{ num }}</a></li>
+          <li><a href="?page={{ num }}{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}">{{ num }}</a></li>
           {% endif %}
         {% endfor %}
-
         {% if page_obj.has_next %}
-        <li><a href="?page={{ page_obj.next_page_number }}"><i class="fas fa-angle-right"></i></a></li>
-        <li><a href="?page={{ page_obj.paginator.num_pages }}"><i class="fas fa-angle-double-right"></i></a></li>
+        <li><a href="?page={{ page_obj.next_page_number }}{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}"><i class="fas fa-angle-right"></i></a></li>
+        <li><a href="?page={{ page_obj.paginator.num_pages }}{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}"><i class="fas fa-angle-double-right"></i></a></li>
         {% endif %}
       </ul>
     </div>
@@ -268,49 +264,5 @@
 
 {% block extra_js %}
 <script src="{% static 'js/members/members.js' %}"></script>
-<script>
-  function sendReminder(memberId) {
-    if (confirm('Send a reminder notification to this member?')) {
-      fetch(`/members/${memberId}/send-reminder/`, {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-          'Content-Type': 'application/json'
-        }
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          MembersModule.Utils.showToast('Reminder sent successfully', 'success');
-        } else {
-          MembersModule.Utils.showToast('Failed to send reminder', 'error');
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        MembersModule.Utils.showToast('An error occurred', 'error');
-      });
-    }
-  }
-
-  function markCleared(memberId) {
-    if (confirm('Mark this member as cleared? This will update their clearance status.')) {
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = `/members/${memberId}/mark-cleared/`;
-      
-      const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
-      if (csrfToken) {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'csrfmiddlewaretoken';
-        input.value = csrfToken.value;
-        form.appendChild(input);
-      }
-      
-      document.body.appendChild(form);
-      form.submit();
-    }
-  }
-</script>
+<script src="{% static 'js/members/pending_clearance.js' %}"></script>
 {% endblock %}

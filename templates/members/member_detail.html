@@ -6,12 +6,18 @@
 {% block nav_members %}active{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/members/members.css' %}" />
+<link rel="stylesheet" href="{% static 'css/members/member_detail.css' %}" />
+<style>
+.role-badge{display:inline-block;padding:3px 12px;border-radius:12px;font-size:.8rem;font-weight:600;color:#fff}
+.role-badge.role-student{background:#3b82f6}
+.role-badge.role-teacher{background:#8b5cf6}
+.role-badge.role-general{background:#6b7280}
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="member-detail-container">
-  
+
   <!-- Member Header Card -->
   <div class="member-header-card">
     <div class="member-header-content">
@@ -22,10 +28,14 @@
         {{ member.full_name|slice:":1"|upper }}
       </div>
       {% endif %}
-      
+
       <div class="member-header-info">
         <h1>{{ member.full_name }}</h1>
         <div class="member-meta">
+          <div class="member-meta-item">
+            <i class="fas fa-user-tag"></i>
+            <span class="role-badge role-{{ member.role }}">{{ member.get_role_display }}</span>
+          </div>
           <div class="member-meta-item">
             <i class="fas fa-id-card"></i>
             <span>{{ member.member_id }}</span>
@@ -45,12 +55,12 @@
             </span>
           </div>
         </div>
-        
+
         <div class="member-header-actions">
           <a href="{% url 'members:member_edit' member.id %}" class="btn btn-outline-white">
             <i class="fas fa-edit"></i> Edit Profile
           </a>
-          <button class="btn btn-outline-white delete-member-btn" 
+          <button class="btn btn-outline-white delete-member-btn"
                   data-member-name="{{ member.full_name }}"
                   data-delete-url="{% url 'members:member_delete' member.id %}">
             <i class="fas fa-trash"></i> Delete Member
@@ -65,7 +75,7 @@
 
   <!-- Member Details Grid -->
   <div class="member-details-grid">
-    
+
     <!-- Personal Information -->
     <div class="detail-card">
       <div class="detail-card-header">
@@ -136,7 +146,7 @@
       </div>
       <div class="detail-row">
         <span class="detail-label">Year</span>
-        <span class="detail-value">{{ member.get_year_display|default:"N/A" }}</span>
+        <span class="detail-value">{{ member.year.name|default:"N/A" }}</span>
       </div>
       <div class="detail-row">
         <span class="detail-label">Roll Number</span>
@@ -159,6 +169,12 @@
       <div class="detail-row">
         <span class="detail-label">Member ID</span>
         <span class="detail-value"><strong>{{ member.member_id }}</strong></span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Role</span>
+        <span class="detail-value">
+          <span class="role-badge role-{{ member.role }}">{{ member.get_role_display }}</span>
+        </span>
       </div>
       <div class="detail-row">
         <span class="detail-label">Join Date</span>
@@ -191,12 +207,13 @@
       <h2>
         <i class="fas fa-history"></i> Recent Transactions
       </h2>
-      <a href="#" class="btn-secondary">
+      <a href="#" class="btn btn-secondary">
         View All <i class="fas fa-arrow-right"></i>
       </a>
     </div>
 
     {% if transactions %}
+    <div class="members-table-wrapper">
     <table class="members-table">
       <thead>
         <tr>
@@ -222,26 +239,27 @@
             {% if transaction.return_date %}
               {{ transaction.return_date|date:"M d, Y" }}
             {% else %}
-              <span style="color: #f59e0b;">Not returned</span>
+              <span class="not-returned">Not returned</span>
             {% endif %}
           </td>
           <td>
-            <span class="status-badge {% if transaction.status == 'returned' %}cleared{% else %}pending{% endif %}">
+            <span class="status-badge {% if transaction.status == 'returned' %}returned{% else %}issued{% endif %}">
               <i class="fas fa-circle"></i>
               {{ transaction.get_status_display }}
             </span>
           </td>
           <td>
             {% if transaction.fine_amount %}
-              <span style="color: #ef4444; font-weight: 600;">₹{{ transaction.fine_amount }}</span>
+              <span class="fine-pending">₹{{ transaction.fine_amount }}</span>
             {% else %}
-              <span style="color: #10b981;">₹0</span>
+              <span class="fine-paid">₹0</span>
             {% endif %}
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div><!-- /.members-table-wrapper -->
     {% else %}
     <div class="empty-state">
       <div class="empty-state-icon">
@@ -258,4 +276,5 @@
 
 {% block extra_js %}
 <script src="{% static 'js/members/members.js' %}"></script>
+<script src="{% static 'js/members/member_detail.js' %}"></script>
 {% endblock %}
