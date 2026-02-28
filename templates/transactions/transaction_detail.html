@@ -1,0 +1,416 @@
+{% extends "dashboard_base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/transactions/transaction_detail.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+
+  <!-- Page Header -->
+  <div class="page-header">
+    <div class="page-header__left">
+      <div class="page-header__breadcrumb">
+        <span class="breadcrumb-item">Library</span>
+        <svg class="breadcrumb-sep" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <a href="{% url 'transactions:transaction_list' %}" class="breadcrumb-item">Transactions</a>
+        <svg class="breadcrumb-sep" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="breadcrumb-item breadcrumb-item--active">#{{ transaction.id }}</span>
+      </div>
+      <div class="page-title-row">
+        <h1 class="page-title">Transaction #{{ transaction.id }}</h1>
+        <span class="status-badge status-badge--{{ transaction.status }} status-badge--lg">
+          <span class="status-badge__dot"></span>
+          {{ transaction.get_status_display }}
+        </span>
+      </div>
+      <p class="page-subtitle">Created on {{ transaction.created_at|date:"d F Y, H:i" }}</p>
+    </div>
+    <div class="page-header__actions">
+      {% if transaction.status == 'issued' or transaction.status == 'overdue' %}
+      <a href="{% url 'transactions:return_book' transaction.id %}" class="btn btn--primary">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M4 10h10M10 6l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Process Return
+      </a>
+      <form method="POST" action="{% url 'transactions:renew_book' transaction.id %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--ghost">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M4 10a6 6 0 0 1 6-6 6 6 0 0 1 4.24 1.76M16 6v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Renew Loan
+        </button>
+      </form>
+      {% endif %}
+      <button class="btn btn--ghost" onclick="window.print()">
+        <svg viewBox="0 0 20 20" fill="none"><rect x="4" y="2" width="12" height="4" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="8" width="16" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M6 14h8M6 17h5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+        Print
+      </button>
+      <a href="{% url 'transactions:transaction_list' %}" class="btn btn--ghost">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Back
+      </a>
+    </div>
+  </div>
+
+  <!-- Main Content Grid -->
+  <div class="detail-grid">
+
+    <!-- Left Column -->
+    <div class="detail-grid__main">
+
+      <!-- Member Info Card -->
+      <div class="info-card">
+        <div class="info-card__header">
+          <div class="info-card__icon info-card__icon--member">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.75"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
+          </div>
+          <div>
+            <h2 class="info-card__title">Member Information</h2>
+            <p class="info-card__subtitle">Borrower details</p>
+          </div>
+          <a href="{% url 'members:member_detail' transaction.member.id %}" class="info-card__link">View Profile →</a>
+        </div>
+        <div class="info-card__body">
+          <div class="member-profile">
+            <div class="member-profile__avatar">
+              {# Try to load member photo (BLOB); fall back to initial letter on error #}
+              <img
+                src="{% url 'members:member_photo' transaction.member.id %}"
+                alt="{{ transaction.member.first_name }}"
+                style="width:100%;height:100%;object-fit:cover;border-radius:50%;"
+                onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex';"
+              >
+              <span style="display:none">{{ transaction.member.first_name|first|upper }}</span>
+            </div>
+            <div class="member-profile__details">
+              <h3 class="member-profile__name">{{ transaction.member.first_name }} {{ transaction.member.last_name }}</h3>
+              <span class="member-profile__type">{{ transaction.member.get_role_display }}</span>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-item__label">Member ID</span>
+              <span class="info-item__value">{{ transaction.member.member_id }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-item__label">Email</span>
+              <span class="info-item__value">{{ transaction.member.email }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-item__label">Phone</span>
+              <span class="info-item__value">{{ transaction.member.phone }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-item__label">Department</span>
+              <span class="info-item__value">{{ transaction.member.department|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-item__label">Active Loans</span>
+              <span class="info-item__value">
+                {{ active_loans_count }}{% if borrow_limit %} / {{ borrow_limit }}{% else %} / ∞{% endif %}
+              </span>
+            </div>
+            <div class="info-item">
+              <span class="info-item__label">Outstanding Fine</span>
+              <span class="info-item__value {% if outstanding_fine %}info-item__value--danger{% endif %}">
+                ₹{{ outstanding_fine|default:"0.00" }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Book Info Card -->
+      <div class="info-card">
+        <div class="info-card__header">
+          <div class="info-card__icon info-card__icon--book">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M4 4h12a2 2 0 0 1 2 2v14l-7-3.5L4 20V6a2 2 0 0 1 0-2z" stroke="currentColor" stroke-width="1.75"/></svg>
+          </div>
+          <div>
+            <h2 class="info-card__title">Book Information</h2>
+            <p class="info-card__subtitle">Issued copy details</p>
+          </div>
+          <a href="{% url 'books:book_detail' transaction.book.id %}" class="info-card__link">View Book →</a>
+        </div>
+        <div class="info-card__body">
+          <div class="book-profile">
+            <div class="book-profile__cover">
+             
+              <img
+                id="bookCoverImg"
+                src="{% url 'books:book_cover' transaction.book.id %}"
+                alt="{{ transaction.book.title }}"
+                onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 48%22 fill=%22none%22%3E%3Crect x=%222%22 y=%222%22 width=%2236%22 height=%2244%22 rx=%223%22 stroke=%22%2394a3b8%22 stroke-width=%222%22/%3E%3Cpath d=%22M8 14h24M8 20h24M8 26h16%22 stroke=%22%2394a3b8%22 stroke-width=%221.5%22 stroke-linecap=%22round%22/%3E%3C/svg%3E';this.style.opacity='0.5';"
+              >
+            </div>
+            <div class="book-profile__info">
+              <h3 class="book-profile__title">{{ transaction.book.title }}</h3>
+              <p class="book-profile__author">by {{ transaction.book.author }}</p>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-item__label">ISBN</span>
+              <span class="info-item__value">{{ transaction.book.isbn|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-item__label">Category</span>
+              <span class="info-item__value">{{ transaction.book.category|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-item__label">Publisher</span>
+              <span class="info-item__value">{{ transaction.book.publisher|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-item__label">Copy No.</span>
+              <span class="info-item__value">{{ transaction.copy_number|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-item__label">Location</span>
+              <span class="info-item__value">{{ transaction.book.shelf_location|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-item__label">Available Copies</span>
+              <span class="info-item__value">{{ transaction.book.available_copies }} / {{ transaction.book.total_copies }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.detail-grid__main -->
+
+    <!-- Right Column -->
+    <div class="detail-grid__sidebar">
+
+      <!-- Timeline Card -->
+      <div class="timeline-card">
+        <div class="timeline-card__header">
+          <h2 class="timeline-card__title">Transaction Timeline</h2>
+        </div>
+        <div class="timeline">
+
+          <!-- Issued -->
+          <div class="timeline-step timeline-step--done">
+            <div class="timeline-step__indicator">
+              <div class="timeline-step__icon">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="timeline-step__line"></div>
+            </div>
+            <div class="timeline-step__content">
+              <h4 class="timeline-step__label">Book Issued</h4>
+              <p class="timeline-step__date">{{ transaction.issue_date|date:"d F Y" }}</p>
+              <p class="timeline-step__meta">by {{ transaction.issued_by|default:"—" }}</p>
+            </div>
+          </div>
+
+          <!-- Due Date -->
+          <div class="timeline-step {% if transaction.is_overdue and transaction.status != 'returned' %}timeline-step--danger{% elif transaction.status == 'returned' %}timeline-step--done{% else %}timeline-step--pending{% endif %}">
+            <div class="timeline-step__indicator">
+              <div class="timeline-step__icon">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M8 4v4l3 3" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.75"/></svg>
+              </div>
+              <div class="timeline-step__line"></div>
+            </div>
+            <div class="timeline-step__content">
+              <h4 class="timeline-step__label">Due Date</h4>
+              <p class="timeline-step__date">{{ transaction.due_date|date:"d F Y" }}</p>
+              {% if transaction.is_overdue and transaction.status != 'returned' %}
+              <p class="timeline-step__meta timeline-step__meta--danger">{{ transaction.overdue_days }} days overdue</p>
+              {% endif %}
+              {% if transaction.renewal_count %}
+              <p class="timeline-step__meta">Renewed {{ transaction.renewal_count }}×</p>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Returned / Lost -->
+          <div class="timeline-step {% if transaction.status == 'returned' %}timeline-step--done{% elif transaction.status == 'lost' %}timeline-step--lost{% else %}timeline-step--future{% endif %}">
+            <div class="timeline-step__indicator">
+              <div class="timeline-step__icon">
+                {% if transaction.status == 'returned' %}
+                  <svg viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                {% elif transaction.status == 'lost' %}
+                  <svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                {% else %}
+                  <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.75"/></svg>
+                {% endif %}
+              </div>
+            </div>
+            <div class="timeline-step__content">
+              {% if transaction.status == 'returned' %}
+              <h4 class="timeline-step__label">Book Returned</h4>
+              <p class="timeline-step__date">{{ transaction.return_date|date:"d F Y" }}</p>
+              <p class="timeline-step__meta">to {{ transaction.returned_to|default:"—" }}</p>
+              {% if transaction.return_condition %}
+              <p class="timeline-step__meta">Condition: {{ transaction.get_return_condition_display }}</p>
+              {% endif %}
+              {% elif transaction.status == 'lost' %}
+              <h4 class="timeline-step__label">Reported Lost</h4>
+              <p class="timeline-step__date">{{ transaction.lost_date|date:"d F Y"|default:"—" }}</p>
+              {% else %}
+              <h4 class="timeline-step__label">Pending Return</h4>
+              <p class="timeline-step__date">Not returned yet</p>
+              {% endif %}
+            </div>
+          </div>
+
+        </div><!-- /.timeline -->
+      </div>
+
+      <!-- Fine Calculation Card -->
+      <div class="fine-card">
+        <div class="fine-card__header">
+          <h2 class="fine-card__title">Fine Details</h2>
+          {% if transaction.fine_paid %}
+          <span class="fine-status-badge fine-status-badge--paid">Paid</span>
+          {% elif transaction.fine_amount > 0 %}
+          <span class="fine-status-badge fine-status-badge--unpaid">Unpaid</span>
+          {% else %}
+          <span class="fine-status-badge fine-status-badge--nil">No Fine</span>
+          {% endif %}
+        </div>
+        <div class="fine-card__body">
+          <div class="fine-calc">
+            <div class="fine-calc__row">
+              <span class="fine-calc__label">Daily Fine Rate</span>
+              <span class="fine-calc__value">₹{{ transaction.fine_rate_per_day }} / day</span>
+            </div>
+            <div class="fine-calc__row">
+              <span class="fine-calc__label">Overdue Days</span>
+              <span class="fine-calc__value {% if transaction.overdue_days > 0 %}fine-calc__value--danger{% endif %}">
+                {{ transaction.overdue_days }} days
+              </span>
+            </div>
+            <div class="fine-calc__row">
+              <span class="fine-calc__label">Overdue Fine</span>
+              <span class="fine-calc__value">₹{{ transaction.overdue_fine }}</span>
+            </div>
+            {% if transaction.damage_charge %}
+            <div class="fine-calc__row">
+              <span class="fine-calc__label">Damage Charge</span>
+              <span class="fine-calc__value fine-calc__value--danger">₹{{ transaction.damage_charge }}</span>
+            </div>
+            {% endif %}
+            {% if transaction.status == 'lost' %}
+            <div class="fine-calc__row">
+              <span class="fine-calc__label">Book Lost</span>
+              <span class="fine-calc__value fine-calc__value--danger">See penalty below</span>
+            </div>
+            {% endif %}
+            <div class="fine-calc__divider"></div>
+            <div class="fine-calc__row fine-calc__row--total">
+              <span class="fine-calc__label">Total Fine</span>
+              <span class="fine-calc__total {% if transaction.fine_amount > 0 %}fine-calc__total--danger{% endif %}">
+                ₹{{ transaction.fine_amount }}
+              </span>
+            </div>
+          </div>
+
+          {% if transaction.fine_amount > 0 and not transaction.fine_paid %}
+          {% with first_unpaid=fines|dictsort:"id" %}
+          <form method="POST" action="{% url 'transactions:mark_fine_paid' %}" class="inline-pay-form">
+            {% csrf_token %}
+            <input type="hidden" name="fine_id" value="{{ fines.0.id }}">
+            <input type="hidden" name="payment_method" value="cash">
+            <input type="hidden" name="next" value="{% url 'transactions:transaction_detail' transaction.id %}">
+            <button type="submit" class="btn btn--primary btn--block" {% if not fines %}disabled{% endif %}>
+              Mark Fine as Paid
+            </button>
+          </form>
+          {% endwith %}
+          {% endif %}
+
+          {% if transaction.fine_paid %}
+          <div class="fine-paid-info">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Paid on {{ transaction.fine_paid_date|date:"d M Y"|default:"—" }}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Notes Card -->
+      {% if transaction.notes or transaction.return_notes %}
+      <div class="notes-card">
+        <div class="notes-card__header">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M4 4h12v12H4z" stroke="currentColor" stroke-width="1.5"/><path d="M8 8h4M8 11h4M8 14h2" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+          <h3 class="notes-card__title">Notes</h3>
+        </div>
+        {% if transaction.notes %}
+        <p class="notes-card__text">{{ transaction.notes }}</p>
+        {% endif %}
+        {% if transaction.return_notes %}
+        <p class="notes-card__label">Return notes:</p>
+        <p class="notes-card__text">{{ transaction.return_notes }}</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </div><!-- /.detail-grid__sidebar -->
+
+  </div><!-- /.detail-grid -->
+
+  <!-- Fines Table -->
+  {% if fines %}
+  <div class="table-card" style="margin-top: 1.5rem;">
+    <div class="table-card__header">
+      <h3 style="font-size:1rem;font-weight:600;margin:0">Fine Records</h3>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Fine ID</th>
+            <th>Type</th>
+            <th>Amount (₹)</th>
+            <th>Status</th>
+            <th>Paid Date</th>
+            <th>Method</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fine in fines %}
+          <tr class="table-row">
+            <td><span class="fine-id">#F{{ fine.id|stringformat:"04d" }}</span></td>
+            <td>{{ fine.get_fine_type_display }}</td>
+            <td>₹{{ fine.amount }}</td>
+            <td>
+              <span class="payment-badge payment-badge--{{ fine.status }}">
+                <span class="payment-badge__dot"></span>
+                {{ fine.get_status_display }}
+              </span>
+            </td>
+            <td>{{ fine.paid_date|date:"d M Y"|default:"—" }}</td>
+            <td>{{ fine.get_payment_method_display|default:"—" }}</td>
+            <td>
+              {% if fine.status == 'unpaid' %}
+              <form method="POST" action="{% url 'transactions:mark_fine_paid' %}" style="display:inline">
+                {% csrf_token %}
+                <input type="hidden" name="fine_id" value="{{ fine.id }}">
+                <input type="hidden" name="payment_method" value="cash">
+                <input type="hidden" name="next" value="{% url 'transactions:transaction_detail' transaction.id %}">
+                <button type="submit" class="action-btn action-btn--pay">Mark Paid</button>
+              </form>
+              <form method="POST" action="{% url 'transactions:waive_fine' fine.id %}" style="display:inline">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{% url 'transactions:transaction_detail' transaction.id %}">
+                <button type="submit" class="action-btn action-btn--waive">Waive</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div><!-- /.page-wrapper -->
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/transactions/transaction_detail.js' %}"></script>
+{% endblock %}

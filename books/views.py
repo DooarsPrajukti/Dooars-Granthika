@@ -547,15 +547,30 @@ def update_stock(request):
 
 @login_required
 def book_cover(request, pk):
-    """Serve the binary cover image for a book owned by the current user."""
+    """
+    Serve the binary cover image stored as a BinaryField (BLOB) in the DB.
+    Scoped to the current user's books. Returns 404 if no image is stored.
+
+    Django's BinaryField returns a memoryview on MySQL/PostgreSQL.
+    We must convert to bytes and check length — not truthiness — because
+    a memoryview object is always truthy even when it wraps zero bytes.
+    """
+    from django.http import Http404, HttpResponse
     book = get_object_or_404(Book, pk=pk, owner=request.user)
-    if not book.cover_image:
-        from django.http import Http404
+
+    raw = book.cover_image
+    if raw is None:
         raise Http404("No cover image.")
-    return HttpResponse(
-        bytes(book.cover_image),
-        content_type=book.cover_mime_type or "image/jpeg",
-    )
+
+    image_bytes = bytes(raw)
+    if not image_bytes:
+        raise Http404("Cover image is empty.")
+
+    mime = (book.cover_mime_type or "image/jpeg").strip() or "image/jpeg"
+    response = HttpResponse(image_bytes, content_type=mime)
+    # Allow browsers to cache the cover for 1 hour
+    response["Cache-Control"] = "private, max-age=3600"
+    return response
 
 
 # ─────────────────────────────────────────────────────────────

@@ -55,6 +55,10 @@
       <span class="tab-icon"><i class="fas fa-coins"></i></span>
       <span class="tab-label">Fine & Loans</span>
     </button>
+    <button class="settings-tab" data-tab="members">
+      <span class="tab-icon"><i class="fas fa-users"></i></span>
+      <span class="tab-label">Members</span>
+    </button>
   </nav>
 
   <!-- Single Form wraps ALL panels -->
@@ -411,6 +415,114 @@
       </div>
 
     </div><!-- /tab-fine -->
+
+
+    <!-- ==================
+         MEMBERS TAB
+         ================== -->
+    <div class="settings-panel" id="tab-members">
+
+      <div class="panel-section">
+        <h2 class="section-heading">Borrow Limits</h2>
+        <p class="section-desc">Set how many books each member type can borrow at once.</p>
+
+        <div class="form-grid">
+          <div class="field-group">
+            <label class="field-label" for="student_borrow_limit">Student Borrow Limit</label>
+            <input class="field-input" type="number" id="student_borrow_limit"
+                   name="student_borrow_limit" min="0"
+                   value="{{ member_cfg.student_borrow_limit }}" />
+            <span class="field-hint">Number of books a student can borrow at once. 0 = unlimited.</span>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="teacher_borrow_limit">Teacher / Faculty Borrow Limit</label>
+            <input class="field-input" type="number" id="teacher_borrow_limit"
+                   name="teacher_borrow_limit" min="0"
+                   value="{{ member_cfg.teacher_borrow_limit }}" />
+            <span class="field-hint">Number of books a teacher/faculty can borrow at once. 0 = unlimited.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h2 class="section-heading">Membership Rules</h2>
+        <p class="section-desc">Membership validity and ID format.</p>
+
+        <div class="form-grid">
+          <div class="field-group">
+            <label class="field-label" for="membership_validity_days">Membership Validity (days)</label>
+            <input class="field-input" type="number" id="membership_validity_days"
+                   name="membership_validity_days" min="1"
+                   value="{{ member_cfg.membership_validity_days }}" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="member_id_format">Member ID Format</label>
+            <input class="field-input" type="text" id="member_id_format"
+                   name="member_id_format"
+                   value="{{ member_cfg.member_id_format }}"
+                   placeholder="e.g. MEM-{0001}" />
+            <span class="field-hint">Use <code>{0001}</code> as the auto-incrementing number placeholder.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h2 class="section-heading">Member Permissions</h2>
+        <p class="section-desc">Control what members can do on their own.</p>
+
+        <div class="toggle-list">
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-label">Allow Self Registration</div>
+              <div class="toggle-desc">Let members register themselves without admin action.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" name="allow_self_registration"
+                     {% if member_cfg.allow_self_registration %}checked{% endif %} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-label">Require Admin Approval</div>
+              <div class="toggle-desc">New member registrations need admin approval before activation.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" name="require_admin_approval"
+                     {% if member_cfg.require_admin_approval %}checked{% endif %} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-label">Enable Member ID Card Download</div>
+              <div class="toggle-desc">Allow members to download their library ID card as a PDF.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" name="enable_member_id_download"
+                     {% if member_cfg.enable_member_id_download %}checked{% endif %} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-label">Allow Profile Edit</div>
+              <div class="toggle-desc">Let members update their own profile details.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" name="allow_profile_edit"
+                     {% if member_cfg.allow_profile_edit %}checked{% endif %} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-footer">
+        <button type="submit" class="btn btn-primary" data-form="members">Save Member Settings</button>
+      </div>
+
+    </div><!-- /tab-members -->
 
   </form><!-- /settings-panels -->
 </div><!-- /settings-layout -->

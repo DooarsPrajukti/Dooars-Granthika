@@ -4,6 +4,8 @@ from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.urls import reverse
+from django.utils import timezone
+
 
 # ==============================
 # Shared HTML Email Base
@@ -166,7 +168,7 @@ def build_html_email(title, body_content):
             word-break: break-all;
         }}
 
-        /* ── Warning / Info Box ── */
+        /* ── Warning / Info / Danger / Success Boxes ── */
         .warning-box {{
             background: linear-gradient(135deg, #fffbf0 0%, #fff8e1 100%);
             border-left: 5px solid #e5a000;
@@ -210,6 +212,10 @@ def build_html_email(title, body_content):
             line-height: 1.6;
             box-shadow: 0 2px 8px rgba(56, 161, 105, 0.10);
         }}
+        .success-box strong {{
+            font-weight: 700;
+            color: #1a3d2b;
+        }}
 
         /* ── CTA Button ── */
         .btn-container {{
@@ -227,11 +233,6 @@ def build_html_email(title, body_content):
             font-weight: 700;
             letter-spacing: 0.5px;
             box-shadow: 0 6px 20px rgba(44, 62, 80, 0.30), 0 2px 6px rgba(74, 111, 165, 0.25);
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }}
-        .btn:hover {{
-            box-shadow: 0 10px 28px rgba(44, 62, 80, 0.38), 0 4px 10px rgba(74, 111, 165, 0.30);
-            transform: translateY(-1px);
         }}
         .fallback-link {{
             font-size: 12px;
@@ -378,6 +379,7 @@ def build_html_email(title, body_content):
 </html>
 """
 
+
 # ==============================
 # Basic Email Sender Function
 # ==============================
@@ -395,6 +397,7 @@ def send_basic_email(subject, plain_message, html_message, recipient):
     except Exception as e:
         print("Email sending failed:", e)
         return False
+
 
 # ==============================
 # 1️⃣ Account Credentials Email
@@ -432,6 +435,7 @@ Please login and change your password immediately.
     html_message = build_html_email("Account Credentials", body_content)
     return send_basic_email(subject, plain_message, html_message, email)
 
+
 # ==============================
 # 2️⃣ Welcome Email
 # ==============================
@@ -464,6 +468,7 @@ Happy Reading!
 
     html_message = build_html_email("Welcome", body_content)
     return send_basic_email(subject, plain_message, html_message, user.email)
+
 
 # ==============================
 # 3️⃣ Password Reset Email
@@ -503,6 +508,377 @@ If you did not request this, please contact support.
     """
 
     html_message = build_html_email("Password Reset", body_content)
-
-    # ✅ ALWAYS send to email
     return send_basic_email(subject, plain_message, html_message, user.email)
+
+
+# ==============================
+# 4️⃣ Member Registration Confirmation Email
+# ==============================
+def send_member_confirmation_email(member):
+    subject = "Membership Confirmed – Your Member ID | Dooars Granthika"
+
+    plain_message = f"""
+Hello {member.full_name},
+
+Congratulations! Your membership at Dooars Granthika has been confirmed.
+
+Your Member ID: {member.member_id}
+Registered On:  {member.created_at.strftime('%d %b %Y') if member.created_at else 'N/A'}
+
+Please keep your Member ID safe — you will need it for borrowing books,
+visiting the library, and any future correspondence.
+
+Happy Reading!
+Dooars Granthika
+"""
+
+    phone_row = (
+        f'<p><strong>Phone:</strong> <span>{member.phone}</span></p>'
+        if getattr(member, 'phone', None) else ''
+    )
+
+    body_content = f"""
+        <p class="greeting">Membership Confirmed! 🎊</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, congratulations! Your membership at <span class="highlight">Dooars Granthika Library</span> has been officially confirmed.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Full Name:</strong> <span>{member.full_name}</span></p>
+            <p><strong>Registered On:</strong> <span>{member.created_at.strftime('%d %b %Y') if member.created_at else 'N/A'}</span></p>
+            {phone_row}
+        </div>
+
+        <div class="success-box">
+            ✅ Your membership is now <strong>active</strong>. Please keep your <strong>Member ID</strong> safe — you will need it for borrowing books, library visits, and all future correspondence.
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Member ID</div>
+                <div class="info-value">{member.member_id}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Status</div>
+                <div class="info-value" style="color: #38a169;">Active ✓</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Role</div>
+                <div class="info-value" style="font-size:13px;">{member.get_role_display()}</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+
+        <p>You can now borrow books from our catalogue, track your borrowing history, and access all member benefits. Simply quote your <span class="highlight">Member ID</span> at the library counter or when contacting us.</p>
+        <p style="margin-top: 24px; font-size: 18px;">Welcome to the family — Happy Reading! 📚</p>
+    """
+
+    html_message = build_html_email("Membership Confirmation", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 5️⃣ Member Reactivation Email
+# ==============================
+def send_member_reactivation_email(member):
+    subject = "Your Library Membership Has Been Reactivated | Dooars Granthika"
+
+    plain_message = f"""
+Hello {member.full_name},
+
+Great news! Your membership at Dooars Granthika has been reactivated.
+
+Member ID: {member.member_id}
+Status: Active
+
+You now have full access to borrow books and use all library services again.
+
+Happy Reading!
+Dooars Granthika
+"""
+
+    phone_row = (
+        f'<p><strong>Phone:</strong> <span>{member.phone}</span></p>'
+        if getattr(member, 'phone', None) else ''
+    )
+
+    body_content = f"""
+        <p class="greeting">Welcome Back! 🎉</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, your membership at <span class="highlight">Dooars Granthika Library</span> has been successfully reactivated.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Full Name:</strong> <span>{member.full_name}</span></p>
+            {phone_row}
+        </div>
+
+        <div class="success-box">
+            ✅ Your account is now <strong>active</strong> again. You have full access to borrow books and use all library services.
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Member ID</div>
+                <div class="info-value">{member.member_id}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Status</div>
+                <div class="info-value" style="color: #38a169;">Active ✓</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Role</div>
+                <div class="info-value" style="font-size:13px;">{member.get_role_display()}</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+
+        <p>If you did not expect this reactivation or have any concerns, please contact our library team immediately.</p>
+        <p style="margin-top: 24px; font-size: 18px;">Happy Reading! 📖</p>
+    """
+
+    html_message = build_html_email("Membership Reactivated", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 6️⃣ Clearance Confirmed Email
+# ==============================
+def send_clearance_confirmation_email(member):
+    subject = "Library Clearance Confirmed | Dooars Granthika"
+
+    clearance_date_str = (
+        member.clearance_date.strftime('%d %b %Y')
+        if member.clearance_date else 'N/A'
+    )
+    cleared_by_name = 'Library Administration'
+    if member.cleared_by:
+        cleared_by_name = member.cleared_by.get_full_name() or member.cleared_by.username
+
+    dept_name = member.department.name if member.department else 'N/A'
+
+    plain_message = f"""
+Hello {member.full_name},
+
+Your library clearance has been confirmed at Dooars Granthika.
+
+Member ID     : {member.member_id}
+Department    : {dept_name}
+Clearance Date: {clearance_date_str}
+Cleared By    : {cleared_by_name}
+
+You have no outstanding books or dues. You may collect your clearance
+certificate from the library if required.
+
+Dooars Granthika
+"""
+
+    body_content = f"""
+        <p class="greeting">Clearance Confirmed! ✅</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, we are pleased to confirm that your library clearance at <span class="highlight">Dooars Granthika</span> has been completed successfully.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Full Name:</strong> <span>{member.full_name}</span></p>
+            <p><strong>Department:</strong> <span>{dept_name}</span></p>
+            <p><strong>Clearance Date:</strong> <span>{clearance_date_str}</span></p>
+            <p><strong>Cleared By:</strong> <span>{cleared_by_name}</span></p>
+        </div>
+
+        <div class="success-box">
+            ✅ You have <strong>no outstanding books, fines, or dues</strong>. Your library record is fully clear.
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Books Pending</div>
+                <div class="info-value" style="color: #38a169;">0</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Fines Due</div>
+                <div class="info-value" style="color: #38a169;">₹0</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Clearance</div>
+                <div class="info-value" style="color: #38a169;">Cleared ✓</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+
+        <p>You may visit the library to collect your official <strong>Clearance Certificate</strong> if required for institutional purposes.</p>
+        <p>Thank you for being a valued member of Dooars Granthika Library. We wish you all the best!</p>
+    """
+
+    html_message = build_html_email("Library Clearance Confirmed", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 7️⃣ Overdue Reminder Email
+# ==============================
+def send_overdue_reminder_email(member, overdue_transactions):
+    """
+    Send an overdue reminder to a member.
+
+    Args:
+        member               – Member model instance
+        overdue_transactions – QuerySet or list of Transaction objects
+                               with .book.title, .issue_date, .due_date,
+                               .fine_amount populated.
+    """
+    subject = "⚠️ Overdue Books Notice – Action Required | Dooars Granthika"
+
+    overdue_list = list(overdue_transactions)
+    total_fine   = sum(float(t.fine_amount or 0) for t in overdue_list)
+    book_count   = len(overdue_list)
+
+    # Plain-text book lines
+    book_lines = "\n".join(
+        f"  • {t.book.title} — Due: {t.due_date.strftime('%d %b %Y')} | Fine: ₹{t.fine_amount or 0}"
+        for t in overdue_list
+    )
+
+    plain_message = f"""
+Hello {member.full_name},
+
+This is a reminder that you have {book_count} overdue book(s) at Dooars Granthika Library.
+
+Member ID    : {member.member_id}
+Overdue Books:
+{book_lines}
+
+Total Fine Accrued: ₹{total_fine:.2f}
+
+Please return the books at the earliest to avoid additional fines.
+Visit the library or contact us for any assistance.
+
+Dooars Granthika
+"""
+
+    # Build HTML table rows for each overdue transaction
+    book_rows = ""
+    for t in overdue_list:
+        due_date = t.due_date
+        if hasattr(due_date, 'date'):
+            days_overdue = (timezone.now().date() - due_date.date()).days
+        else:
+            days_overdue = 0
+
+        book_rows += f"""
+            <tr>
+                <td style="padding:10px 14px; border-bottom:1px solid #e8edf2; font-size:14px; color:#2c3e50;">{t.book.title}</td>
+                <td style="padding:10px 14px; border-bottom:1px solid #e8edf2; font-size:14px; color:#666; text-align:center;">{t.issue_date.strftime('%d %b %Y')}</td>
+                <td style="padding:10px 14px; border-bottom:1px solid #e8edf2; font-size:14px; color:#e53e3e; text-align:center; font-weight:600;">{t.due_date.strftime('%d %b %Y')}</td>
+                <td style="padding:10px 14px; border-bottom:1px solid #e8edf2; font-size:14px; color:#e53e3e; text-align:center;">{days_overdue}d</td>
+                <td style="padding:10px 14px; border-bottom:1px solid #e8edf2; font-size:14px; font-weight:700; color:#742a2a; text-align:right;">₹{t.fine_amount or 0}</td>
+            </tr>
+        """
+
+    body_content = f"""
+        <p class="greeting">Overdue Notice ⚠️</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, this is a friendly reminder that you have overdue books at <span class="highlight">Dooars Granthika Library</span>. Please return them as soon as possible to avoid further fines.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Overdue Books:</strong> <span>{book_count} book(s)</span></p>
+            <p><strong>Total Fine:</strong> <span>₹{total_fine:.2f}</span></p>
+        </div>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin:24px 0; border:1px solid #e8edf2; border-radius:10px; overflow:hidden;">
+            <thead>
+                <tr style="background:linear-gradient(135deg, #1e3a5f, #2c3e50);">
+                    <th style="padding:12px 14px; text-align:left; font-size:12px; color:#a8c4e0; text-transform:uppercase; letter-spacing:1px; font-weight:600;">Book Title</th>
+                    <th style="padding:12px 14px; text-align:center; font-size:12px; color:#a8c4e0; text-transform:uppercase; letter-spacing:1px; font-weight:600;">Issued</th>
+                    <th style="padding:12px 14px; text-align:center; font-size:12px; color:#a8c4e0; text-transform:uppercase; letter-spacing:1px; font-weight:600;">Due Date</th>
+                    <th style="padding:12px 14px; text-align:center; font-size:12px; color:#a8c4e0; text-transform:uppercase; letter-spacing:1px; font-weight:600;">Overdue</th>
+                    <th style="padding:12px 14px; text-align:right; font-size:12px; color:#a8c4e0; text-transform:uppercase; letter-spacing:1px; font-weight:600;">Fine</th>
+                </tr>
+            </thead>
+            <tbody>
+                {book_rows}
+                <tr style="background:#f7f9fc;">
+                    <td colspan="4" style="padding:12px 14px; font-size:14px; font-weight:700; color:#1e3a5f; text-align:right;">Total Fine:</td>
+                    <td style="padding:12px 14px; font-size:15px; font-weight:700; color:#742a2a; text-align:right;">₹{total_fine:.2f}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="danger-box">
+            ⏰ <strong>Please return all overdue books immediately.</strong> Fines continue to accrue daily until the books are returned. Failure to return books may result in membership suspension.
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Books Overdue</div>
+                <div class="info-value" style="color:#e53e3e;">{book_count}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Total Fine</div>
+                <div class="info-value" style="color:#e53e3e;">₹{total_fine:.2f}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Action</div>
+                <div class="info-value" style="font-size:12px; color:#e53e3e;">Return ASAP</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+        <p>If you have already returned the books, please ignore this notice or contact us so we can update your record. We're always here to help!</p>
+    """
+
+    html_message = build_html_email("Overdue Books Notice", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 8️⃣ Member Account Closed Email
+# ==============================
+def send_member_deletion_email(member_name, member_id, member_email):
+    """
+    Send a farewell / account-closed notice.
+
+    Accepts raw values (not the model instance) because the member will
+    already be deleted from the DB when this is called.
+    IMPORTANT: Call this BEFORE member.delete() in the view.
+    """
+    subject = "Your Library Membership Has Been Closed | Dooars Granthika"
+
+    plain_message = f"""
+Hello {member_name},
+
+Your membership at Dooars Granthika Library has been closed.
+
+Member ID: {member_id}
+
+All your borrowing records have been archived. If you believe this was
+done in error, please contact our library team immediately.
+
+Thank you for being a member of Dooars Granthika.
+"""
+
+    body_content = f"""
+        <p class="greeting">Membership Closed</p>
+        <p>Hello <span class="highlight">{member_name}</span>, we are writing to inform you that your membership at <span class="highlight">Dooars Granthika Library</span> has been closed.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member_id}</span></p>
+            <p><strong>Full Name:</strong> <span>{member_name}</span></p>
+            <p><strong>Status:</strong> <span>Closed</span></p>
+        </div>
+
+        <div class="warning-box">
+            ⚠️ <strong>Your membership is no longer active.</strong> All borrowing privileges have been revoked and your records have been archived.
+        </div>
+
+        <div class="danger-box">
+            🛡️ <strong>Not expecting this?</strong> If you did not request account closure or believe this was done in error, please contact our library support team immediately.
+        </div>
+
+        <hr class="divider"/>
+        <p>Thank you for being a valued member of Dooars Granthika Library. We hope to welcome you back in the future.</p>
+        <p style="margin-top: 16px;">Goodbye and best wishes! 👋</p>
+    """
+
+    html_message = build_html_email("Membership Closed", body_content)
+    return send_basic_email(subject, plain_message, html_message, member_email)

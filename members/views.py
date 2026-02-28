@@ -26,7 +26,7 @@ from .forms import (
     MemberForm, DepartmentForm, CourseForm, AcademicYearForm, SemesterForm,
     StudentMemberForm, TeacherMemberForm, GeneralMemberForm,
 )
-
+from core.email_service import send_member_confirmation_email
 # Map role string → role-specific form class
 _ROLE_FORM_MAP = {
     "student": StudentMemberForm,
@@ -322,6 +322,7 @@ def member_add(request):
         form      = FormClass(request.POST, request.FILES, user=request.user)
         if form.is_valid():
             member = form.save_with_create()
+            send_member_confirmation_email(member)
             messages.success(
                 request, f"Member {member.full_name} added successfully!"
             )
@@ -392,21 +393,27 @@ def member_photo(request, pk):
     """
     Serve a member's photo stored as a binary blob in MySQL.
 
-    BinaryField returns a memoryview in Python; we cast it to bytes before
-    passing it to HttpResponse.
+    Django's BinaryField returns a memoryview on MySQL — must convert to
+    bytes and check length, NOT truthiness: a memoryview is always truthy
+    even when it wraps zero bytes, so `if not member.photo` is unreliable.
 
     Template usage:
         <img src="{% url 'members:member_photo' member.pk %}">
     """
     member = get_object_or_404(Member, pk=pk, owner=request.user)
 
-    if not member.photo:
+    raw = member.photo
+    if raw is None:
         return HttpResponse(status=404)
 
-    return HttpResponse(
-        bytes(member.photo),
-        content_type=member.photo_mime_type or "image/jpeg",
-    )
+    photo_bytes = bytes(raw)
+    if not photo_bytes:
+        return HttpResponse(status=404)
+
+    mime = (member.photo_mime_type or "image/jpeg").strip() or "image/jpeg"
+    response = HttpResponse(photo_bytes, content_type=mime)
+    response["Cache-Control"] = "private, max-age=3600"
+    return response
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -145,8 +145,8 @@ class MemberSettings(models.Model):
         related_name="member_settings"
     )
 
-    student_borrow_limit = models.PositiveIntegerField(default=3)
-    teacher_borrow_limit = models.PositiveIntegerField(default=5)
+    student_borrow_limit = models.PositiveIntegerField(default=0)
+    teacher_borrow_limit = models.PositiveIntegerField(default=0)
     membership_validity_days = models.PositiveIntegerField(default=365)
 
     member_id_format = models.CharField(

@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'books',
     # 'staff',
     'members',
+    'transactions',
 ]
 
 MIDDLEWARE = [

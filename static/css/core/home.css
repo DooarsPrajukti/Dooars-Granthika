@@ -49,12 +49,14 @@
 
 .hero-image {
   opacity: 0;
+  
   animation: slideInRight 1s ease-out 0.4s forwards;
 }
 
 .hero-image img {
   width: 100%;
   height: auto;
+  border-radius: 10%;
   animation: float 3s ease-in-out infinite;
 }
 

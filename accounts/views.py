@@ -323,6 +323,19 @@ def settings_view(request):
             rules.save()
             messages.success(request, "Loan & fine settings saved.")
 
+        # ── members ───────────────────────────────────────────────
+        elif section == "members":
+            member_cfg.student_borrow_limit     = _int(request.POST.get("student_borrow_limit"),     member_cfg.student_borrow_limit)
+            member_cfg.teacher_borrow_limit     = _int(request.POST.get("teacher_borrow_limit"),     member_cfg.teacher_borrow_limit)
+            member_cfg.membership_validity_days = _int(request.POST.get("membership_validity_days"), member_cfg.membership_validity_days)
+            member_cfg.member_id_format         = request.POST.get("member_id_format", member_cfg.member_id_format).strip()
+            member_cfg.allow_self_registration  = request.POST.get("allow_self_registration")  == "on"
+            member_cfg.require_admin_approval   = request.POST.get("require_admin_approval")   == "on"
+            member_cfg.enable_member_id_download= request.POST.get("enable_member_id_download")== "on"
+            member_cfg.allow_profile_edit       = request.POST.get("allow_profile_edit")       == "on"
+            member_cfg.save()
+            messages.success(request, "Member settings saved.")
+
         else:
             messages.warning(request, f"Unknown settings section: '{section}'.")
 
