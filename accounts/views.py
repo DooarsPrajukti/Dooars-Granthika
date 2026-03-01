@@ -22,13 +22,21 @@ from .models import (
     AppearanceSettings,
 )
 from .utils import generate_random_password, generate_username
-
+import json
+from datetime import date, datetime, timedelta
 # optional email service
 try:
     import core.email_service as email_service
 except Exception:
     email_service = None
+import json
+from datetime import date, datetime, timedelta
 
+from django.contrib.auth.decorators import login_required
+from django.db.models import Count
+from django.http import Http404
+from django.shortcuts import render
+from django.utils.timesince import timesince
 
 # ==========================================================
 # 🔐 SIGN IN
@@ -173,29 +181,301 @@ def view_forget_password(request):
     return render(request, "accounts/forget_password.html")
 
 
-# ==========================================================
-# 🖥 ADMIN DASHBOARD
-# ==========================================================
+# ─────────────────────────────────────────────────────────────────────────────
+# HELPERS  (add these as module-level functions)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _get_library_or_404(request):
+    """Return the Library for the logged-in admin or raise Http404."""
+    try:
+        return request.user.library   # OneToOne reverse on accounts.Library
+    except Exception:
+        raise Http404("No library associated with this account.")
+
+
+def _first_of_month(ref_date, months_back=0):
+    """
+    Return the first day of the month that is `months_back` months before
+    `ref_date`.  Works correctly across year boundaries.
+    """
+    m = ref_date.month - months_back
+    y = ref_date.year
+    while m <= 0:
+        m += 12
+        y -= 1
+    return date(y, m, 1)
+
+
+def _first_of_next_month(d):
+    """Return the first day of the month following `d`."""
+    if d.month == 12:
+        return date(d.year + 1, 1, 1)
+    return date(d.year, d.month + 1, 1)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VIEW
+# ─────────────────────────────────────────────────────────────────────────────
 @login_required
 def admin_dashboard(request):
+    library = _get_library_or_404(request)
+    owner   = library.user
 
-    library = request.user.library
+    from accounts.models import Library
+    from books.models import Book, Category
+    from members.models import Member
+    from transactions.models import Transaction
 
-    # Build base64 logo data-URI
-    library_logo_b64 = None
-    if library.library_logo:
-        mime = library.library_logo_mime or "image/png"
-        encoded = base64.b64encode(bytes(library.library_logo)).decode("utf-8")
-        library_logo_b64 = f"data:{mime};base64,{encoded}"
+    today            = date.today()
+    this_month_start = _first_of_month(today, months_back=0)
+    last_month_start = _first_of_month(today, months_back=1)
+    last_month_end   = this_month_start - timedelta(days=1)
 
-    return render(
-        request,
-        "dashboards/admin_dashboard.html",
-        {
-            "library": library,
-            "library_logo_b64": library_logo_b64,
-        },
+    # ── Section 1 · Library Overview ─────────────────────────────────────────
+
+    if request.user.is_superuser:
+        total_libraries      = Library.objects.count()
+        libraries_this_month = Library.objects.filter(created_at__date__gte=this_month_start).count()
+        libraries_last_month = Library.objects.filter(
+            created_at__date__gte=last_month_start,
+            created_at__date__lte=last_month_end,
+        ).count()
+    else:
+        total_libraries      = 1
+        libraries_this_month = 0
+        libraries_last_month = 0
+    libraries_change = libraries_this_month - libraries_last_month
+
+    total_books  = Book.objects.filter(owner=owner).count()
+    books_change = (
+        Book.objects.filter(owner=owner, created_at__date__gte=this_month_start).count()
+        - Book.objects.filter(
+            owner=owner,
+            created_at__date__gte=last_month_start,
+            created_at__date__lte=last_month_end,
+        ).count()
     )
+
+    total_members  = Member.objects.filter(owner=owner, status="active").count()
+    members_change = (
+        Member.objects.filter(owner=owner, date_joined__gte=this_month_start).count()
+        - Member.objects.filter(
+            owner=owner,
+            date_joined__gte=last_month_start,
+            date_joined__lte=last_month_end,
+        ).count()
+    )
+
+    base_txns           = Transaction.objects.for_library(library)
+    active_transactions = base_txns.filter(
+        status__in=(Transaction.STATUS_ISSUED, Transaction.STATUS_OVERDUE)
+    ).count()
+    transactions_change = (
+        base_txns.filter(issue_date__gte=this_month_start).count()
+        - base_txns.filter(
+            issue_date__gte=last_month_start,
+            issue_date__lte=last_month_end,
+        ).count()
+    )
+
+    # ── Section 2 · Membership Statistics ────────────────────────────────────
+
+    count_map = {
+        row["status"]: row["cnt"]
+        for row in Member.objects.filter(owner=owner)
+            .values("status")
+            .annotate(cnt=Count("id"))
+    }
+    active_count   = count_map.get("active",   0)
+    passout_count  = count_map.get("passout",  0)
+    inactive_count = count_map.get("inactive", 0)
+    total_count    = active_count + passout_count + inactive_count
+
+    def _pct(n):
+        return round(n / total_count * 100, 1) if total_count else 0
+
+    stats = {
+        "active_count":        active_count,
+        "passout_count":       passout_count,
+        "inactive_count":      inactive_count,
+        "total_count":         total_count,
+        "active_percentage":   _pct(active_count),
+        "passout_percentage":  _pct(passout_count),
+        "inactive_percentage": _pct(inactive_count),
+    }
+
+    # ── Chart 1 · Monthly Loans (last 6 months) ───────────────────────────────
+    # Build raw Python lists first so we can check if any data is non-zero.
+
+    _loan_labels_raw = []
+    _loan_data_raw   = []
+    for i in range(5, -1, -1):
+        ms  = _first_of_month(today, months_back=i)
+        me  = _first_of_next_month(ms)
+        cnt = base_txns.filter(issue_date__gte=ms, issue_date__lt=me).count()
+        _loan_labels_raw.append(ms.strftime("%b %Y"))
+        _loan_data_raw.append(cnt)
+
+    # The template {% if monthly_loan_labels and monthly_loan_data %} must
+    # receive values that are falsy when there is no real data.
+    # We always have labels (month names), so gate on whether any loans exist.
+    loans_have_data = any(v > 0 for v in _loan_data_raw)
+
+    # ── Chart 2 · Books by Category ───────────────────────────────────────────
+
+    cat_qs = (
+        Category.objects
+        .filter(owner=owner)
+        .annotate(cnt=Count("books"))
+        .filter(cnt__gt=0)
+        .order_by("-cnt")[:8]
+    )
+    _cat_labels_raw = [c.name for c in cat_qs]
+    _cat_data_raw   = [c.cnt  for c in cat_qs]
+    categories_have_data = len(_cat_labels_raw) > 0
+
+    # ── Chart 3 · New Members per day (last 7 days) ───────────────────────────
+
+    day_count_map = {
+        row["date_joined"]: row["cnt"]
+        for row in Member.objects.filter(
+            owner=owner,
+            date_joined__gte=today - timedelta(days=6),
+            date_joined__lte=today,
+        ).values("date_joined").annotate(cnt=Count("id"))
+    }
+    _day_labels_raw = []
+    _day_data_raw   = []
+    for i in range(6, -1, -1):
+        d = today - timedelta(days=i)
+        _day_labels_raw.append(d.strftime("%a"))
+        _day_data_raw.append(day_count_map.get(d, 0))
+
+    members_chart_have_data = any(v > 0 for v in _day_data_raw)
+
+    # ── Chart 4 · Members by Department ──────────────────────────────────────
+
+    dept_qs = (
+        Member.objects
+        .filter(owner=owner)
+        .values("department__name")
+        .annotate(cnt=Count("id"))
+        .order_by("-cnt")
+    )
+    _dept_labels_raw = [row["department__name"] or "No Department" for row in dept_qs]
+    _dept_data_raw   = [row["cnt"] for row in dept_qs]
+
+    # ── Recent Activity Feed ──────────────────────────────────────────────────
+
+    recent_activities = []
+
+    for txn in base_txns.select_related("member", "book").order_by("-created_at")[:5]:
+        if txn.status == Transaction.STATUS_RETURNED:
+            icon, color, title = "undo-alt",           "green",  f"Book returned: {txn.book.title}"
+        elif txn.status == Transaction.STATUS_OVERDUE:
+            icon, color, title = "exclamation-triangle","red",   f"Overdue: {txn.book.title}"
+        elif txn.status == Transaction.STATUS_LOST:
+            icon, color, title = "times-circle",        "red",   f"Lost book: {txn.book.title}"
+        else:
+            icon, color, title = "book",                "blue",  f"Book issued: {txn.book.title}"
+        recent_activities.append({
+            "title":       title,
+            "description": f"{txn.member.first_name} {txn.member.last_name}",
+            "icon":        icon,
+            "color":       color,
+            "timestamp":   timesince(txn.created_at) + " ago",
+        })
+
+    for m in Member.objects.filter(owner=owner).order_by("-date_joined", "-id")[:3]:
+        joined_dt  = datetime.combine(m.date_joined, datetime.min.time())
+        role_label = m.get_role_display() if hasattr(m, "get_role_display") else ""
+        recent_activities.append({
+            "title":       f"New member: {m.first_name} {m.last_name}",
+            "description": f"ID: {m.member_id}  {role_label}".strip(),
+            "icon":        "user-plus",
+            "color":       "purple",
+            "timestamp":   timesince(joined_dt) + " ago",
+        })
+
+    recent_activities = recent_activities[:8]
+
+    # ── Recent Members Table ──────────────────────────────────────────────────
+
+    recent_members = (
+        Member.objects
+        .filter(owner=owner)
+        .select_related("department")
+        .order_by("-date_joined", "-id")[:5]
+    )
+
+    # ── UI Helpers ────────────────────────────────────────────────────────────
+
+    library_logo_b64 = ""
+    if library.library_logo and library.library_logo_mime:
+        import base64
+        raw = base64.b64encode(bytes(library.library_logo)).decode("ascii")
+        library_logo_b64 = f"data:{library.library_logo_mime};base64,{raw}"
+
+    notification_count = base_txns.filter(status=Transaction.STATUS_OVERDUE).count()
+
+    # ── Build context ─────────────────────────────────────────────────────────
+    #
+    # The template's {% if monthly_loan_labels and monthly_loan_data %} check
+    # needs the variables to be FALSY when there is no meaningful data.
+    #
+    # Strategy:
+    #   • Pass the Python list as  monthly_loan_labels / monthly_loan_data
+    #     so {% if %} evaluates the list (empty list = False).
+    #   • The template then does  {{ monthly_loan_labels|safe }}  which on a
+    #     Python list outputs its repr — NOT valid JSON.
+    #
+    # Fix: we pre-serialise to JSON and pass the JSON string, but we set the
+    # variable to an EMPTY STRING (falsy) when there is no real data.
+    # The template's |safe filter will output "" which becomes an empty JS
+    # expression — so we must keep the {% else %}[]{% endif %} fallback intact.
+    #
+    # This is the cleanest way without touching the template at all.
+
+    monthly_loan_labels = json.dumps(_loan_labels_raw)   if loans_have_data        else ""
+    monthly_loan_data   = json.dumps(_loan_data_raw)     if loans_have_data        else ""
+    category_labels     = json.dumps(_cat_labels_raw)    if categories_have_data   else ""
+    category_data       = json.dumps(_cat_data_raw)      if categories_have_data   else ""
+    member_day_labels   = json.dumps(_day_labels_raw)    if members_chart_have_data else ""
+    member_day_data     = json.dumps(_day_data_raw)      if members_chart_have_data else ""
+
+    # Department + status charts are always shown (they have inline fallback)
+    department_labels = json.dumps(_dept_labels_raw)
+    department_data   = json.dumps(_dept_data_raw)
+
+    return render(request, "dashboards/admin_dashboard.html", {
+        # Section 1
+        "total_libraries":     total_libraries,
+        "libraries_change":    libraries_change,
+        "total_books":         total_books,
+        "books_change":        books_change,
+        "total_members":       total_members,
+        "members_change":      members_change,
+        "active_transactions": active_transactions,
+        "transactions_change": transactions_change,
+        # Section 2
+        "stats": stats,
+        # Charts — empty string when no data (falsy for {% if %} checks)
+        "monthly_loan_labels": monthly_loan_labels,
+        "monthly_loan_data":   monthly_loan_data,
+        "category_labels":     category_labels,
+        "category_data":       category_data,
+        "member_day_labels":   member_day_labels,
+        "member_day_data":     member_day_data,
+        "department_labels":   department_labels,
+        "department_data":     department_data,
+        # Activity + table
+        "recent_activities": recent_activities,
+        "recent_members":    recent_members,
+        # UI
+        "library_logo_b64":   library_logo_b64,
+        "notification_count": notification_count,
+    })
+
 
 
 # ==========================================================
