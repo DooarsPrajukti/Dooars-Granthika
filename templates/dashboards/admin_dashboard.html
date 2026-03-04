@@ -346,7 +346,9 @@
           <td>
             <div class="member-info">
               {% if member.photo %}
-              <img src="{{ member.photo.url }}" alt="{{ member.full_name }}" class="member-avatar" style="border-radius: 50%; object-fit: cover;" />
+              <img src="{% url 'members:member_photo' member.pk %}"
+                   alt="{{ member.full_name }}"
+                   class="member-avatar" />
               {% else %}
               <div class="member-avatar">
                 {{ member.full_name|slice:":1"|upper }}

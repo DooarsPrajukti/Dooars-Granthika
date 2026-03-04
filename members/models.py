@@ -19,11 +19,13 @@ Photo Storage Note:
     No MEDIA_ROOT / MEDIA_URL configuration is required for photos.
 """
 
-import os
+import uuid
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import RegexValidator
 from django.utils import timezone
+
+from core.id_generator import generate_compact_id, get_module_code_for_member
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -232,9 +234,34 @@ class Member(models.Model):
 
     # ── Identity ─────────────────────────────────────────────────────────────
     member_id = models.CharField(
-        max_length=50,
+        max_length=30,
+        unique=True,
         blank=True,
-        help_text="Unique member ID per owner. Auto-generated if left blank.",
+        db_index=True,
+        help_text=(
+            "Compact random ID — auto-generated on first save. "
+            "Format: DG<LIB><MODULE><YY><8-digit-random>  e.g. DGDOOST2692715482"
+        ),
+    )
+    # Year the member record was created — stored in full (e.g. 2026).
+    # The last 2 digits are embedded in the member_id; this field stores the
+    # full year for reporting / filtering without string parsing.
+    entry_year = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="Full year the member was registered (auto-set, do not override).",
+    )
+    # ── Internal UUID (two-step migration) ───────────────────────────────────
+    # Step 1: null=True, no default → safe column addition to existing rows.
+    # Step 2: data migration populates NULLs with uuid.uuid4().
+    # Step 3: null=False once backfill is complete.
+    internal_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        editable=False,
+        help_text="Internal immutable UUID — do not expose in public-facing UI.",
     )
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
@@ -376,8 +403,8 @@ class Member(models.Model):
     # ─────────────────────────────────────────────────────────────────────────
 
     class Meta:
+        # member_id has unique=True at field level — no need in unique_together.
         unique_together = [
-            ("owner", "member_id"),
             ("owner", "email"),
         ]
         ordering = ["-created_at"]
@@ -431,24 +458,26 @@ class Member(models.Model):
     # ── Save hook ─────────────────────────────────────────────────────────────
 
     def save(self, *args, **kwargs):
-        # Auto-generate member_id on first save if not provided
+        # ── Auto-generate compact member_id on first save ─────────────────────
         if not self.member_id:
-            timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
-            prefix_map = {
-                "teacher": "TCH",
-                "general": "GEN",
-                "student": "STU",
-            }
-            prefix = prefix_map.get(self.role, "MEM")
-            self.member_id = f"{prefix}-{self.owner_id}-{timestamp}"
+            module_code    = get_module_code_for_member(self.role)   # ST / TC / GM
+            self.member_id = generate_compact_id(
+                owner       = self.owner,
+                module_code = module_code,
+                model_class = Member,
+                field_name  = "member_id",
+            )
+            # Store the full year alongside the record for easy querying.
+            from datetime import datetime
+            self.entry_year = datetime.now().year
 
-        # Manage inactive_since timestamp automatically
+        # ── Manage inactive_since timestamp automatically ──────────────────────
         if self.status == "inactive":
             if not self.inactive_since:
                 self.inactive_since = timezone.now()
         else:
             # Clear inactive metadata when re-activating
-            self.inactive_since = None
+            self.inactive_since  = None
             self.inactive_reason = None
 
         super().save(*args, **kwargs)
@@ -482,6 +511,35 @@ class Transaction(models.Model):
         on_delete=models.CASCADE,
         related_name="member_transactions",
         help_text="Library admin who owns this transaction.",
+    )
+
+    # ── Compact ID ────────────────────────────────────────────────────────────
+    transaction_id = models.CharField(
+        max_length=30,
+        unique=True,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Compact random ID — auto-generated on first save. "
+            "Format: DG<LIB>TR<YY><8-digit-random>  e.g. DGDOOTR2618273645"
+        ),
+    )
+    entry_year = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="Full year the transaction was created (auto-set, do not override).",
+    )
+    # ── Internal UUID (two-step migration) ───────────────────────────────────
+    # Step 1: null=True, no default → safe column addition to existing rows.
+    # Step 2: data migration populates NULLs with uuid.uuid4().
+    # Step 3: null=False once backfill is complete.
+    internal_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        editable=False,
+        help_text="Internal immutable UUID for database integrity.",
     )
 
     # ── Core details ──────────────────────────────────────────────────────────
@@ -609,15 +667,26 @@ class Transaction(models.Model):
     # ── Save hook ─────────────────────────────────────────────────────────────
 
     def save(self, *args, **kwargs):
-        # Auto-flag overdue books
+        # ── Auto-generate compact transaction_id on first save ────────────────
+        if not self.transaction_id:
+            self.transaction_id = generate_compact_id(
+                owner       = self.owner,
+                module_code = "TR",
+                model_class = Transaction,
+                field_name  = "transaction_id",
+            )
+            from datetime import datetime
+            self.entry_year = datetime.now().year
+
+        # ── Auto-flag overdue books ───────────────────────────────────────────
         if self.status == "issued" and self.is_overdue:
             self.status = "overdue"
 
-        # Auto-set return_date when marking as returned
+        # ── Auto-set return_date when marking as returned ─────────────────────
         if self.status == "returned" and not self.return_date:
             self.return_date = timezone.now()
 
-        # Auto-set fine_paid_date when fine is marked paid
+        # ── Auto-set fine_paid_date when fine is marked paid ──────────────────
         if self.fine_paid and not self.fine_paid_date:
             self.fine_paid_date = timezone.now()
 

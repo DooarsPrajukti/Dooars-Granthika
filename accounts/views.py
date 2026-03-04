@@ -1,9 +1,8 @@
 import base64
-from datetime import timedelta
-from django.shortcuts import render, redirect
-from django.contrib.auth.models import User
+import json
+from datetime import date, datetime, timedelta
+
 from django.contrib import messages
-from django.db import transaction
 from django.contrib.auth import (
     authenticate,
     login,
@@ -11,7 +10,14 @@ from django.contrib.auth import (
     update_session_auth_hash,
 )
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+from django.db import IntegrityError, transaction
+from django.db.models import Count
+from django.http import Http404, JsonResponse
+from django.shortcuts import render, redirect
 from django.utils import timezone
+from django.utils.timesince import timesince
+from django.views.decorators.http import require_POST
 
 from .models import (
     Library,
@@ -22,51 +28,65 @@ from .models import (
     AppearanceSettings,
 )
 from .utils import generate_random_password, generate_username
-import json
-from datetime import date, datetime, timedelta
-# optional email service
-try:
-    import core.email_service as email_service
-except Exception:
-    email_service = None
-import json
-from datetime import date, datetime, timedelta
 
-from django.contrib.auth.decorators import login_required
-from django.db.models import Count
-from django.http import Http404
-from django.shortcuts import render
-from django.utils.timesince import timesince
+# ── Email service ─────────────────────────────────────────────
+# All email functions available:
+#   send_account_credentials(email, password, username)
+#   send_password_reset_email(user, new_password, lib_name, username)
+#   send_member_confirmation_email(member)
+#   send_member_reactivation_email(member)
+#   send_clearance_confirmation_email(member)
+#   send_overdue_reminder_email(member, overdue_transactions)
+#   send_member_deletion_email(member_name, member_id, member_email)
+try:
+    from core import email_service
+    EMAIL_ENABLED = True
+except ImportError:
+    email_service  = None
+    EMAIL_ENABLED  = False
+
+
+def _send_email(fn_name, *args, **kwargs):
+    """
+    Safe wrapper — calls email_service.<fn_name>(*args) and silently
+    swallows any exception so an email failure never breaks a view.
+    Returns True on success, False on failure / unavailable.
+    """
+    if not EMAIL_ENABLED or email_service is None:
+        return False
+    try:
+        fn = getattr(email_service, fn_name)
+        return fn(*args, **kwargs)
+    except Exception as exc:
+        print(f"[email_service] {fn_name} failed: {exc}")
+        return False
+
 
 # ==========================================================
 # 🔐 SIGN IN
 # ==========================================================
 def view_signin(request):
-
     if request.user.is_authenticated:
-        return redirect("accounts:admin_dashboard")
+        return redirect("/authentication/admin_dashboard/")
 
     if request.method == "POST":
-        username = request.POST.get("username", "").strip()
-        password = request.POST.get("password")
+        username    = request.POST.get("username", "").strip()
+        password    = request.POST.get("password")
         remember_me = request.POST.get("remember_me")
 
         if not username or not password:
             messages.error(request, "Please enter username and password.")
-            return redirect("accounts:signin")
+            return redirect("/authentication/sign_in/")
 
         user = authenticate(request, username=username, password=password)
-
         if user:
             login(request, user)
-
             if remember_me:
                 request.session.set_expiry(timedelta(days=7))
             else:
                 request.session.set_expiry(0)
-
             messages.success(request, "Login successful.")
-            return redirect("accounts:admin_dashboard")
+            return redirect("/authentication/admin_dashboard/")
 
         messages.error(request, "Invalid username or password.")
 
@@ -80,70 +100,147 @@ def view_signin(request):
 def view_logout(request):
     logout(request)
     messages.success(request, "Logged out successfully.")
-    return redirect("accounts:signin")
+    return redirect("/authentication/sign_in/")
 
 
 # ==========================================================
 # 📝 REGISTER LIBRARY
 # ==========================================================
 def register_library(request):
-
     if request.method == "POST":
+        p = request.POST
+
+        library_name    = p.get("library_name",           "").strip()
+        institute_name  = p.get("institute_name",          "").strip()
+        institute_type  = p.get("institute_type",          "").strip()
+        institute_email = p.get("institute_email",         "").strip().lower()
+        phone_number    = p.get("phone_number",            "").strip()
+        address         = p.get("address",                 "").strip()
+        district        = p.get("district",                "").strip()
+        state           = p.get("state",                   "").strip()
+        country         = p.get("country",                 "").strip()
+        admin_full_name = p.get("admin_full_name",         "").strip()
+        password        = p.get("admin_password",          "")
+        confirm_pw      = p.get("admin_confirm_password",  "")
+        declaration     = p.get("declaration")
+
+        # ── Required field check ──────────────────────────────────
+        required = {
+            "Library name":       library_name,
+            "Library type":       institute_type,
+            "Official email":     institute_email,
+            "Address":            address,
+            "District":           district,
+            "State":              state,
+            "Country":            country,
+            "Administrator name": admin_full_name,
+            "Password":           password,
+            "Confirm password":   confirm_pw,
+        }
+        missing = [label for label, val in required.items() if not val]
+        if missing:
+            messages.error(request, f"Please fill in: {', '.join(missing)}.")
+            return render(request, "accounts/sign_up.html")
+
+        if not declaration:
+            messages.error(request, "You must accept the declaration to register.")
+            return render(request, "accounts/sign_up.html")
+
+        import re
+        if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", institute_email):
+            messages.error(request, "Please enter a valid email address.")
+            return render(request, "accounts/sign_up.html")
+
+        if len(password) < 8:
+            messages.error(request, "Password must be at least 8 characters.")
+            return render(request, "accounts/sign_up.html")
+
+        if password != confirm_pw:
+            messages.error(request, "Passwords do not match.")
+            return render(request, "accounts/sign_up.html")
+
+        if User.objects.filter(email=institute_email).exists():
+            messages.error(request, "An account with this email already exists.")
+            return render(request, "accounts/sign_up.html")
+
+        if Library.objects.filter(institute_email=institute_email).exists():
+            messages.error(request, "A library with this email is already registered.")
+            return render(request, "accounts/sign_up.html")
+
+        valid_types = {c[0] for c in Library.INSTITUTE_TYPE_CHOICES}
+        if institute_type not in valid_types:
+            messages.error(request, "Invalid library type selected.")
+            return render(request, "accounts/sign_up.html")
+
+        if institute_type == "Institution" and not institute_name:
+            messages.error(request, "Institution name is required for Institutional Libraries.")
+            return render(request, "accounts/sign_up.html")
+
+        # ── Logo validation (optional) ────────────────────────────
+        logo_data = None
+        logo_mime = None
+        if "library_logo" in request.FILES:
+            logo_file = request.FILES["library_logo"]
+            if logo_file.content_type not in ("image/jpeg", "image/png"):
+                messages.error(request, "Logo must be a JPG or PNG image.")
+                return render(request, "accounts/sign_up.html")
+            if logo_file.size > 2 * 1024 * 1024:
+                messages.error(request, "Logo file must be under 2 MB.")
+                return render(request, "accounts/sign_up.html")
+            logo_data = logo_file.read()
+            logo_mime = logo_file.content_type
+
+        name_parts = admin_full_name.split(maxsplit=1)
+        first_name = name_parts[0]
+        last_name  = name_parts[1] if len(name_parts) > 1 else ""
+
+        # ── Create user + library atomically ─────────────────────
         try:
             with transaction.atomic():
-
-                institute_email = request.POST.get("institute_email").lower()
-
-                if User.objects.filter(email=institute_email).exists():
-                    messages.error(request, "Email already exists.")
-                    return redirect("accounts:signup")
-
-                password = request.POST.get("admin_password")
-                confirm_password = request.POST.get("admin_confirm_password")
-
-                if password != confirm_password:
-                    messages.error(request, "Passwords do not match.")
-                    return redirect("accounts:signup")
-
                 username = generate_username()
+                attempts = 0
                 while User.objects.filter(username=username).exists():
                     username = generate_username()
+                    attempts += 1
+                    if attempts > 20:
+                        raise RuntimeError("Could not generate a unique username.")
 
                 user = User.objects.create_user(
                     username=username,
                     email=institute_email,
                     password=password,
-                    first_name=request.POST.get("admin_full_name"),
+                    first_name=first_name,
+                    last_name=last_name,
                 )
 
                 Library.objects.create(
                     user=user,
-                    library_name=request.POST.get("library_name"),
-                    institute_name=request.POST.get("institute_name"),
-                    institute_type=request.POST.get("institute_type"),
+                    library_name=library_name,
+                    institute_name=institute_name,
+                    institute_type=institute_type,
                     institute_email=institute_email,
-                    phone_number=request.POST.get("phone_number"),
-                    address=request.POST.get("address"),
-                    district=request.POST.get("district"),
-                    state=request.POST.get("state"),
-                    country=request.POST.get("country"),
+                    phone_number=phone_number or None,
+                    address=address,
+                    district=district,
+                    state=state,
+                    country=country,
+                    library_logo=logo_data,
+                    library_logo_mime=logo_mime,
                 )
 
-                if email_service:
-                    try:
-                        email_service.send_account_credentials(
-                            institute_email, password, username
-                        )
-                    except Exception:
-                        pass
-
-                messages.success(request, "Library registered successfully.")
-                return redirect("accounts:signin")
-
+        except IntegrityError:
+            messages.error(request, "A library with this email is already registered.")
+            return render(request, "accounts/sign_up.html")
         except Exception as e:
-            print(e)
-            messages.error(request, "Something went wrong.")
-            return redirect("accounts:signup")
+            import traceback; traceback.print_exc()
+            messages.error(request, f"Registration failed: {e}")
+            return render(request, "accounts/sign_up.html")
+
+        # ── Email credentials to new admin ────────────────────────
+        _send_email("send_account_credentials", institute_email, password, username)
+
+        messages.success(request, f"✅ Library registered! Your login username is: {username}")
+        return redirect("/authentication/sign_in/")
 
     return render(request, "accounts/sign_up.html")
 
@@ -152,74 +249,227 @@ def register_library(request):
 # 🔑 FORGOT PASSWORD
 # ==========================================================
 def view_forget_password(request):
-
     if request.method == "POST":
         email = request.POST.get("email", "").lower()
-        user = User.objects.filter(email=email).first()
+        user  = User.objects.filter(email=email).first()
 
         if user:
             new_password = generate_random_password()
             user.set_password(new_password)
             user.save()
 
-            lib = getattr(user, "library", None)
+            lib      = getattr(user, "library", None)
+            lib_name = lib.library_name if lib else "Library"
 
-            if email_service:
-                try:
-                    email_service.send_password_reset_email(
-                        user,
-                        new_password,
-                        lib.library_name if lib else "Library",
-                        user.username,
-                    )
-                except Exception:
-                    pass
+            # send_password_reset_email(user, new_password, lib_name, username)
+            _send_email("send_password_reset_email", user, new_password, lib_name, user.username)
 
-        messages.success(request, "If this email exists, password sent.")
-        return redirect("accounts:signin")
+        messages.success(request, "If this email exists, a new password has been sent.")
+        return redirect("/authentication/sign_in/")
 
     return render(request, "accounts/forget_password.html")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HELPERS  (add these as module-level functions)
-# ─────────────────────────────────────────────────────────────────────────────
+# ==========================================================
+# 🏛️ LIBRARY SETUP  (first-time onboarding)
+# ==========================================================
 
-def _get_library_or_404(request):
-    """Return the Library for the logged-in admin or raise Http404."""
-    try:
-        return request.user.library   # OneToOne reverse on accounts.Library
-    except Exception:
-        raise Http404("No library associated with this account.")
+_VALID_TIMEZONES = {
+    "Asia/Kolkata", "Asia/Dhaka", "Asia/Kathmandu", "Asia/Colombo",
+    "Asia/Dubai", "Asia/Singapore", "Asia/Tokyo",
+    "Europe/London", "Europe/Paris",
+    "America/New_York", "America/Chicago", "America/Los_Angeles",
+}
+
+_VALID_DAYS = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
 
 
-def _first_of_month(ref_date, months_back=0):
+@login_required
+def library_setup_view(request):
     """
-    Return the first day of the month that is `months_back` months before
-    `ref_date`.  Works correctly across year boundaries.
+    First-time library configuration page.
+
+    GET  – Render setup form. If already configured, redirect to dashboard.
+    POST – Validate and save everything to LibraryRuleSettings.
+           Borrow limits are also mirrored to MemberSettings.
+           Notifications are saved to NotificationSettings.
     """
-    m = ref_date.month - months_back
-    y = ref_date.year
-    while m <= 0:
-        m += 12
-        y -= 1
-    return date(y, m, 1)
+    library = _get_library_or_404(request)
+    rules, _ = LibraryRuleSettings.objects.get_or_create(library=library)
+
+    if _is_setup_complete(library, rules):
+        return redirect("/authentication/admin_dashboard/")
+
+    if request.method == "POST":
+        errors = {}
+        p = request.POST
+
+        library_code         = p.get("library_code",          "").strip().upper()
+        timezone_val         = p.get("timezone",              "").strip()
+        student_borrow_limit = p.get("student_borrow_limit",  "").strip()
+        teacher_borrow_limit = p.get("teacher_borrow_limit",  "").strip()
+        max_books            = p.get("max_books_per_member",   "").strip()
+        late_fine            = p.get("late_fine",              "").strip()
+        working_days_raw     = p.get("working_days",           "").strip()
+
+        # ── Validate timezone ─────────────────────────────────────
+        if not timezone_val or timezone_val not in _VALID_TIMEZONES:
+            errors["timezone"] = "Please select a valid time zone."
+
+        # ── Validate student borrow limit ─────────────────────────
+        sbl_val = _int(student_borrow_limit, None)
+        if sbl_val is None or not (1 <= sbl_val <= 50):
+            errors["student_borrow_limit"] = "Enter a value between 1 and 50."
+
+        # ── Validate teacher borrow limit ─────────────────────────
+        tbl_val = _int(teacher_borrow_limit, None)
+        if tbl_val is None or not (1 <= tbl_val <= 50):
+            errors["teacher_borrow_limit"] = "Enter a value between 1 and 50."
+
+        # ── Validate max books per member ─────────────────────────
+        mb_val = _int(max_books, None)
+        if mb_val is None or not (1 <= mb_val <= 50):
+            errors["max_books_per_member"] = "Enter a value between 1 and 50."
+
+        # ── Validate late fine ────────────────────────────────────
+        lf_val = _dec(late_fine, None)
+        if lf_val is None or lf_val < 0:
+            errors["late_fine"] = "Must be 0 or greater."
+
+        # ── Validate working days ─────────────────────────────────
+        days_list = [
+            d.strip() for d in working_days_raw.split(",")
+            if d.strip() in _VALID_DAYS
+        ]
+        if not days_list:
+            errors["working_days"] = "Select at least one working day."
+
+        # ── Validate library code (if user regenerated it) ────────
+        if library_code and library_code != library.library_code:
+            import re as _re
+            if _re.match(r"^DG-[A-Z0-9]{4}$", library_code):
+                if Library.objects.exclude(pk=library.pk).filter(library_code=library_code).exists():
+                    errors["library_code"] = "This code is already in use. Click 'New' to generate another."
+            else:
+                errors["library_code"] = "Invalid code format."
+
+        # ── Return errors ─────────────────────────────────────────
+        if errors:
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return JsonResponse({"ok": False, "errors": errors}, status=422)
+            for msg in errors.values():
+                messages.error(request, msg)
+            return render(request, "accounts/library_setup.html", _setup_ctx(library, rules))
+
+        # ── Save everything to LibraryRuleSettings ────────────────
+        try:
+            with transaction.atomic():
+
+                if library_code and library_code != library.library_code:
+                    library.library_code = library_code
+
+                # Core rule fields
+                rules.student_borrow_limit  = sbl_val
+                rules.teacher_borrow_limit  = tbl_val
+                rules.max_books_per_member  = mb_val
+                rules.late_fine             = lf_val
+                rules.timezone              = timezone_val
+                rules.working_days          = ",".join(days_list)
+                rules.is_setup_complete     = True
+
+                # Loan behaviour toggles
+                rules.auto_fine             = p.get("auto_fine")             == "on"
+                rules.allow_renewal         = p.get("allow_renewal")         == "on"
+                rules.allow_partial_payment = p.get("allow_partial_payment") == "on"
+                rules.auto_mark_lost        = p.get("auto_mark_lost")        == "on"
+                rules.allow_advance_booking = p.get("allow_advance_booking") == "on"
+                rules.save()
+
+                # Mirror borrow limits + member permissions to MemberSettings
+                member_cfg, _ = MemberSettings.objects.get_or_create(library=library)
+                member_cfg.student_borrow_limit      = sbl_val
+                member_cfg.teacher_borrow_limit      = tbl_val
+                member_cfg.allow_self_registration   = p.get("allow_self_registration")   == "on"
+                member_cfg.require_admin_approval    = p.get("require_admin_approval")    == "on"
+                member_cfg.enable_member_id_download = p.get("enable_member_id_download") == "on"
+                member_cfg.allow_profile_edit        = p.get("allow_profile_edit")        == "on"
+                member_cfg.save()
+
+                # Notification preferences
+                notif, _ = NotificationSettings.objects.get_or_create(library=library)
+                notif.email_overdue_reminder = p.get("email_overdue_reminder") == "on"
+                notif.sms_reminder           = p.get("sms_reminder")           == "on"
+                notif.monthly_usage_report   = p.get("monthly_usage_report")   == "on"
+                notif.weekly_database_backup = p.get("weekly_database_backup") == "on"
+                notif.daily_activity_summary = p.get("daily_activity_summary") == "on"
+                notif.save()
+
+                library.save()
+
+        except Exception as exc:
+            import traceback; traceback.print_exc()
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return JsonResponse({"ok": False, "errors": {"__all__": str(exc)}}, status=500)
+            messages.error(request, f"Setup failed: {exc}")
+            return render(request, "accounts/library_setup.html", _setup_ctx(library, rules))
+
+        # ── Success ───────────────────────────────────────────────
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({
+                "ok":      True,
+                "code":    library.library_code,
+                "redirect": "/authentication/admin_dashboard/",
+            })
+
+        messages.success(request, "✅ Library configured successfully! All modules are now active.")
+        return redirect("/authentication/admin_dashboard/")
+
+    # GET
+    return render(request, "accounts/library_setup.html", _setup_ctx(library, rules))
 
 
-def _first_of_next_month(d):
-    """Return the first day of the month following `d`."""
-    if d.month == 12:
-        return date(d.year + 1, 1, 1)
-    return date(d.year, d.month + 1, 1)
+# ── AJAX: regenerate library code ────────────────────────────
+@login_required
+@require_POST
+def regenerate_library_code(request):
+    import random, string
+    library  = _get_library_or_404(request)
+    chars    = string.ascii_uppercase.replace("I", "").replace("O", "") + "23456789"
+    attempts = 0
+    while True:
+        code = "DG-" + "".join(random.choices(chars, k=4))
+        if not Library.objects.filter(library_code=code).exists():
+            break
+        attempts += 1
+        if attempts > 50:
+            return JsonResponse({"ok": False, "error": "Could not generate code."}, status=500)
+    return JsonResponse({"ok": True, "code": code})
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# VIEW
-# ─────────────────────────────────────────────────────────────────────────────
+def _is_setup_complete(library, rules):
+    return getattr(rules, "is_setup_complete", False)
+
+
+def _setup_ctx(library, rules):
+    return {
+        "library":      library,
+        "rules":        rules,
+        "timezone":     getattr(rules, "timezone",      "Asia/Kolkata"),
+        "working_days": getattr(rules, "working_days",  "Mon,Tue,Wed,Thu,Fri"),
+    }
+
+
+# ==========================================================
+# 🏠 ADMIN DASHBOARD
+# ==========================================================
 @login_required
 def admin_dashboard(request):
-    library = _get_library_or_404(request)
-    owner   = library.user
+    library  = _get_library_or_404(request)
+    rules_qs = LibraryRuleSettings.objects.filter(library=library).first()
+    if rules_qs and not _is_setup_complete(library, rules_qs):
+        return redirect("/authentication/library_setup/")
+
+    owner = library.user
 
     from accounts.models import Library
     from books.models import Book, Category
@@ -231,8 +481,6 @@ def admin_dashboard(request):
     last_month_start = _first_of_month(today, months_back=1)
     last_month_end   = this_month_start - timedelta(days=1)
 
-    # ── Section 1 · Library Overview ─────────────────────────────────────────
-
     if request.user.is_superuser:
         total_libraries      = Library.objects.count()
         libraries_this_month = Library.objects.filter(created_at__date__gte=this_month_start).count()
@@ -241,9 +489,8 @@ def admin_dashboard(request):
             created_at__date__lte=last_month_end,
         ).count()
     else:
-        total_libraries      = 1
-        libraries_this_month = 0
-        libraries_last_month = 0
+        total_libraries = 1
+        libraries_this_month = libraries_last_month = 0
     libraries_change = libraries_this_month - libraries_last_month
 
     total_books  = Book.objects.filter(owner=owner).count()
@@ -278,8 +525,6 @@ def admin_dashboard(request):
         ).count()
     )
 
-    # ── Section 2 · Membership Statistics ────────────────────────────────────
-
     count_map = {
         row["status"]: row["cnt"]
         for row in Member.objects.filter(owner=owner)
@@ -304,25 +549,17 @@ def admin_dashboard(request):
         "inactive_percentage": _pct(inactive_count),
     }
 
-    # ── Chart 1 · Monthly Loans (last 6 months) ───────────────────────────────
-    # Build raw Python lists first so we can check if any data is non-zero.
-
-    _loan_labels_raw = []
-    _loan_data_raw   = []
+    # ── Chart 1: Monthly Loans (last 6 months) ────────────────
+    _loan_labels_raw, _loan_data_raw = [], []
     for i in range(5, -1, -1):
         ms  = _first_of_month(today, months_back=i)
         me  = _first_of_next_month(ms)
         cnt = base_txns.filter(issue_date__gte=ms, issue_date__lt=me).count()
         _loan_labels_raw.append(ms.strftime("%b %Y"))
         _loan_data_raw.append(cnt)
-
-    # The template {% if monthly_loan_labels and monthly_loan_data %} must
-    # receive values that are falsy when there is no real data.
-    # We always have labels (month names), so gate on whether any loans exist.
     loans_have_data = any(v > 0 for v in _loan_data_raw)
 
-    # ── Chart 2 · Books by Category ───────────────────────────────────────────
-
+    # ── Chart 2: Books by Category ────────────────────────────
     cat_qs = (
         Category.objects
         .filter(owner=owner)
@@ -330,12 +567,11 @@ def admin_dashboard(request):
         .filter(cnt__gt=0)
         .order_by("-cnt")[:8]
     )
-    _cat_labels_raw = [c.name for c in cat_qs]
-    _cat_data_raw   = [c.cnt  for c in cat_qs]
+    _cat_labels_raw      = [c.name for c in cat_qs]
+    _cat_data_raw        = [c.cnt  for c in cat_qs]
     categories_have_data = len(_cat_labels_raw) > 0
 
-    # ── Chart 3 · New Members per day (last 7 days) ───────────────────────────
-
+    # ── Chart 3: New Members per day (last 7 days) ────────────
     day_count_map = {
         row["date_joined"]: row["cnt"]
         for row in Member.objects.filter(
@@ -344,17 +580,14 @@ def admin_dashboard(request):
             date_joined__lte=today,
         ).values("date_joined").annotate(cnt=Count("id"))
     }
-    _day_labels_raw = []
-    _day_data_raw   = []
+    _day_labels_raw, _day_data_raw = [], []
     for i in range(6, -1, -1):
         d = today - timedelta(days=i)
         _day_labels_raw.append(d.strftime("%a"))
         _day_data_raw.append(day_count_map.get(d, 0))
-
     members_chart_have_data = any(v > 0 for v in _day_data_raw)
 
-    # ── Chart 4 · Members by Department ──────────────────────────────────────
-
+    # ── Chart 4: Members by Department ───────────────────────
     dept_qs = (
         Member.objects
         .filter(owner=owner)
@@ -365,19 +598,17 @@ def admin_dashboard(request):
     _dept_labels_raw = [row["department__name"] or "No Department" for row in dept_qs]
     _dept_data_raw   = [row["cnt"] for row in dept_qs]
 
-    # ── Recent Activity Feed ──────────────────────────────────────────────────
-
+    # ── Recent Activity Feed ──────────────────────────────────
     recent_activities = []
-
     for txn in base_txns.select_related("member", "book").order_by("-created_at")[:5]:
         if txn.status == Transaction.STATUS_RETURNED:
-            icon, color, title = "undo-alt",           "green",  f"Book returned: {txn.book.title}"
+            icon, color, title = "undo-alt",             "green",  f"Book returned: {txn.book.title}"
         elif txn.status == Transaction.STATUS_OVERDUE:
-            icon, color, title = "exclamation-triangle","red",   f"Overdue: {txn.book.title}"
+            icon, color, title = "exclamation-triangle",  "red",   f"Overdue: {txn.book.title}"
         elif txn.status == Transaction.STATUS_LOST:
-            icon, color, title = "times-circle",        "red",   f"Lost book: {txn.book.title}"
+            icon, color, title = "times-circle",          "red",   f"Lost book: {txn.book.title}"
         else:
-            icon, color, title = "book",                "blue",  f"Book issued: {txn.book.title}"
+            icon, color, title = "book",                  "blue",  f"Book issued: {txn.book.title}"
         recent_activities.append({
             "title":       title,
             "description": f"{txn.member.first_name} {txn.member.last_name}",
@@ -396,10 +627,7 @@ def admin_dashboard(request):
             "color":       "purple",
             "timestamp":   timesince(joined_dt) + " ago",
         })
-
     recent_activities = recent_activities[:8]
-
-    # ── Recent Members Table ──────────────────────────────────────────────────
 
     recent_members = (
         Member.objects
@@ -408,47 +636,14 @@ def admin_dashboard(request):
         .order_by("-date_joined", "-id")[:5]
     )
 
-    # ── UI Helpers ────────────────────────────────────────────────────────────
-
     library_logo_b64 = ""
     if library.library_logo and library.library_logo_mime:
-        import base64
         raw = base64.b64encode(bytes(library.library_logo)).decode("ascii")
         library_logo_b64 = f"data:{library.library_logo_mime};base64,{raw}"
 
     notification_count = base_txns.filter(status=Transaction.STATUS_OVERDUE).count()
 
-    # ── Build context ─────────────────────────────────────────────────────────
-    #
-    # The template's {% if monthly_loan_labels and monthly_loan_data %} check
-    # needs the variables to be FALSY when there is no meaningful data.
-    #
-    # Strategy:
-    #   • Pass the Python list as  monthly_loan_labels / monthly_loan_data
-    #     so {% if %} evaluates the list (empty list = False).
-    #   • The template then does  {{ monthly_loan_labels|safe }}  which on a
-    #     Python list outputs its repr — NOT valid JSON.
-    #
-    # Fix: we pre-serialise to JSON and pass the JSON string, but we set the
-    # variable to an EMPTY STRING (falsy) when there is no real data.
-    # The template's |safe filter will output "" which becomes an empty JS
-    # expression — so we must keep the {% else %}[]{% endif %} fallback intact.
-    #
-    # This is the cleanest way without touching the template at all.
-
-    monthly_loan_labels = json.dumps(_loan_labels_raw)   if loans_have_data        else ""
-    monthly_loan_data   = json.dumps(_loan_data_raw)     if loans_have_data        else ""
-    category_labels     = json.dumps(_cat_labels_raw)    if categories_have_data   else ""
-    category_data       = json.dumps(_cat_data_raw)      if categories_have_data   else ""
-    member_day_labels   = json.dumps(_day_labels_raw)    if members_chart_have_data else ""
-    member_day_data     = json.dumps(_day_data_raw)      if members_chart_have_data else ""
-
-    # Department + status charts are always shown (they have inline fallback)
-    department_labels = json.dumps(_dept_labels_raw)
-    department_data   = json.dumps(_dept_data_raw)
-
     return render(request, "dashboards/admin_dashboard.html", {
-        # Section 1
         "total_libraries":     total_libraries,
         "libraries_change":    libraries_change,
         "total_books":         total_books,
@@ -457,25 +652,20 @@ def admin_dashboard(request):
         "members_change":      members_change,
         "active_transactions": active_transactions,
         "transactions_change": transactions_change,
-        # Section 2
-        "stats": stats,
-        # Charts — empty string when no data (falsy for {% if %} checks)
-        "monthly_loan_labels": monthly_loan_labels,
-        "monthly_loan_data":   monthly_loan_data,
-        "category_labels":     category_labels,
-        "category_data":       category_data,
-        "member_day_labels":   member_day_labels,
-        "member_day_data":     member_day_data,
-        "department_labels":   department_labels,
-        "department_data":     department_data,
-        # Activity + table
-        "recent_activities": recent_activities,
-        "recent_members":    recent_members,
-        # UI
-        "library_logo_b64":   library_logo_b64,
-        "notification_count": notification_count,
+        "stats":               stats,
+        "monthly_loan_labels": json.dumps(_loan_labels_raw)  if loans_have_data         else "",
+        "monthly_loan_data":   json.dumps(_loan_data_raw)    if loans_have_data         else "",
+        "category_labels":     json.dumps(_cat_labels_raw)   if categories_have_data    else "",
+        "category_data":       json.dumps(_cat_data_raw)     if categories_have_data    else "",
+        "member_day_labels":   json.dumps(_day_labels_raw)   if members_chart_have_data else "",
+        "member_day_data":     json.dumps(_day_data_raw)     if members_chart_have_data else "",
+        "department_labels":   json.dumps(_dept_labels_raw),
+        "department_data":     json.dumps(_dept_data_raw),
+        "recent_activities":   recent_activities,
+        "recent_members":      recent_members,
+        "library_logo_b64":    library_logo_b64,
+        "notification_count":  notification_count,
     })
-
 
 
 # ==========================================================
@@ -483,26 +673,22 @@ def admin_dashboard(request):
 # ==========================================================
 @login_required
 def settings_view(request):
-
-    # ── Fetch library ──────────────────────────────────────────────
     try:
         library = Library.objects.get(user=request.user)
     except Library.DoesNotExist:
         messages.error(request, "No library found for your account.")
-        return redirect("accounts:admin_dashboard")
+        return redirect("/authentication/admin_dashboard/")
 
-    # ── get_or_create — never throws RelatedObjectDoesNotExist ─────
     rules,         _ = LibraryRuleSettings.objects.get_or_create(library=library)
     member_cfg,    _ = MemberSettings.objects.get_or_create(library=library)
     security,      _ = SecuritySettings.objects.get_or_create(library=library)
     notifications, _ = NotificationSettings.objects.get_or_create(library=library)
     appearance,    _ = AppearanceSettings.objects.get_or_create(library=library)
 
-    # ── POST ───────────────────────────────────────────────────────
     if request.method == "POST":
         section = request.POST.get("form_type", "").strip()
 
-        # ── profile ────────────────────────────────────────────────
+        # ── Profile ───────────────────────────────────────────────
         if section == "profile":
             user            = request.user
             user.first_name = request.POST.get("first_name", user.first_name).strip()
@@ -510,24 +696,21 @@ def settings_view(request):
             user.email      = request.POST.get("email",      user.email).strip()
             user.save()
 
-            # Library fields
             library.library_name   = request.POST.get("library_name",   library.library_name).strip()
             library.institute_name = request.POST.get("institute_name", library.institute_name).strip()
             library.phone_number   = request.POST.get("phone_number",   library.phone_number or "").strip()
             library.address        = request.POST.get("address",        library.address).strip()
 
             if "library_logo" in request.FILES:
-                logo_file = request.FILES["library_logo"]
+                logo_file             = request.FILES["library_logo"]
                 library.library_logo      = logo_file.read()
                 library.library_logo_mime = logo_file.content_type
             elif request.POST.get("remove_logo") == "1":
-                library.library_logo      = None
-                library.library_logo_mime = None
-
+                library.library_logo = library.library_logo_mime = None
             library.save()
             messages.success(request, "Profile updated successfully.")
 
-        # ── security ───────────────────────────────────────────────
+        # ── Security ──────────────────────────────────────────────
         elif section == "security":
             user       = request.user
             current_pw = request.POST.get("current_password", "")
@@ -549,19 +732,18 @@ def settings_view(request):
             else:
                 messages.warning(request, "Please fill in all password fields.")
 
-            # SecuritySettings fields
-            security.two_factor_auth              = request.POST.get("two_factor_auth")              == "on"
-            security.lock_after_failed_attempts   = request.POST.get("lock_after_failed_attempts")   == "on"
-            security.force_password_reset         = request.POST.get("force_password_reset")         == "on"
-            security.login_email_notification     = request.POST.get("login_email_notification")     == "on"
-            security.allow_multiple_device_login  = request.POST.get("allow_multiple_device_login")  == "on"
-            security.failed_login_attempts_limit  = _int(
+            security.two_factor_auth             = request.POST.get("two_factor_auth")             == "on"
+            security.lock_after_failed_attempts  = request.POST.get("lock_after_failed_attempts")  == "on"
+            security.force_password_reset        = request.POST.get("force_password_reset")        == "on"
+            security.login_email_notification    = request.POST.get("login_email_notification")    == "on"
+            security.allow_multiple_device_login = request.POST.get("allow_multiple_device_login") == "on"
+            security.failed_login_attempts_limit = _int(
                 request.POST.get("failed_login_attempts_limit"),
                 security.failed_login_attempts_limit,
             )
             security.save()
 
-        # ── system ─────────────────────────────────────────────────
+        # ── System ────────────────────────────────────────────────
         elif section == "system":
             library.institute_email = request.POST.get("institute_email", library.institute_email).strip()
             library.phone_number    = request.POST.get("phone_number",    library.phone_number or "").strip()
@@ -570,26 +752,22 @@ def settings_view(request):
             library.state           = request.POST.get("state",           library.state).strip()
             library.country         = request.POST.get("country",         library.country).strip()
             library.save()
-
             appearance.primary_color = request.POST.get("primary_color", appearance.primary_color).strip()
             appearance.save()
-
             messages.success(request, "System settings updated successfully.")
 
-        # ── notifications ──────────────────────────────────────────
+        # ── Notifications ─────────────────────────────────────────
         elif section == "notifications":
-            # Exact field names from NotificationSettings model
-            notifications.email_overdue_reminder  = request.POST.get("email_overdue_reminder")  == "on"
-            notifications.sms_reminder            = request.POST.get("sms_reminder")            == "on"
-            notifications.monthly_usage_report    = request.POST.get("monthly_usage_report")    == "on"
-            notifications.weekly_database_backup  = request.POST.get("weekly_database_backup")  == "on"
-            notifications.daily_activity_summary  = request.POST.get("daily_activity_summary")  == "on"
+            notifications.email_overdue_reminder = request.POST.get("email_overdue_reminder") == "on"
+            notifications.sms_reminder           = request.POST.get("sms_reminder")           == "on"
+            notifications.monthly_usage_report   = request.POST.get("monthly_usage_report")   == "on"
+            notifications.weekly_database_backup = request.POST.get("weekly_database_backup") == "on"
+            notifications.daily_activity_summary = request.POST.get("daily_activity_summary") == "on"
             notifications.save()
             messages.success(request, "Notification preferences saved.")
 
-        # ── fine & loans ───────────────────────────────────────────
+        # ── Fine & Loans ──────────────────────────────────────────
         elif section == "fine":
-            # Exact field names from LibraryRuleSettings model
             rules.max_books_per_member  = _int(request.POST.get("max_books_per_member"),  rules.max_books_per_member)
             rules.borrowing_period      = _int(request.POST.get("loan_period_days"),      rules.borrowing_period)
             rules.max_renewal_count     = _int(request.POST.get("renewal_limit"),         rules.max_renewal_count)
@@ -603,83 +781,60 @@ def settings_view(request):
             rules.save()
             messages.success(request, "Loan & fine settings saved.")
 
-        # ── members ───────────────────────────────────────────────
+        # ── Members ───────────────────────────────────────────────
         elif section == "members":
-            member_cfg.student_borrow_limit     = _int(request.POST.get("student_borrow_limit"),     member_cfg.student_borrow_limit)
-            member_cfg.teacher_borrow_limit     = _int(request.POST.get("teacher_borrow_limit"),     member_cfg.teacher_borrow_limit)
-            member_cfg.membership_validity_days = _int(request.POST.get("membership_validity_days"), member_cfg.membership_validity_days)
-            member_cfg.member_id_format         = request.POST.get("member_id_format", member_cfg.member_id_format).strip()
-            member_cfg.allow_self_registration  = request.POST.get("allow_self_registration")  == "on"
-            member_cfg.require_admin_approval   = request.POST.get("require_admin_approval")   == "on"
-            member_cfg.enable_member_id_download= request.POST.get("enable_member_id_download")== "on"
-            member_cfg.allow_profile_edit       = request.POST.get("allow_profile_edit")       == "on"
+            if library.institute_type == "Institution":
+                member_cfg.student_borrow_limit      = _int(request.POST.get("student_borrow_limit"),     member_cfg.student_borrow_limit)
+                member_cfg.teacher_borrow_limit      = _int(request.POST.get("teacher_borrow_limit"),     member_cfg.teacher_borrow_limit)
+            else:
+                member_cfg.member_borrow_limit       = _int(request.POST.get("member_borrow_limit"),      member_cfg.member_borrow_limit)
+            member_cfg.membership_validity_days  = _int(request.POST.get("membership_validity_days"), member_cfg.membership_validity_days)
+            member_cfg.member_id_format          = request.POST.get("member_id_format", member_cfg.member_id_format).strip()
+            member_cfg.allow_self_registration   = request.POST.get("allow_self_registration")   == "on"
+            member_cfg.require_admin_approval    = request.POST.get("require_admin_approval")    == "on"
+            member_cfg.enable_member_id_download = request.POST.get("enable_member_id_download") == "on"
+            member_cfg.allow_profile_edit        = request.POST.get("allow_profile_edit")        == "on"
             member_cfg.save()
+            # Keep LibraryRuleSettings in sync
+            rules.student_borrow_limit = member_cfg.student_borrow_limit
+            rules.teacher_borrow_limit = member_cfg.teacher_borrow_limit
+            rules.save()
             messages.success(request, "Member settings saved.")
 
         else:
             messages.warning(request, f"Unknown settings section: '{section}'.")
 
-        return redirect("accounts:settings")
+        return redirect("/authentication/settings/")
 
-    # ── GET: build context ─────────────────────────────────────────
-
-    # Notification list — keys EXACTLY match model field names
+    # ── GET: build context ────────────────────────────────────────
     notification_list = [
-        {
-            "key":         "email_overdue_reminder",
-            "label":       "Email Overdue Reminder",
-            "description": "Send email reminders when a loan becomes overdue.",
-            "enabled":     notifications.email_overdue_reminder,
-        },
-        {
-            "key":         "sms_reminder",
-            "label":       "SMS Reminders",
-            "description": "Send SMS reminders for due and overdue books.",
-            "enabled":     notifications.sms_reminder,
-        },
-        {
-            "key":         "monthly_usage_report",
-            "label":       "Monthly Usage Report",
-            "description": "Receive a monthly summary report via email.",
-            "enabled":     notifications.monthly_usage_report,
-        },
-        {
-            "key":         "weekly_database_backup",
-            "label":       "Weekly Database Backup",
-            "description": "Get notified when weekly backup completes.",
-            "enabled":     notifications.weekly_database_backup,
-        },
-        {
-            "key":         "daily_activity_summary",
-            "label":       "Daily Activity Summary",
-            "description": "Receive a daily digest of library activity.",
-            "enabled":     notifications.daily_activity_summary,
-        },
+        {"key": "email_overdue_reminder", "label": "Email Overdue Reminder",  "description": "Send email reminders when a loan becomes overdue.", "enabled": notifications.email_overdue_reminder},
+        {"key": "sms_reminder",           "label": "SMS Reminders",            "description": "Send SMS reminders for due and overdue books.",    "enabled": notifications.sms_reminder},
+        {"key": "monthly_usage_report",   "label": "Monthly Usage Report",     "description": "Receive a monthly summary report via email.",       "enabled": notifications.monthly_usage_report},
+        {"key": "weekly_database_backup", "label": "Weekly Database Backup",   "description": "Get notified when weekly backup completes.",        "enabled": notifications.weekly_database_backup},
+        {"key": "daily_activity_summary", "label": "Daily Activity Summary",   "description": "Receive a daily digest of library activity.",       "enabled": notifications.daily_activity_summary},
     ]
 
-    # system_settings proxy — template uses system_settings.<field>
     system_settings = _Proxy({
-        "org_name":      library.library_name,
+        "org_name":       library.library_name,
         "institute_name": library.institute_name,
-        "org_email":     library.institute_email,
-        "org_phone":     library.phone_number or "",
-        "org_address":   library.address,
-        "district":      library.district,
-        "state":         library.state,
-        "country":       library.country,
-        "primary_color": appearance.primary_color,
+        "org_email":      library.institute_email,
+        "org_phone":      library.phone_number or "",
+        "org_address":    library.address,
+        "district":       library.district,
+        "state":          library.state,
+        "country":        library.country,
+        "primary_color":  appearance.primary_color,
     })
 
-    # loan_settings proxy — template uses loan_settings.<field>
     loan_settings = _Proxy({
-        "max_books_per_member": rules.max_books_per_member,
-        "loan_period_days":     rules.borrowing_period,
-        "renewal_limit":        rules.max_renewal_count,
-        "grace_period_days":    rules.grace_period,
-        "fine_per_day":         rules.late_fine,
-        "max_fine":             0,   # no max_fine_amount field in model
-        "waiver_percentage":    0,   # no waiver_percentage field in model
-        # Toggles
+        "max_books_per_member":  rules.max_books_per_member,
+        "loan_period_days":      rules.borrowing_period,
+        "renewal_limit":         rules.max_renewal_count,
+        "grace_period_days":     rules.grace_period,
+        "fine_per_day":          rules.late_fine,
+        "max_fine":              0,
+        "waiver_percentage":     0,
         "auto_fine":             rules.auto_fine,
         "allow_renewal":         rules.allow_renewal,
         "allow_partial_payment": rules.allow_partial_payment,
@@ -687,38 +842,49 @@ def settings_view(request):
         "allow_advance_booking": rules.allow_advance_booking,
     })
 
-    # ── Build base64 logo data-URI for template ────────────────
     library_logo_b64 = None
     if library.library_logo:
-        mime = library.library_logo_mime or "image/png"
+        mime    = library.library_logo_mime or "image/png"
         encoded = base64.b64encode(bytes(library.library_logo)).decode("utf-8")
         library_logo_b64 = f"data:{mime};base64,{encoded}"
 
-    context = {
-        # Raw instances
+    return render(request, "accounts/settings.html", {
         "library":               library,
         "rules":                 rules,
         "member_cfg":            member_cfg,
         "security":              security,
         "notifications":         notifications,
         "appearance":            appearance,
-
-        # Template-facing aliases
         "system_settings":       system_settings,
         "loan_settings":         loan_settings,
         "notification_settings": notification_list,
-
-        # Logo as base64 data-URI (blob from MySQL)
         "library_logo_b64":      library_logo_b64,
-
-        # Active sessions — wire up your own queryset here if needed
         "active_sessions":       [],
-    }
-
-    return render(request, "accounts/settings.html", context)
+    })
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# ==========================================================
+# HELPERS
+# ==========================================================
+
+def _get_library_or_404(request):
+    try:
+        return request.user.library
+    except Exception:
+        raise Http404("No library associated with this account.")
+
+
+def _first_of_month(ref_date, months_back=0):
+    m, y = ref_date.month - months_back, ref_date.year
+    while m <= 0:
+        m += 12
+        y -= 1
+    return date(y, m, 1)
+
+
+def _first_of_next_month(d):
+    return date(d.year + 1, 1, 1) if d.month == 12 else date(d.year, d.month + 1, 1)
+
 
 def _int(value, fallback=0):
     try:
@@ -739,9 +905,3 @@ class _Proxy:
     def __init__(self, data: dict):
         for k, v in data.items():
             setattr(self, k, v)
-
-
-
-
-# def staff_dashboard(request):
-#     return render(request, 'dashboards/staff_dashboard.html')

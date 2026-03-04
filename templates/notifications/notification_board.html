@@ -1,0 +1,129 @@
+{% extends "dashboard_base.html" %}
+{% load static %}
+
+{% block title %}Notifications — Dooars Granthika{% endblock %}
+{% block nav_dashboard %}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboards/notification_board.css' %}" />
+{% endblock %}
+
+{% block topbar %}
+<div class="topbar">
+  <div class="topbar__left">
+    <button class="topbar__menu-btn" id="sidebarToggle">
+      <i class="fas fa-bars"></i>
+    </button>
+    <div class="topbar__breadcrumb">
+      <span class="topbar__breadcrumb-home"><i class="fas fa-house"></i></span>
+      <i class="fas fa-chevron-right"></i>
+      <span>Notifications</span>
+    </div>
+  </div>
+  <div class="topbar__right">
+    <button class="notif-toggle topbar__icon-btn" title="Notification panel">
+      <i class="fas fa-bell"></i>
+      <span class="notif-badge" id="topbarBadge" style="display:none">0</span>
+    </button>
+    <div class="topbar__avatar">
+      <i class="fas fa-user-circle"></i>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="nb-page">
+
+  <!-- ── Page header ── -->
+  <div class="nb-header">
+    <div class="nb-header__left">
+      <h1 class="nb-header__title">
+        <i class="fas fa-bell"></i> Notifications
+      </h1>
+      <p class="nb-header__sub">Stay on top of every library activity</p>
+    </div>
+    <div class="nb-header__actions">
+      <button class="nb-btn nb-btn--ghost" id="nbMarkAllRead">
+        <i class="fas fa-check-double"></i> Mark all read
+      </button>
+      <button class="nb-btn nb-btn--ghost nb-btn--danger" id="nbClearAll">
+        <i class="fas fa-trash-can"></i> Clear all
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Stats row ── -->
+  <div class="nb-stats">
+    <div class="nb-stat">
+      <span class="nb-stat__value" id="statTotal">0</span>
+      <span class="nb-stat__label">Total</span>
+    </div>
+    <div class="nb-stat nb-stat--indigo">
+      <span class="nb-stat__value" id="statUnread">0</span>
+      <span class="nb-stat__label">Unread</span>
+    </div>
+    <div class="nb-stat nb-stat--red">
+      <span class="nb-stat__value" id="statOverdue">0</span>
+      <span class="nb-stat__label">Overdue</span>
+    </div>
+    <div class="nb-stat nb-stat--violet">
+      <span class="nb-stat__value" id="statSystem">0</span>
+      <span class="nb-stat__label">System</span>
+    </div>
+  </div>
+
+  <!-- ── Toolbar: search + filters ── -->
+  <div class="nb-toolbar">
+    <div class="nb-search">
+      <i class="fas fa-magnifying-glass nb-search__icon"></i>
+      <input
+        type="search"
+        class="nb-search__input"
+        id="nbSearch"
+        placeholder="Search notifications…"
+        autocomplete="off"
+      />
+    </div>
+
+    <div class="nb-filters" id="nbFilters">
+      <button class="nb-filter is-active" data-filter="all">All</button>
+      <button class="nb-filter" data-filter="unread">Unread</button>
+      <button class="nb-filter" data-filter="overdue">Overdue</button>
+      <button class="nb-filter" data-filter="system">System</button>
+      <button class="nb-filter" data-filter="info">Info</button>
+      <button class="nb-filter" data-filter="success">Success</button>
+      <button class="nb-filter" data-filter="warning">Warning</button>
+    </div>
+  </div>
+
+  <!-- ── Notification list ── -->
+  <div class="nb-list" id="nbList">
+    <!-- Populated by JS -->
+    <div class="nb-empty" id="nbEmpty" style="display:none">
+      <div class="nb-empty__icon"><i class="fas fa-bell-slash"></i></div>
+      <p class="nb-empty__text">All clear!</p>
+      <p class="nb-empty__sub">No notifications match your filter.</p>
+    </div>
+  </div>
+
+  <!-- ── Pagination ── -->
+  <div class="nb-pagination" id="nbPagination">
+    <button class="nb-page-btn" id="nbPrevPage" disabled>
+      <i class="fas fa-chevron-left"></i> Prev
+    </button>
+    <span class="nb-page-info" id="nbPageInfo">Page 1 of 1</span>
+    <button class="nb-page-btn" id="nbNextPage" disabled>
+      Next <i class="fas fa-chevron-right"></i>
+    </button>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-level data injected from view -->
+<script>
+  window.NOTIF_BOARD = true;  // tells notifications.js it's on the board page
+</script>
+{% endblock %}

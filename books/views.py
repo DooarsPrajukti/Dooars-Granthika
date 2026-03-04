@@ -75,6 +75,22 @@ def _filter_books(qs, request):
     return qs
 
 
+def _find_title_author_edition_duplicate(user, title, author, edition):
+    """
+    Return an existing Book for this owner that matches title + author + edition
+    (case-insensitive), or None if no such book exists.
+
+    This is used during import to merge copies onto an existing record rather
+    than creating a redundant row when the same edition is re-imported.
+    """
+    return Book.objects.filter(
+        owner=user,
+        title__iexact=title,
+        author__iexact=author,
+        edition__iexact=edition,
+    ).first()
+
+
 # ─────────────────────────────────────────────────────────────
 # Book List
 # book_list.html needs:
@@ -177,14 +193,28 @@ def book_create(request):
             d   = r["data"]
             cat = Category.objects.filter(pk=d.get("category_pk")).first() if d.get("category_pk") else None
             total = int(d.get("total_copies") or 1)
+
+            title   = d.get("title", "")
+            author  = d.get("author", "")
+            edition = d.get("edition", "")
+
+            # ── Merge into existing record if title+author+edition match ──
+            existing = _find_title_author_edition_duplicate(request.user, title, author, edition)
+            if existing:
+                existing.total_copies     += total
+                existing.available_copies += total
+                existing.save(update_fields=["total_copies", "available_copies"])
+                updated += 1
+                continue
+
             defaults = {
-                "title":            d.get("title", ""),
-                "author":           d.get("author", ""),
+                "title":            title,
+                "author":           author,
                 "category":         cat,
                 "publisher":        d.get("publisher", ""),
                 "publication_year": d.get("publication_year") or None,
                 "language":         d.get("language", ""),
-                "edition":          d.get("edition", ""),
+                "edition":          edition,
                 "shelf_location":   d.get("shelf_location", ""),
                 "total_copies":     total,
                 "available_copies": total,
@@ -588,6 +618,10 @@ def import_books_excel(request):
     GET  → show upload form
     POST (step=upload)   → parse file, store preview in session, show preview
     POST (step=confirm)  → read session data, bulk-create/update, redirect to list
+
+    Merge rule: if a book with the same title + author + edition already exists
+    for this owner, its total_copies and available_copies are incremented by the
+    imported quantity instead of creating a duplicate record.
     """
     from .forms import ExcelImportForm, parse_excel_rows
 
@@ -676,7 +710,6 @@ def import_books_excel(request):
 
             # ───────── SAFE TOTAL COPIES CONVERSION ─────────
             raw_total = d.get("total_copies")
-
             try:
                 total = int(raw_total)
                 if total < 1:
@@ -684,26 +717,38 @@ def import_books_excel(request):
             except (TypeError, ValueError):
                 total = 1
 
-            # DEBUG PRINT (REMOVE AFTER TESTING)
-            print("Excel Total:", raw_total)
-            print("Saving Total:", total)
+            title   = d.get("title", "")
+            author  = d.get("author", "")
+            edition = d.get("edition", "")
+
+            # ── Merge into existing record if title+author+edition match ──
+            # This handles re-imports of the same book edition: instead of
+            # creating a duplicate row, we add the new copies to the
+            # existing record's totals.
+            existing = _find_title_author_edition_duplicate(request.user, title, author, edition)
+            if existing:
+                existing.total_copies     += total
+                existing.available_copies += total
+                existing.save(update_fields=["total_copies", "available_copies"])
+                updated_count += 1
+                continue
 
             cat = None
             if d.get("category_pk"):
                 cat = Category.objects.filter(pk=d["category_pk"]).first()
 
             defaults = {
-                "title": d.get("title", ""),
-                "author": d.get("author", ""),
-                "category": cat,
-                "publisher": d.get("publisher", ""),
+                "title":            title,
+                "author":           author,
+                "category":         cat,
+                "publisher":        d.get("publisher", ""),
                 "publication_year": d.get("publication_year") or None,
-                "language": d.get("language", ""),
-                "edition": d.get("edition", ""),
-                "shelf_location": d.get("shelf_location", ""),
-                "total_copies": total,
-                "available_copies": total,  # ALWAYS equal on import
-                "description": d.get("description", ""),
+                "language":         d.get("language", ""),
+                "edition":          edition,
+                "shelf_location":   d.get("shelf_location", ""),
+                "total_copies":     total,
+                "available_copies": total,
+                "description":      d.get("description", ""),
             }
 
             if r["status"] == "duplicate":

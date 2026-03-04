@@ -203,3 +203,86 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
 });
+
+
+/* ── Pass institute_type to member_add.js so role switching stays correct ── */
+window.INSTITUTE_TYPE = "{{ institute_type|escapejs }}";
+
+(function () {
+  /*
+   * Role-based field visibility and label changes.
+   * For private institutes: student-field / teacher fields are visible.
+   * For non-private: only general-field is rendered (server-side).
+   * This block handles JS-driven switching between student ↔ teacher
+   * (only relevant for private institutes).
+   */
+
+  var IS_PRIVATE = (window.INSTITUTE_TYPE === 'private');
+
+  var SECTION_TITLES = {
+    student: "Academic Information",
+    teacher: "Professional Information",
+    general: "Additional Information",
+  };
+
+  var ROLE_LABELS = {
+    "roll-label":  { student: "Roll Number",             teacher: "Employee ID",             general: "Government ID" },
+    "spec-label":  { student: "Specialization / Subject", teacher: "Designation / Post",     general: "Occupation"    },
+    "notes-label": { student: "Notes / Remarks",          teacher: "Notes / Remarks",         general: "Notes / Remarks" },
+    "dept-star":   { student: "*",                        teacher: "*",                       general: ""              },
+  };
+
+  var ROLE_PLACEHOLDERS = {
+    "rollNumber":     { student: "e.g. CS2024001",                  teacher: "e.g. EMP-2024-001",              general: "Aadhaar / Voter ID / PAN…"     },
+    "specialization": { student: "e.g. Machine Learning, Finance…",  teacher: "e.g. Assistant Professor, HOD…", general: "e.g. Farmer, Govt. Teacher…"    },
+  };
+
+  function applyRole(role) {
+    // Section heading
+    var titleEl = document.getElementById("academicSectionTitle");
+    if (titleEl) titleEl.textContent = SECTION_TITLES[role] || "Academic Information";
+
+    // student-field blocks (course, year, semester, admission year)
+    // Only exist in the DOM for private institutes
+    document.querySelectorAll(".student-field").forEach(function (el) {
+      el.style.display = (role === "student") ? "" : "none";
+    });
+
+    // Guardian phone wrapper — student only, only rendered for private
+    var guardianWrapper = document.getElementById("guardian-phone-wrapper");
+    if (guardianWrapper) guardianWrapper.style.display = (role === "student") ? "" : "none";
+
+    // Dynamic labels
+    Object.keys(ROLE_LABELS).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && ROLE_LABELS[id][role] !== undefined) {
+        el.textContent = ROLE_LABELS[id][role];
+      }
+    });
+
+    // Dynamic placeholders
+    Object.keys(ROLE_PLACEHOLDERS).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && ROLE_PLACEHOLDERS[id][role]) {
+        el.placeholder = ROLE_PLACEHOLDERS[id][role];
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    // Card click → highlight + apply
+    document.querySelectorAll(".role-option").forEach(function (label) {
+      label.addEventListener("click", function () {
+        document.querySelectorAll(".role-option").forEach(function (l) {
+          l.classList.remove("selected");
+        });
+        this.classList.add("selected");
+        applyRole(this.dataset.role);
+      });
+    });
+
+    // On page load — apply the already-checked role
+    var checked = document.querySelector('input[name="role"]:checked');
+    if (checked) applyRole(checked.value);
+  });
+})();

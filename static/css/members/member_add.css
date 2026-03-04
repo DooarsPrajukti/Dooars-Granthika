@@ -24,3 +24,20 @@
   font-size: 0.8125rem;
   margin-top: 0.25rem;
 }
+
+
+/* ── Role selector cards ─────────────────────────────────────────── */
+.role-selector{display:flex;gap:1rem;flex-wrap:wrap;margin-top:.5rem}
+.role-option{flex:1;min-width:150px;display:flex;flex-direction:column;align-items:center;
+  gap:.4rem;padding:1.25rem 1rem;border:2px solid #e5e7eb;border-radius:12px;cursor:pointer;
+  transition:border-color .2s,background .2s;background:#fff;text-align:center}
+.role-option input[type="radio"]{display:none}
+.role-option i{font-size:1.75rem;color:#6b7280}
+.role-option span{font-weight:600;color:#374151;font-size:.95rem}
+.role-option small{color:#9ca3af;font-size:.8rem}
+.role-option.selected,.role-option:hover{border-color:#3b82f6;background:#eff6ff}
+.role-option.selected i,.role-option:hover i{color:#3b82f6}
+.role-option[data-role="teacher"].selected,.role-option[data-role="teacher"]:hover{border-color:#8b5cf6;background:#f5f3ff}
+.role-option[data-role="teacher"].selected i,.role-option[data-role="teacher"]:hover i{color:#8b5cf6}
+.role-option[data-role="general"].selected,.role-option[data-role="general"]:hover{border-color:#6b7280;background:#f9fafb}
+.role-option[data-role="general"].selected i,.role-option[data-role="general"]:hover i{color:#6b7280}

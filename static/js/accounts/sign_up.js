@@ -1,15 +1,17 @@
 /**
  * Sign Up / Registration Authentication
+ * Django POST only — no pywebview dependency.
  */
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phoneRegex  = /^[+\d][\d\s\-().]{6,19}$/;
 
 const FIELD_IDS = [
-  "libraryName", "instituteName", "instituteType", "instituteEmail",
-  "phoneNumber", "address", "district", "state", "country",
-  "latefine", "borrowingPeriod", "AlottedBooks"
+  "libraryName", "instituteType", "instituteEmail",
+  "phoneNumber", "address", "district", "state", "country"
 ];
 
+// instituteName validated separately (conditional on instituteType)
 const OPTIONAL_FIELDS = ["phoneNumber"];
 
 // ===========================
@@ -17,32 +19,27 @@ const OPTIONAL_FIELDS = ["phoneNumber"];
 // ===========================
 function showMessage(message, type = "success") {
   const msgBox = document.getElementById("status-msg");
-  if (msgBox) {
-    msgBox.textContent = message;
-    msgBox.className = `status ${type}`;
-    setTimeout(() => {
-      msgBox.textContent = "";
-      msgBox.className = "status";
-    }, type === "success" ? 8000 : 5000);
-  }
+  if (!msgBox) return;
+  msgBox.textContent = message;
+  msgBox.className = `status ${type}`;
+  setTimeout(() => {
+    msgBox.textContent = "";
+    msgBox.className = "status";
+  }, type === "success" ? 8000 : 5000);
 }
 
 // ===========================
 // Field Validation
 // ===========================
-const phoneRegex = /^[+\d][\d\s\-().]{6,19}$/;
-
 function validateField(fieldId) {
   const field = document.getElementById(fieldId);
   const group = document.getElementById(fieldId + "-group");
-
   if (!field || !group) return true;
 
-  const value = field.value.trim();
+  const value      = field.value.trim();
   const isOptional = OPTIONAL_FIELDS.includes(fieldId);
-  let isValid = true;
+  let   isValid    = true;
 
-  // Optional fields: skip validation if empty, but validate format if filled
   if (!value) {
     if (isOptional) {
       group.classList.remove("error", "success");
@@ -55,118 +52,105 @@ function validateField(fieldId) {
     isValid = emailRegex.test(value);
   } else if (fieldId === "phoneNumber") {
     isValid = phoneRegex.test(value);
-  } else if (fieldId === "latefine") {
-    const num = parseFloat(value);
-    isValid = !isNaN(num) && num >= 0;
-  } else if (fieldId === "borrowingPeriod") {
-    const num = parseInt(value);
-    isValid = !isNaN(num) && num >= 1 && num <= 365;
-  } else if (fieldId === "AlottedBooks") {
-    const num = parseInt(value);
-    isValid = !isNaN(num) && num >= 1 && num <= 50;
   }
 
-  group.classList.toggle("error", !isValid);
-  group.classList.toggle("success", isValid);
-
+  group.classList.toggle("error",   !isValid);
+  group.classList.toggle("success",  isValid);
   return isValid;
 }
 
 // ===========================
-// Validate Full Form
+// Password Validation
+// ===========================
+function validatePasswords() {
+  const pw   = document.getElementById("adminPassword");
+  const cpw  = document.getElementById("adminConfirmPassword");
+  const pwG  = document.getElementById("adminPassword-group");
+  const cpwG = document.getElementById("adminConfirmPassword-group");
+  let valid  = true;
+
+  if (!pw?.value || pw.value.length < 8) {
+    pwG?.classList.add("error");
+    pwG?.classList.remove("success");
+    valid = false;
+  } else {
+    pwG?.classList.remove("error");
+    pwG?.classList.add("success");
+  }
+
+  if (!cpw?.value || cpw.value !== pw?.value) {
+    cpwG?.classList.add("error");
+    cpwG?.classList.remove("success");
+    valid = false;
+  } else {
+    cpwG?.classList.remove("error");
+    cpwG?.classList.add("success");
+  }
+
+  return valid;
+}
+
+// ===========================
+// Admin Name Validation
+// ===========================
+function validateAdminFullName() {
+  const field = document.getElementById("adminFullName");
+  const group = document.getElementById("adminFullName-group");
+  if (!field || !group) return true;
+  const isValid = field.value.trim().length > 0;
+  group.classList.toggle("error",   !isValid);
+  group.classList.toggle("success",  isValid);
+  return isValid;
+}
+
+// ===========================
+// Institution Name Validation
+// (only when type === Institution)
+// ===========================
+function validateInstituteName() {
+  const group = document.getElementById("instituteName-group");
+  if (!group || group.style.display === "none") return true;
+  const field   = document.getElementById("instituteName");
+  const isValid = field?.value.trim().length > 0;
+  group.classList.toggle("error",   !isValid);
+  group.classList.toggle("success",  isValid);
+  return isValid;
+}
+
+// ===========================
+// Declaration Validation
+// ===========================
+function validateDeclaration() {
+  const checkbox = document.getElementById("declaration");
+  const box      = document.getElementById("declaration-group");
+  if (!checkbox || !box) return true;
+  const isChecked = checkbox.checked;
+  box.classList.toggle("error", !isChecked);
+  return isChecked;
+}
+
+// ===========================
+// Full Form Validation
 // ===========================
 function validateForm() {
-  return FIELD_IDS.every(id => validateField(id));
-}
-
-// ===========================
-// Collect Form Data
-// ===========================
-function collectFormData() {
-  return Object.fromEntries(
-    FIELD_IDS.map(id => [id, document.getElementById(id)?.value.trim() ?? ""])
-  );
-}
-
-// ===========================
-// Clear Form Fields
-// ===========================
-function clearFields() {
-  FIELD_IDS.forEach(fieldId => {
-    const field = document.getElementById(fieldId);
-    const group = document.getElementById(fieldId + "-group");
-    if (field) field.value = "";
-    if (group) group.classList.remove("error", "success");
-  });
+  const main        = FIELD_IDS.every(id => validateField(id));
+  const instName    = validateInstituteName();
+  const name        = validateAdminFullName();
+  const pw          = validatePasswords();
+  const declaration = validateDeclaration();
+  return main && instName && name && pw && declaration;
 }
 
 // ===========================
 // Reset Button State
 // ===========================
 function resetButton() {
-  const registerBtn = document.getElementById("registerBtn");
-  if (!registerBtn) return;
-  const btnText = registerBtn.querySelector(".btn-text");
-  registerBtn.disabled = false;
-  registerBtn.classList.remove("loading");
+  const btn     = document.getElementById("registerBtn");
+  const btnText = btn?.querySelector(".btn-text");
+  if (!btn) return;
+  btn.disabled = false;
+  btn.classList.remove("loading");
   if (btnText) btnText.textContent = "Create Library Account";
-}
-
-// ===========================
-// Register
-// ===========================
-async function register() {
-  if (!validateForm()) {
-    showMessage("⚠️ Please fix the errors above before submitting.", "error");
-    return;
-  }
-
-  const registerBtn = document.getElementById("registerBtn");
-  const btnText = registerBtn?.querySelector(".btn-text");
-
-  if (registerBtn) registerBtn.disabled = true;
-  if (registerBtn) registerBtn.classList.add("loading");
-  if (btnText) btnText.textContent = "Registering...";
-
-  try {
-    if (window.pywebview?.api?.submit_registration) {
-      const response = await window.pywebview.api.submit_registration(collectFormData());
-      console.log("Registration response:", response);
-
-      if (response.check_internet === false) {
-        showMessage("⚠️ No internet connection. Please check your network settings.", "error");
-      } else if (response.valid_email === false) {
-        showMessage("⚠️ Invalid email structure.", "error");
-      } else if (response.is_valid === false) {
-        showMessage("⚠️ Invalid or duplicate email.", "error");
-      } else if (response.Status === true) {
-        showMessage("✅ Registration successful!\n\n📁 Check the Downloads folder for Excel templates.", "success");
-        clearFields();
-      } else {
-        showMessage(`⚠️ Registration failed: ${response.message || "Unknown error"}`, "error");
-      }
-    } else {
-      // Django fallback — submit form normally
-      document.getElementById("registrationForm")?.submit();
-      return;
-    }
-  } catch (error) {
-    console.error("Registration error:", error);
-    showMessage("❌ Registration failed. Please try again.", "error");
-  }
-
-  resetButton();
-}
-
-// ===========================
-// Go Back (PyWebView)
-// ===========================
-function goBack() {
-  if (window.pywebview?.api?.go_back) {
-    window.pywebview.api.go_back();
-  } else {
-    window.history.back();
-  }
 }
 
 // ===========================
@@ -175,21 +159,138 @@ function goBack() {
 document.addEventListener("DOMContentLoaded", function () {
   console.log("sign_up.js loaded");
 
-  // Attach blur + live validation to all fields
+  // ── Logo upload: live preview + validation ────────────────────
+  const logoInput    = document.getElementById("libraryLogo");
+  const logoPreview  = document.getElementById("logoPreview");
+  const logoWrap     = document.getElementById("logoPreviewWrap");
+  const logoFileName = document.getElementById("logoFileName");
+  const logoError    = document.getElementById("logoError");
+
+  logoInput?.addEventListener("change", function () {
+    const file = this.files[0];
+    logoError.classList.remove("visible");
+
+    if (!file) {
+      logoFileName.textContent = "No file chosen";
+      logoWrap.classList.remove("has-upload");
+      return;
+    }
+
+    // Validate type
+    if (!["image/jpeg", "image/png"].includes(file.type)) {
+      logoError.classList.add("visible");
+      this.value = "";
+      logoFileName.textContent = "No file chosen";
+      logoWrap.classList.remove("has-upload");
+      return;
+    }
+
+    // Validate size (2 MB)
+    if (file.size > 2 * 1024 * 1024) {
+      logoError.classList.add("visible");
+      this.value = "";
+      logoFileName.textContent = "No file chosen";
+      logoWrap.classList.remove("has-upload");
+      return;
+    }
+
+    // Show preview
+    logoFileName.textContent = file.name;
+    logoWrap.classList.add("has-upload");
+    const reader = new FileReader();
+    reader.onload = e => { logoPreview.src = e.target.result; };
+    reader.readAsDataURL(file);
+  });
+
+  // ── Main fields: blur + live re-validation ────────────────────
   FIELD_IDS.forEach(fieldId => {
     const field = document.getElementById(fieldId);
     if (!field) return;
     field.addEventListener("blur", () => validateField(fieldId));
     field.addEventListener("input", () => {
-      const group = document.getElementById(fieldId + "-group");
-      if (group?.classList.contains("error")) validateField(fieldId);
+      if (document.getElementById(fieldId + "-group")?.classList.contains("error")) {
+        validateField(fieldId);
+      }
     });
   });
 
-  // Registration form submit
+  // ── Password fields ───────────────────────────────────────────
+  ["adminPassword", "adminConfirmPassword"].forEach(id => {
+    const field = document.getElementById(id);
+    field?.addEventListener("blur",  validatePasswords);
+    field?.addEventListener("input", () => {
+      if (document.getElementById(id + "-group")?.classList.contains("error")) {
+        validatePasswords();
+      }
+    });
+  });
+
+  // ── Admin full name ───────────────────────────────────────────
+  const nameField = document.getElementById("adminFullName");
+  nameField?.addEventListener("blur",  validateAdminFullName);
+  nameField?.addEventListener("input", () => {
+    if (document.getElementById("adminFullName-group")?.classList.contains("error")) {
+      validateAdminFullName();
+    }
+  });
+
+  // ── Institution name ──────────────────────────────────────────
+  const instField = document.getElementById("instituteName");
+  instField?.addEventListener("blur",  validateInstituteName);
+  instField?.addEventListener("input", () => {
+    if (document.getElementById("instituteName-group")?.classList.contains("error")) {
+      validateInstituteName();
+    }
+  });
+
+  // ── Declaration checkbox ──────────────────────────────────────
+  document.getElementById("declaration")
+    ?.addEventListener("change", () => {
+      if (document.getElementById("declaration-group")?.classList.contains("error")) {
+        validateDeclaration();
+      }
+    });
+
+  // ── Institute type → show / hide institution name ─────────────
+  const instituteType      = document.getElementById("instituteType");
+  const instituteNameGroup = document.getElementById("instituteName-group");
+  const instituteNameInput = document.getElementById("instituteName");
+
+  if (instituteType && instituteNameGroup && instituteNameInput) {
+    // Hidden on load
+    instituteNameGroup.style.display = "none";
+
+    instituteType.addEventListener("change", function () {
+      if (this.value === "Institution") {
+        instituteNameGroup.style.display = "block";
+      } else {
+        instituteNameGroup.style.display = "none";
+        instituteNameInput.value = "";
+        instituteNameGroup.classList.remove("error", "success");
+      }
+    });
+  }
+
+  // ── Form submit ───────────────────────────────────────────────
   document.getElementById("registrationForm")
     ?.addEventListener("submit", function (e) {
       e.preventDefault();
-      register();
+
+      if (!validateForm()) {
+        showMessage("⚠️ Please fix the errors above before submitting.", "error");
+        document.querySelector(".form-group.error")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+
+      // Loading state
+      const btn     = document.getElementById("registerBtn");
+      const btnText = btn?.querySelector(".btn-text");
+      if (btn)     btn.disabled = true;
+      if (btn)     btn.classList.add("loading");
+      if (btnText) btnText.textContent = "Registering...";
+
+      // Native Django POST
+      this.submit();
     });
 });

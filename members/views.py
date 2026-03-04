@@ -39,6 +39,20 @@ def _get_role_form(role):
     return _ROLE_FORM_MAP.get(role, StudentMemberForm)
 
 
+def _get_institute_type(user):
+    """
+    Return the institute_type string for this user's Library, or "" if none.
+
+    Gating logic consumed by member_add / member_edit:
+      "private"     → Student + Teacher cards shown; General hidden.
+      anything else → General card only; Student + Teacher hidden.
+    """
+    try:
+        return user.library.institute_type or ""
+    except Exception:
+        return ""
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
@@ -315,9 +329,21 @@ def member_add(request):
     GeneralMemberForm) so each role only validates and saves its relevant
     fields.  Supports select-or-create for Department, Course, AcademicYear,
     Semester.
+
+    institute_type gating
+    ─────────────────────
+    • "Institution"  → Student + Teacher cards shown; default role = "student".
+    • anything else  → General card only; default role = "general".
+
+    `institute_type` is passed to the template so role cards can be hidden
+    server-side, and embedded as window.INSTITUTE_TYPE for the JS layer.
     """
+    institute_type  = _get_institute_type(request.user)
+    is_institution  = (institute_type == "Institution")
+    default_role    = "student" if is_institution else "general"
+
     if request.method == "POST":
-        role      = request.POST.get("role", "student")
+        role      = request.POST.get("role", default_role)
         FormClass = _get_role_form(role)
         form      = FormClass(request.POST, request.FILES, user=request.user)
         if form.is_valid():
@@ -330,11 +356,13 @@ def member_add(request):
         else:
             messages.error(request, "Please correct the errors below.")
     else:
-        form = StudentMemberForm(user=request.user)
+        FormClass = _get_role_form(default_role)
+        form      = FormClass(user=request.user)
 
     context = {
         **_owner_ctx(request),
-        "form": form,
+        "form":           form,
+        "institute_type": institute_type,
     }
     return render(request, "members/member_add.html", context)
 
@@ -345,8 +373,12 @@ def member_edit(request, pk):
     Edit an existing member.
     The role-specific form is chosen based on the submitted role (POST) or the
     member's current role (GET), so each role only validates its own fields.
+
+    institute_type is passed to the template so role cards are hidden
+    consistently with member_add.
     """
-    member = get_object_or_404(Member, pk=pk, owner=request.user)
+    member         = get_object_or_404(Member, pk=pk, owner=request.user)
+    institute_type = _get_institute_type(request.user)
 
     if request.method == "POST":
         role      = request.POST.get("role", member.role)
@@ -368,8 +400,9 @@ def member_edit(request, pk):
 
     context = {
         **_owner_ctx(request),
-        "form":   form,
-        "member": member,
+        "form":           form,
+        "member":         member,
+        "institute_type": institute_type,
     }
     return render(request, "members/member_edit.html", context)
 

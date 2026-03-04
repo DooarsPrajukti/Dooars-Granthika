@@ -7,23 +7,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/members/member_add.css' %}" />
-<style>
-/* ── Role selector cards ─────────────────────────────────────────── */
-.role-selector{display:flex;gap:1rem;flex-wrap:wrap;margin-top:.5rem}
-.role-option{flex:1;min-width:150px;display:flex;flex-direction:column;align-items:center;
-  gap:.4rem;padding:1.25rem 1rem;border:2px solid #e5e7eb;border-radius:12px;cursor:pointer;
-  transition:border-color .2s,background .2s;background:#fff;text-align:center}
-.role-option input[type="radio"]{display:none}
-.role-option i{font-size:1.75rem;color:#6b7280}
-.role-option span{font-weight:600;color:#374151;font-size:.95rem}
-.role-option small{color:#9ca3af;font-size:.8rem}
-.role-option.selected,.role-option:hover{border-color:#3b82f6;background:#eff6ff}
-.role-option.selected i,.role-option:hover i{color:#3b82f6}
-.role-option[data-role="teacher"].selected,.role-option[data-role="teacher"]:hover{border-color:#8b5cf6;background:#f5f3ff}
-.role-option[data-role="teacher"].selected i,.role-option[data-role="teacher"]:hover i{color:#8b5cf6}
-.role-option[data-role="general"].selected,.role-option[data-role="general"]:hover{border-color:#6b7280;background:#f9fafb}
-.role-option[data-role="general"].selected i,.role-option[data-role="general"]:hover i{color:#6b7280}
-</style>
+
 {% endblock %}
 
 {% block content %}
@@ -47,6 +31,8 @@
         <label class="required">Select Role</label>
         <div class="role-selector" id="roleSelectorGroup">
 
+          {# ── Student card: shown for Institution type only ── #}
+          {% if institute_type == "Institution" %}
           <label class="role-option {% if form.role.value == 'student' or not form.role.value %}selected{% endif %}" data-role="student">
             <input type="radio" name="role" value="student"
                    {% if form.role.value == 'student' or not form.role.value %}checked{% endif %} />
@@ -54,7 +40,10 @@
             <span>Student</span>
             <small>Enrolled academic student</small>
           </label>
+          {% endif %}
 
+          {# ── Teacher card: shown for Institution type only ── #}
+          {% if institute_type == "Institution" %}
           <label class="role-option {% if form.role.value == 'teacher' %}selected{% endif %}" data-role="teacher">
             <input type="radio" name="role" value="teacher"
                    {% if form.role.value == 'teacher' %}checked{% endif %} />
@@ -62,14 +51,18 @@
             <span>Teacher / Faculty</span>
             <small>Teaching or research staff</small>
           </label>
+          {% endif %}
 
-          <label class="role-option {% if form.role.value == 'general' %}selected{% endif %}" data-role="general">
+          {# ── General card: shown for all non-Institution institutes ── #}
+          {% if institute_type != "Institution" %}
+          <label class="role-option {% if form.role.value == 'general' or not form.role.value %}selected{% endif %}" data-role="general">
             <input type="radio" name="role" value="general"
-                   {% if form.role.value == 'general' %}checked{% endif %} />
+                   {% if form.role.value == 'general' or not form.role.value %}checked{% endif %} />
             <i class="fas fa-user"></i>
             <span>General Member</span>
             <small>Govt / Rural / Urban / Public</small>
           </label>
+          {% endif %}
 
         </div>
         {% if form.role.errors %}<span class="error-message">{{ form.role.errors.0 }}</span>{% endif %}
@@ -147,7 +140,6 @@
           {% if form.phone.errors %}<span class="error-message">{{ form.phone.errors.0 }}</span>{% endif %}
         </div>
 
-        <!-- Alternate Phone — all roles -->
         <div class="form-group">
           <label for="alternatePhone">Alternate Phone</label>
           <input type="tel" id="alternatePhone" name="alternate_phone" class="form-control"
@@ -156,7 +148,8 @@
           {% if form.alternate_phone.errors %}<span class="error-message">{{ form.alternate_phone.errors.0 }}</span>{% endif %}
         </div>
 
-        <!-- Guardian Phone — student only -->
+        {# Guardian phone — student only; hidden server-side for non-Institution #}
+        {% if institute_type == "Institution" %}
         <div class="form-group" id="guardian-phone-wrapper">
           <label for="guardianPhone">Guardian / Parent Phone</label>
           <input type="tel" id="guardianPhone" name="guardian_phone" class="form-control"
@@ -164,6 +157,7 @@
                  value="{{ form.guardian_phone.value|default:'' }}" />
           {% if form.guardian_phone.errors %}<span class="error-message">{{ form.guardian_phone.errors.0 }}</span>{% endif %}
         </div>
+        {% endif %}
 
       </div>
     </div>
@@ -172,14 +166,17 @@
     <div class="form-section">
       <div class="form-section-title">
         <i class="fas fa-graduation-cap"></i>
-        <span id="academicSectionTitle">Academic Information</span>
+        <span id="academicSectionTitle">
+          {% if institute_type == "Institution" %}Academic Information{% else %}Additional Information{% endif %}
+        </span>
       </div>
 
       <div class="form-subsection-label">
         <i class="fas fa-list-ul"></i> Select or Create
       </div>
 
-      <!-- Department — all roles -->
+      {# Department — private institutes only (Student / Teacher roles) #}
+      {% if institute_type == "Institution" %}
       <div class="form-group--soc">
         <div class="select-or-create" id="soc-department">
           <div class="select-or-create__left">
@@ -209,6 +206,10 @@
         </div>
         {% if form.department.errors %}<span class="error-message">{{ form.department.errors.0 }}</span>{% endif %}
       </div>
+      {% endif %}
+
+      {# Course, Academic Year, Semester — Institution only #}
+      {% if institute_type == "Institution" %}
 
       <!-- Course — student only -->
       <div class="form-group--soc role-field student-field" id="soc-course-wrapper" style="margin-bottom:1rem;">
@@ -297,8 +298,11 @@
         {% if form.semester.errors %}<span class="error-message">{{ form.semester.errors.0 }}</span>{% endif %}
       </div>
 
-      <!-- Area Type — general only -->
-      <div class="form-group role-field general-field" id="area-type-wrapper" style="margin-bottom:1rem;">
+      {% endif %}{# end institute_type == "Institution" #}
+
+      {# Area Type — non-Institution type only #}
+      {% if institute_type != "Institution" %}
+      <div class="form-group" id="area-type-wrapper" style="margin-bottom:1rem;">
         <label for="areaType">Area Type</label>
         <select id="areaType" name="area_type" class="form-control">
           <option value="">— Select area type —</option>
@@ -309,6 +313,7 @@
         </select>
         <small class="form-hint">Rural / Urban classification for community members.</small>
       </div>
+      {% endif %}
 
       <hr class="form-subsection-divider" />
 
@@ -318,17 +323,24 @@
 
       <div class="form-grid">
 
-        <!-- Roll Number / Employee ID / Govt ID — label changes by role -->
+        <!-- Roll Number (private) / Government ID (non-Institution, required) -->
         <div class="form-group" id="roll-wrapper">
-          <label for="rollNumber" id="roll-label">Roll Number</label>
-          <input type="text" id="rollNumber" name="roll_number" class="form-control"
-                 id="roll-input"
-                 placeholder="e.g. CS2024001"
-                 value="{{ form.roll_number.value|default:'' }}" />
+          {% if institute_type == "Institution" %}
+            <label for="rollNumber" id="roll-label">Roll Number</label>
+            <input type="text" id="rollNumber" name="roll_number" class="form-control"
+                   placeholder="e.g. CS2024001"
+                   value="{{ form.roll_number.value|default:'' }}" />
+          {% else %}
+            <label for="rollNumber" id="roll-label" class="required">Government ID</label>
+            <input type="text" id="rollNumber" name="roll_number" class="form-control" required
+                   placeholder="Aadhaar / Voter ID / PAN…"
+                   value="{{ form.roll_number.value|default:'' }}" />
+          {% endif %}
           {% if form.roll_number.errors %}<span class="error-message">{{ form.roll_number.errors.0 }}</span>{% endif %}
         </div>
 
-        <!-- Admission Year — student only -->
+        {# Admission Year — Institution only #}
+        {% if institute_type == "Institution" %}
         <div class="form-group role-field student-field" id="admission-wrapper">
           <label for="admissionYear">Admission Year</label>
           <input type="number" id="admissionYear" name="admission_year" class="form-control"
@@ -336,6 +348,7 @@
                  value="{{ form.admission_year.value|default:'' }}" />
           {% if form.admission_year.errors %}<span class="error-message">{{ form.admission_year.errors.0 }}</span>{% endif %}
         </div>
+        {% endif %}
 
         <div class="form-group">
           <label for="status" class="required">Status</label>
@@ -347,12 +360,13 @@
           {% if form.status.errors %}<span class="error-message">{{ form.status.errors.0 }}</span>{% endif %}
         </div>
 
-        <!-- Specialization / Designation / Occupation — label changes by role -->
+        <!-- Specialization / Designation / Occupation -->
         <div class="form-group">
-          <label for="specialization" id="spec-label">Specialization / Subject</label>
+          <label for="specialization" id="spec-label">
+            {% if institute_type == "Institution" %}Specialization / Subject{% else %}Occupation{% endif %}
+          </label>
           <input type="text" id="specialization" name="specialization" class="form-control"
-                 id="spec-input"
-                 placeholder="e.g. Machine Learning, Finance…"
+                 placeholder="{% if institute_type == 'Institution' %}e.g. Machine Learning, Finance…{% else %}e.g. Farmer, Govt. Teacher…{% endif %}"
                  value="{{ form.specialization.value|default:'' }}" />
           {% if form.specialization.errors %}<span class="error-message">{{ form.specialization.errors.0 }}</span>{% endif %}
         </div>
@@ -410,88 +424,5 @@
 {% block extra_js %}
 <script src="{% static 'js/members/members.js' %}"></script>
 <script src="{% static 'js/members/member_add.js' %}"></script>
-<script>
-(function () {
-  /*
-   * Role-based field visibility and label changes.
-   *
-   * student-field  → visible for Student only
-   * general-field  → visible for General only
-   * (no class)     → visible for all roles
-   */
 
-  var SECTION_TITLES = {
-    student: "Academic Information",
-    teacher: "Professional Information",
-    general: "Additional Information",
-  };
-
-  // Fields with dynamic labels per role
-  var ROLE_LABELS = {
-    "roll-label":  { student: "Roll Number",   teacher: "Employee ID",     general: "Government ID" },
-    "spec-label":  { student: "Specialization / Subject", teacher: "Designation / Post", general: "Occupation" },
-    "notes-label": { student: "Notes / Remarks", teacher: "Notes / Remarks", general: "Notes / Remarks" },
-    "dept-star":   { student: "*", teacher: "*", general: "" },  // dept optional for general
-  };
-
-  // Placeholder changes per role
-  var ROLE_PLACEHOLDERS = {
-    "rollNumber":      { student: "e.g. CS2024001",                teacher: "e.g. EMP-2024-001",           general: "Aadhaar / Voter ID / PAN…" },
-    "specialization":  { student: "e.g. Machine Learning, Finance…", teacher: "e.g. Assistant Professor, HOD…", general: "e.g. Farmer, Govt. Teacher…" },
-  };
-
-  function applyRole(role) {
-    // Section heading
-    var titleEl = document.getElementById("academicSectionTitle");
-    if (titleEl) titleEl.textContent = SECTION_TITLES[role] || "Academic Information";
-
-    // Show/hide .student-field elements
-    document.querySelectorAll(".student-field").forEach(function (el) {
-      el.style.display = (role === "student") ? "" : "none";
-    });
-
-    // Show/hide .general-field elements
-    document.querySelectorAll(".general-field").forEach(function (el) {
-      el.style.display = (role === "general") ? "" : "none";
-    });
-
-    // Guardian phone — student only
-    var guardianWrapper = document.getElementById("guardian-phone-wrapper");
-    if (guardianWrapper) guardianWrapper.style.display = (role === "student") ? "" : "none";
-
-    // Dynamic labels
-    Object.keys(ROLE_LABELS).forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el && ROLE_LABELS[id][role] !== undefined) {
-        el.textContent = ROLE_LABELS[id][role];
-      }
-    });
-
-    // Dynamic placeholders
-    Object.keys(ROLE_PLACEHOLDERS).forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el && ROLE_PLACEHOLDERS[id][role]) {
-        el.placeholder = ROLE_PLACEHOLDERS[id][role];
-      }
-    });
-  }
-
-  document.addEventListener("DOMContentLoaded", function () {
-    // Card click → highlight + apply
-    document.querySelectorAll(".role-option").forEach(function (label) {
-      label.addEventListener("click", function () {
-        document.querySelectorAll(".role-option").forEach(function (l) {
-          l.classList.remove("selected");
-        });
-        this.classList.add("selected");
-        applyRole(this.dataset.role);
-      });
-    });
-
-    // On page load — apply the already-checked role (handles validation re-renders)
-    var checked = document.querySelector('input[name="role"]:checked');
-    if (checked) applyRole(checked.value);
-  });
-})();
-</script>
 {% endblock %}

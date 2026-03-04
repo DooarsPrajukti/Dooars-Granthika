@@ -427,20 +427,30 @@
         <p class="section-desc">Set how many books each member type can borrow at once.</p>
 
         <div class="form-grid">
-          <div class="field-group">
-            <label class="field-label" for="student_borrow_limit">Student Borrow Limit</label>
-            <input class="field-input" type="number" id="student_borrow_limit"
-                   name="student_borrow_limit" min="0"
-                   value="{{ member_cfg.student_borrow_limit }}" />
-            <span class="field-hint">Number of books a student can borrow at once. 0 = unlimited.</span>
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="teacher_borrow_limit">Teacher / Faculty Borrow Limit</label>
-            <input class="field-input" type="number" id="teacher_borrow_limit"
-                   name="teacher_borrow_limit" min="0"
-                   value="{{ member_cfg.teacher_borrow_limit }}" />
-            <span class="field-hint">Number of books a teacher/faculty can borrow at once. 0 = unlimited.</span>
-          </div>
+          {% if library.institute_type == "Institution" %}
+            <div class="field-group">
+              <label class="field-label" for="student_borrow_limit">Student Borrow Limit</label>
+              <input class="field-input" type="number" id="student_borrow_limit"
+                     name="student_borrow_limit" min="0"
+                     value="{{ member_cfg.student_borrow_limit }}" />
+              <span class="field-hint">Number of books a student can borrow at once. 0 = unlimited.</span>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="teacher_borrow_limit">Teacher / Faculty Borrow Limit</label>
+              <input class="field-input" type="number" id="teacher_borrow_limit"
+                     name="teacher_borrow_limit" min="0"
+                     value="{{ member_cfg.teacher_borrow_limit }}" />
+              <span class="field-hint">Number of books a teacher/faculty can borrow at once. 0 = unlimited.</span>
+            </div>
+          {% else %}
+            <div class="field-group">
+              <label class="field-label" for="member_borrow_limit">Member Borrow Limit</label>
+              <input class="field-input" type="number" id="member_borrow_limit"
+                     name="member_borrow_limit" min="0"
+                     value="{{ member_cfg.member_borrow_limit }}" />
+              <span class="field-hint">Number of books a member can borrow at once. 0 = unlimited.</span>
+            </div>
+          {% endif %}
         </div>
       </div>
 

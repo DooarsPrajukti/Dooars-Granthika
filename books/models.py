@@ -1,6 +1,9 @@
 from django.conf import settings
 from django.db import models, transaction
 from django.utils.text import slugify
+import uuid
+
+from core.id_generator import generate_compact_id
 
 
 class Category(models.Model):
@@ -27,46 +30,6 @@ class Category(models.Model):
         return self.name
 
 
-def _generate_book_id(owner):
-    """
-    Generate a unique Book ID for the given owner.
-
-    Format:  <PREFIX><NNN>
-      PREFIX  — first 3 chars of the owner's library/username, uppercased.
-      NNN     — zero-padded 3-digit serial, scoped per owner.
-
-    The SELECT … FOR UPDATE lock on the last book row prevents duplicate
-    serials under concurrent requests.
-    """
-    # Derive prefix from the owner's display name or username.
-    # Prefer `library_name` if your User model exposes it; fall back to username.
-    source = (
-        getattr(owner, "library_name", None)
-        or getattr(owner, "get_full_name", lambda: "")()
-        or owner.username
-    )
-    prefix = source.replace(" ", "")[:3].upper() or "LIB"
-
-    # Lock the most-recently-created book for this owner to get a safe serial.
-    with transaction.atomic():
-        last = (
-            Book.objects.select_for_update()
-            .filter(owner=owner, book_id__startswith=prefix)
-            .order_by("-book_id")
-            .first()
-        )
-        if last and last.book_id:
-            try:
-                last_serial = int(last.book_id[len(prefix):])
-            except (ValueError, IndexError):
-                last_serial = 0
-        else:
-            last_serial = 0
-
-        new_serial = last_serial + 1
-        return f"{prefix}{new_serial:03d}"
-
-
 class Book(models.Model):
     LANGUAGE_CHOICES = [
         ("English",  "English"),
@@ -82,14 +45,37 @@ class Book(models.Model):
         related_name="books",
     )
 
-    # ── Auto-generated unique Book ID ─────────────────────────────────
+    # ── Compact Random Book ID ─────────────────────────────────────────────
     book_id = models.CharField(
-        max_length=20,
+        max_length=30,
         unique=True,
         editable=False,
         blank=True,
+        db_index=True,
         verbose_name="Book ID",
-        help_text="Auto-generated. Format: <PREFIX><NNN> e.g. DOO001",
+        help_text=(
+            "Auto-generated compact random ID. "
+            "Format: DG<LIB>BK<YY><8-digit-random>  e.g. DGDOOBK2648392071"
+        ),
+    )
+    # Full year the book was catalogued (last 2 digits embedded in book_id;
+    # full year stored here for filtering / reporting without string parsing).
+    entry_year = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="Full year the book was added (auto-set, do not override).",
+    )
+    # ── Internal UUID (two-step migration) ───────────────────────────────────
+    # Step 1 migration: null=True, no default → Django adds column safely.
+    # Step 2 migration (data migration): populate NULL rows with uuid.uuid4().
+    # Step 3 migration: set null=False once all rows have a value.
+    internal_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        editable=False,
+        help_text="Internal immutable UUID — do not expose in public-facing UI.",
     )
 
     title            = models.CharField(max_length=255)
@@ -129,9 +115,16 @@ class Book(models.Model):
         return f"{self.title} — {self.author}"
 
     def save(self, *args, **kwargs):
-        # Generate book_id only once (on first save / creation).
+        # ── Auto-generate compact book_id on first save ────────────────────
         if not self.book_id:
-            self.book_id = _generate_book_id(self.owner)
+            self.book_id = generate_compact_id(
+                owner       = self.owner,
+                module_code = "BK",
+                model_class = Book,
+                field_name  = "book_id",
+            )
+            from datetime import datetime
+            self.entry_year = datetime.now().year
         super().save(*args, **kwargs)
 
     # ── Properties ────────────────────────────────────────────────────
