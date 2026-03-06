@@ -5,40 +5,6 @@
 (function () {
   'use strict';
 
-  /* ── Mark Fine as Paid ── */
-  const markFinePaidBtn = document.getElementById('markFinePaidBtn');
-  if (markFinePaidBtn) {
-    markFinePaidBtn.addEventListener('click', function () {
-      const txnId = this.dataset.id;
-      if (!confirm('Confirm that the fine has been collected?')) return;
-
-      this.disabled = true;
-      this.innerHTML = '<svg viewBox="0 0 20 20" fill="none" style="width:15px;height:15px;animation:spin .6s linear infinite"><path d="M10 2a8 8 0 1 1-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Processing…';
-
-      fetch(`/transactions/${txnId}/mark-fine-paid/`, {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': getCsrf(),
-          'Content-Type': 'application/json',
-        },
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.success) {
-            showToast('Fine marked as paid successfully.', 'success');
-            setTimeout(() => window.location.reload(), 1000);
-          } else {
-            showToast(data.error || 'Something went wrong.', 'error');
-            this.disabled = false;
-          }
-        })
-        .catch(() => {
-          showToast('Network error. Please try again.', 'error');
-          this.disabled = false;
-        });
-    });
-  }
-
   /* ── Toast Notification ── */
   function showToast(message, type = 'info') {
     const toast = document.createElement('div');
@@ -79,6 +45,28 @@
     return meta ? meta.value : '';
   }
 
+  /* ── Pay the Fine anchor links: confirm before navigating ── */
+  document.querySelectorAll('.action-btn--pay, .btn--primary.btn--block').forEach(function (el) {
+    // Only intercept <a> elements (not disabled)
+    if (el.tagName !== 'A') return;
+    if (el.getAttribute('aria-disabled') === 'true') return;
+
+    el.addEventListener('click', function (e) {
+      if (!confirm('Proceed to payment for this fine?')) {
+        e.preventDefault();
+      }
+    });
+  });
+
+  /* ── Waive fine: confirm before submit ── */
+  document.querySelectorAll('.action-btn--waive').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      if (!confirm('Are you sure you want to waive this fine? This cannot be undone.')) {
+        e.preventDefault();
+      }
+    });
+  });
+
   /* ── Print cleanup ── */
   window.addEventListener('beforeprint', () => {
     document.querySelectorAll('.page-header__actions, .info-card__link').forEach(el => {
@@ -113,6 +101,12 @@
       card.style.opacity = '1';
       card.style.transform = 'translateY(0)';
     });
+  });
+
+  /* ── Table row hover highlight ── */
+  document.querySelectorAll('.table-row').forEach(row => {
+    row.addEventListener('mouseenter', () => row.classList.add('table-row--hovered'));
+    row.addEventListener('mouseleave', () => row.classList.remove('table-row--hovered'));
   });
 
 })();

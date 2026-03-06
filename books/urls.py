@@ -19,7 +19,12 @@ urlpatterns = [
 
     # ── Cover image (blob served from DB) ─────────────────────
     path("<int:pk>/cover/",   views.book_cover,           name="book_cover"),
+
     # ── Import ────────────────────────────────────────────────
     path("import/",           views.import_books_excel,       name="import_books_excel"),
     path("import/template/",  views.download_import_template, name="download_import_template"),
+
+    # ── Physical copy borrow / return ─────────────────────────
+    path("copies/borrow/",    views.borrow_copy,  name="borrow_copy"),
+    path("copies/return/",    views.return_copy,  name="return_copy"),
 ]

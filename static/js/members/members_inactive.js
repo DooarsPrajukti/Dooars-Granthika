@@ -1,45 +1,68 @@
 /**
  * members/members_inactive.js
  * ───────────────────────────
- * Inactive members page JavaScript.
- * Depends on: members.js (loaded before this file in the template).
+ * Inactive members page — button UX only.
+ * Depends on: members.js  (getCsrfToken, showToast)
  *
- * Provides:
- *   - reactivateMember(memberId) — POST to /members/<id>/reactivate/
+ * JS role here:
+ *   ✓ reactivateMember(pk) — POST to reactivate URL, show toast, navigate
  *
- * members.js handles: search, table sort, filter reset, delete.
+ * Called directly from the template:
+ *   <button onclick="reactivateMember({{ member.id }})">
  */
 
 'use strict';
 
 /**
- * Reactivate an inactive member.
- * Uses postAction() from members.js (attaches CSRF token automatically).
- * @param {number} memberId
+ * Reactivate a member via AJAX.
+ * On success: fades the row out, then navigates to the member detail page.
+ * On failure: shows an error toast and re-enables the button.
+ *
+ * @param {number} pk  Django member primary key
  */
-function reactivateMember(memberId) {
-  if (!confirm('Reactivate this member? Their status will be changed to Active.')) return;
-
-  const url = `/members/${memberId}/reactivate/`;
-  const btn = document.querySelector(`[onclick="reactivateMember(${memberId})"]`);
+function reactivateMember(pk) {
+  const url = `/members/${pk}/reactivate/`;
+  const btn = document.querySelector(`[onclick="reactivateMember(${pk})"]`);
 
   if (btn) {
     btn.disabled  = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
   }
 
-  postAction(url)
-    .then((resp) => {
-      if (resp.ok || resp.redirected) {
-        showToast('Member reactivated successfully!', 'success');
-        setTimeout(() => window.location.reload(), 800);
+  fetch(url, {
+    method:  'POST',
+    headers: {
+      'Accept':      'application/json',
+      'X-CSRFToken': getCsrfToken(),
+    },
+  })
+    .then((resp) => resp.json().then((data) => ({ ok: resp.ok, data })))
+    .then(({ ok, data }) => {
+      if (ok && data.success) {
+        showToast(data.message || 'Member reactivated!', 'success');
+        const row = btn ? btn.closest('tr') : null;
+        if (row) {
+          row.style.transition = 'opacity 0.4s';
+          row.style.opacity    = '0';
+          setTimeout(() => {
+            row.remove();
+            if (data.redirect_url) {
+              setTimeout(() => { window.location.href = data.redirect_url; }, 300);
+            }
+          }, 420);
+        } else if (data.redirect_url) {
+          setTimeout(() => { window.location.href = data.redirect_url; }, 800);
+        }
       } else {
-        throw new Error('Server error ' + resp.status);
+        showToast(data.message || 'Could not reactivate member.', 'error');
+        if (btn) {
+          btn.disabled  = false;
+          btn.innerHTML = '<i class="fas fa-redo"></i>';
+        }
       }
     })
-    .catch((err) => {
-      console.error('reactivateMember error:', err);
-      showToast('Failed to reactivate member. Please try again.', 'error');
+    .catch(() => {
+      showToast('Network error. Please try again.', 'error');
       if (btn) {
         btn.disabled  = false;
         btn.innerHTML = '<i class="fas fa-redo"></i>';
@@ -48,18 +71,3 @@ function reactivateMember(memberId) {
 }
 
 window.reactivateMember = reactivateMember;
-
-
-document.addEventListener('DOMContentLoaded', () => {
-
-  // ── Row click → detail page ───────────────────────────────────────────────
-  document.querySelectorAll('#membersTable tbody tr').forEach((row) => {
-    row.style.cursor = 'pointer';
-    row.addEventListener('click', (e) => {
-      if (e.target.closest('.table-actions')) return;
-      const viewLink = row.querySelector('.action-icon.view');
-      if (viewLink) window.location.href = viewLink.href;
-    });
-  });
-
-});

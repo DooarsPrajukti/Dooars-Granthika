@@ -11,7 +11,8 @@ from django import forms
 from datetime import date
 from decimal import Decimal
 
-from .models import Fine, MissingBook, Transaction
+from finance.models import Fine
+from .models import MissingBook, Transaction
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -36,9 +37,26 @@ def _active_loans_count(member, library):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IssueBookForm(forms.Form):
-    member_id     = forms.IntegerField(widget=forms.HiddenInput)
-    book_id       = forms.IntegerField(widget=forms.HiddenInput)
-    issue_date    = forms.DateField(
+    """
+    Accepts the human-readable library card ID and book accession ID.
+
+    Fields posted by the form:
+      member_id    — member.member_id  e.g. "DGDGRST0326001"
+      book_copy_id — book.book_id      e.g. "BK-001"
+
+    clean() resolves both to ORM objects and attaches them as
+    cleaned_data["member"] and cleaned_data["book"].
+    """
+
+    member_id = forms.CharField(
+        max_length=50,
+        error_messages={"required": "Member ID is required."},
+    )
+    book_copy_id = forms.CharField(
+        max_length=50,
+        error_messages={"required": "Book Copy ID is required."},
+    )
+    issue_date = forms.DateField(
         widget=forms.DateInput(attrs={"type": "date"}),
         initial=date.today,
     )
@@ -58,8 +76,35 @@ class IssueBookForm(forms.Form):
         self._library = library
         self._owner   = library.user if library else None
 
-        # loan_duration is a plain IntegerField — no choice rebuilding needed.
-        # Any positive integer supplied by the view is valid.
+    def _get_borrow_limit(self, member=None):
+        """Role-specific borrow limit from LibraryRuleSettings."""
+        role = getattr(member, "role", "") if member else ""
+        try:
+            rules = self._library.rules
+            if role in ("teacher", "faculty", "staff"):
+                limit = getattr(rules, "teacher_borrow_limit", None)
+            else:
+                limit = getattr(rules, "student_borrow_limit", None)
+            if limit is None:
+                limit = getattr(rules, "max_books_per_member", None)
+            if limit is not None:
+                return int(limit)
+        except Exception:
+            pass
+        try:
+            from accounts.models import MemberSettings
+            ms = MemberSettings.objects.get(library=self._library)
+            if ms.borrow_limit:
+                return int(ms.borrow_limit)
+        except Exception:
+            pass
+        return 0
+
+    def clean_member_id(self):
+        return self.cleaned_data["member_id"].strip().upper()
+
+    def clean_book_copy_id(self):
+        return self.cleaned_data["book_copy_id"].strip()
 
     def clean(self):
         cleaned = super().clean()
@@ -67,52 +112,84 @@ class IssueBookForm(forms.Form):
         from members.models import Member
         from books.models import Book
 
-        member_id = cleaned.get("member_id")
-        book_id   = cleaned.get("book_id")
+        raw_member_id   = cleaned.get("member_id", "")
+        raw_book_copy_id = cleaned.get("book_copy_id", "")
 
-        # ── Member: scoped by owner (User), confirmed active ──────────────
-        try:
-            member = Member.objects.get(pk=member_id, owner=self._owner)
-        except Member.DoesNotExist:
-            raise forms.ValidationError(
-                "Selected member not found in this library."
-            )
+        # ── Member: look up by library card ID (member.member_id) ─────────
+        member = None
+        if raw_member_id:
+            try:
+                member = Member.objects.get(
+                    member_id=raw_member_id,
+                    owner=self._owner,
+                )
+            except Member.DoesNotExist:
+                self.add_error(
+                    "member_id",
+                    f'Member ID "{raw_member_id}" not found in this library.'
+                )
+            else:
+                if member.status != "active":
+                    self.add_error(
+                        "member_id",
+                        f"{member.first_name} {member.last_name} is not an active "
+                        f"member (status: {member.get_status_display()}).",
+                    )
+                    member = None
+                else:
+                    active_loans = _active_loans_count(member, self._library)
+                    borrow_limit = self._get_borrow_limit(member)
 
-        if member.status != "active":
-            raise forms.ValidationError(
-                f"{member.first_name} {member.last_name} is not an active member."
-            )
+                    if borrow_limit and active_loans >= borrow_limit:
+                        self.add_error(
+                            "member_id",
+                            f"{member.first_name} {member.last_name} has reached "
+                            f"their borrowing limit ({borrow_limit} books).",
+                        )
+                        member = None
 
-        # Borrow limit comes from accounts.MemberSettings.borrow_limit.
-        active_loans = _active_loans_count(member, self._library)
-        try:
-            from accounts.models import MemberSettings
-            member_settings = MemberSettings.objects.get(library=self._library)
-            borrow_limit    = int(member_settings.borrow_limit or 0)
-        except Exception:
-            borrow_limit = 0
+        if member:
+            cleaned["member"] = member
 
-        if borrow_limit and active_loans >= borrow_limit:
-            raise forms.ValidationError(
-                f"{member.first_name} {member.last_name} has reached their "
-                f"borrowing limit ({borrow_limit} books)."
-            )
+        # ── Book: look up BookCopy by copy_id, then get parent Book ─────────
+        book = None
+        book_copy = None
+        if raw_book_copy_id:
+            from books.models import BookCopy
+            try:
+                book_copy = (
+                    BookCopy.objects
+                    .select_related("book")
+                    .get(copy_id=raw_book_copy_id, book__owner=self._owner)
+                )
+            except BookCopy.DoesNotExist:
+                self.add_error(
+                    "book_copy_id",
+                    f'Book copy ID "{raw_book_copy_id}" not found in this library.'
+                )
+            except Exception as exc:
+                self.add_error(
+                    "book_copy_id",
+                    f'Book copy lookup error: {exc}'
+                )
+            else:
+                book = book_copy.book
+                # Check this specific copy is available
+                copy_status = getattr(book_copy, "status", "available")
+                if copy_status != "available":
+                    self.add_error(
+                        "book_copy_id",
+                        f'Copy "{raw_book_copy_id}" of "{book.title}" is not available '
+                        f'(status: {copy_status}).'
+                    )
+                    book = None
+                    book_copy = None
 
-        # ── Book: scoped by owner, must have copies available ─────────────
-        try:
-            book = Book.objects.get(pk=book_id, owner=self._owner)
-        except Book.DoesNotExist:
-            raise forms.ValidationError(
-                "Selected book not found in this library."
-            )
+        if book:
+            cleaned["book"] = book
+        if book_copy:
+            cleaned["book_copy"] = book_copy
 
-        if book.available_copies < 1:
-            raise forms.ValidationError(
-                f'"{book.title}" has no available copies right now.'
-            )
-
-        cleaned["member"] = member
-        cleaned["book"]   = book
         return cleaned
 
 

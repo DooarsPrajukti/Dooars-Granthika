@@ -26,7 +26,6 @@
       <p class="page-subtitle">Books past their due date that haven't been returned</p>
     </div>
     <div class="page-header__actions">
-      {# Send Reminders is JS-driven only — no server-side bulk URL exists for this action #}
       <button class="btn btn--ghost" id="sendRemindersBtn" type="button">
         <svg viewBox="0 0 20 20" fill="none"><path d="M4 4h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.5"/><path d="M3 5l7 5 7-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         Send Reminders
@@ -45,7 +44,6 @@
     </div>
     <div class="overdue-alert__content">
       <strong>{{ overdue_transactions|length }} book{{ overdue_transactions|length|pluralize }} currently overdue.</strong>
-      {# total_fine is a sum of Decimal values — floatformat:2 avoids raw repr like "123.00000000" #}
       Total accumulated fines: <strong>₹{{ total_fine|floatformat:2 }}</strong>
     </div>
     <button class="overdue-alert__dismiss" id="dismissAlert" type="button" aria-label="Dismiss alert">
@@ -78,8 +76,6 @@
         </div>
         <div class="filter-group">
           <label class="filter-label">Sort By</label>
-          {# View default sort is -overdue_days (most overdue first) when no sort param is set.
-             Pre-select that option when request.GET.sort is absent. #}
           <select name="sort" class="filter-select">
             <option value="-overdue_days" {% if request.GET.sort == '-overdue_days' or not request.GET.sort %}selected{% endif %}>Most Overdue</option>
             <option value="overdue_days"  {% if request.GET.sort == 'overdue_days'  %}selected{% endif %}>Least Overdue</option>
@@ -133,7 +129,19 @@
             </td>
             <td class="td-member">
               <div class="member-cell">
-                <div class="member-avatar">{{ txn.member.first_name|first|upper }}</div>
+                <div class="member-avatar">
+                  {% if txn.member.photo_mime_type %}
+                  <img
+                    src="{% url 'members:member_photo' txn.member.pk %}"
+                    alt="{{ txn.member.first_name }}"
+                    class="member-avatar__photo"
+                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+                  >
+                  {% endif %}
+                  <span class="member-avatar__initial" {% if txn.member.photo_mime_type %}style="display:none"{% endif %}>
+                    {{ txn.member.first_name|first|upper }}
+                  </span>
+                </div>
                 <div class="member-info">
                   <span class="member-name">{{ txn.member.first_name }} {{ txn.member.last_name }}</span>
                   <span class="member-id">{{ txn.member.member_id }}</span>
@@ -154,7 +162,6 @@
                   {{ txn.overdue_days }} day{{ txn.overdue_days|pluralize }}
                 </span>
                 <div class="overdue-bar">
-                  {# Cap the bar at 60 days = 100%; widthratio requires integer-compatible values #}
                   <div class="overdue-bar__fill overdue-bar__fill--{{ txn.overdue_severity }}"
                     style="width: {% if txn.overdue_days >= 60 %}100{% else %}{% widthratio txn.overdue_days 60 100 %}{% endif %}%">
                   </div>
@@ -162,12 +169,10 @@
               </div>
             </td>
             <td class="td-fine">
-              {# fine_amount is a computed Decimal property — floatformat:2 prevents raw repr #}
               <span class="fine-amount fine-amount--overdue">₹{{ txn.fine_amount|floatformat:2 }}</span>
             </td>
             <td class="td-actions">
               <div class="action-group">
-                {# return_book URL requires the transaction pk as positional arg #}
                 <a href="{% url 'transactions:return_book' txn.id %}" class="action-btn action-btn--return">
                   <svg viewBox="0 0 20 20" fill="none"><path d="M4 10h10M10 6l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   Return
@@ -176,7 +181,6 @@
                   <svg viewBox="0 0 20 20" fill="none"><path d="M10 4C5.5 4 2 10 2 10s3.5 6 8 6 8-6 8-6-3.5-6-8-6z" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg>
                   View
                 </a>
-                {# Notify button is JS-driven; stores member email via data attribute for the JS handler #}
                 <button
                   class="action-btn action-btn--notify"
                   type="button"
@@ -206,7 +210,6 @@
     </div>
 
     <!-- Bulk Actions Footer -->
-    {# Bulk mark-lost requires a JS modal (no direct POST URL without a pk) — handled in JS #}
     <div class="table-card__footer table-card__footer--bulk" id="bulkActionsBar" hidden>
       <span class="bulk-selected-count"><span id="selectedCount">0</span> selected</span>
       <div class="bulk-actions">

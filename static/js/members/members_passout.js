@@ -1,30 +1,22 @@
 /**
  * members/members_passout.js
  * ──────────────────────────
- * Pass-out members page JavaScript.
- * Depends on: members.js (loaded before this file in the template).
+ * Passout members page — decoration only.
+ * Depends on: members.js
  *
- * members.js handles: search, table sort, filter reset.
+ * JS role here:
+ *   ✓ Highlight rows where clearance badge is pending (decoration)
+ *
+ * members.js handles: search, sort, filter reset, badge colours, row click.
  */
 
 'use strict';
 
 document.addEventListener('DOMContentLoaded', () => {
 
-  // ── Row click → detail page ───────────────────────────────────────────────
+  // Highlight rows with a pending clearance badge
   document.querySelectorAll('#membersTable tbody tr').forEach((row) => {
-    row.style.cursor = 'pointer';
-    row.addEventListener('click', (e) => {
-      if (e.target.closest('.table-actions')) return;
-      const viewLink = row.querySelector('.action-icon.view');
-      if (viewLink) window.location.href = viewLink.href;
-    });
-  });
-
-  // ── Highlight members with pending clearance ──────────────────────────────
-  document.querySelectorAll('#membersTable tbody tr').forEach((row) => {
-    const clearanceBadge = row.querySelector('.status-badge.pending');
-    if (clearanceBadge) {
+    if (row.querySelector('.status-badge.pending')) {
       row.style.borderLeft = '3px solid #f59e0b';
     }
   });

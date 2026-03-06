@@ -1,28 +1,28 @@
 /**
  * members/cleared_members.js
  * ──────────────────────────
- * Cleared members page JavaScript.
- * Depends on: members.js (loaded before this file in the template).
+ * Cleared members page — button UX only.
+ * Depends on: members.js
  *
- * Provides:
- *   - downloadClearanceCertificate(memberId) – triggers PDF download
- *   - Inline search + table sort (handled by members.js)
+ * JS role here:
+ *   ✓ Spinner on the download certificate button
+ *   ✓ Trigger browser file download from the URL Django returns
+ *
+ * Certificate generation logic lives in the Django view.
  */
 
 'use strict';
 
 /**
  * Download the clearance certificate PDF for a member.
- * The endpoint is a GET request — no CSRF token required.
  * @param {number} memberId
  */
 function downloadClearanceCertificate(memberId) {
   const url = `/members/${memberId}/clearance-certificate/`;
   const btn = document.querySelector(`[onclick="downloadClearanceCertificate(${memberId})"]`);
 
-  // Visual loading feedback
   if (btn) {
-    btn.disabled = true;
+    btn.disabled  = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
   }
 
@@ -32,12 +32,10 @@ function downloadClearanceCertificate(memberId) {
       return resp.blob();
     })
     .then((blob) => {
-      // Detect content type — server sends application/pdf
-      const mimeType = blob.type || 'application/pdf';
-      const objectUrl = URL.createObjectURL(new Blob([blob], { type: mimeType }));
-      const a = document.createElement('a');
-      a.href     = objectUrl;
-      a.download = `clearance_certificate_${memberId}.pdf`;
+      const objectUrl = URL.createObjectURL(new Blob([blob], { type: blob.type || 'application/pdf' }));
+      const a         = document.createElement('a');
+      a.href          = objectUrl;
+      a.download      = `clearance_certificate_${memberId}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -50,18 +48,10 @@ function downloadClearanceCertificate(memberId) {
     })
     .finally(() => {
       if (btn) {
-        btn.disabled = false;
+        btn.disabled  = false;
         btn.innerHTML = '<i class="fas fa-download"></i>';
       }
     });
 }
 
 window.downloadClearanceCertificate = downloadClearanceCertificate;
-
-
-// ── Page initialisation ──────────────────────────────────────────────────────
-
-document.addEventListener('DOMContentLoaded', () => {
-  // Table search, sort, and filter reset are handled by members.js.
-  // Nothing extra needed for this page.
-});

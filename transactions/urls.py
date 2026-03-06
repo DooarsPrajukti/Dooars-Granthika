@@ -34,4 +34,12 @@ urlpatterns = [
     # ── AJAX search APIs (used by issue-book autocomplete) ─────────────
     path("api/members/",            views.member_search_api,  name="member_search_api"),
     path("api/books/",              views.book_search_api,    name="book_search_api"),
+
+    # ── AJAX exact-ID lookup APIs (used by issue-book ID fields) ─────────
+    path("api/member-lookup/",      views.member_lookup_api,  name="member_lookup_api"),
+    path("api/book-lookup/",        views.book_lookup_api,    name="book_lookup_api"),
+
+    # ── Book cover image (BLOB served as HTTP response) ───────────────
+    path("api/book-cover/<int:pk>/", views.book_cover_image,  name="book_cover_image"),
+
 ]

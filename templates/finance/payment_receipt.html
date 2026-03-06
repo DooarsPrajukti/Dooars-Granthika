@@ -1,0 +1,190 @@
+{% extends "dashboard_base.html" %}
+{% load static %}
+
+{% block title %}Payment Receipt — Dooars Granthika{% endblock %}
+{% block nav_transactions %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/finance/payment_receipt.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="pr-wrapper">
+
+  <!-- Breadcrumb -->
+  <nav class="pr-breadcrumb">
+    <a href="{% url 'transactions:transaction_list' %}">Transactions</a>
+    <svg viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <a href="{% url 'finance:income_list' %}">Income</a>
+    <svg viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Receipt #{{ payment.receipt_number|default:payment.pk }}</span>
+  </nav>
+
+  <!-- Actions bar (hidden on print) -->
+  <div class="pr-actions no-print">
+    <a href="{% url 'finance:income_list' %}" class="pr-btn pr-btn--ghost">
+      <svg viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back
+    </a>
+    <div style="display:flex;gap:10px;">
+      <a href="?download=1" class="pr-btn pr-btn--ghost">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M10 3v9M6 9l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 15h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Download PDF
+      </a>
+      <button class="pr-btn pr-btn--primary" onclick="window.print()">
+        <svg viewBox="0 0 20 20" fill="none"><rect x="4" y="2" width="12" height="4" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="8" width="16" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M6 14h8M6 17h5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+        Print Receipt
+      </button>
+    </div>
+  </div>
+
+  <!-- Receipt Card -->
+  <div class="pr-receipt">
+
+    <!-- Receipt Header -->
+    <div class="pr-receipt__header">
+      <div class="pr-receipt__library">
+        <div class="pr-receipt__library-logo">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 4h12a2 2 0 0 1 2 2v14l-7-3.5L4 20V6a2 2 0 0 1 0-2z" stroke="currentColor" stroke-width="1.75"/></svg>
+        </div>
+        <div>
+          <div class="pr-receipt__library-name">{{ payment.library.name|default:"Dooars Granthika" }}</div>
+          <div class="pr-receipt__library-sub">Library Management System</div>
+        </div>
+      </div>
+
+      <div class="pr-receipt__status-block">
+        <div class="pr-receipt__status-icon pr-receipt__status-icon--{% if payment.status == 'success' %}success{% else %}pending{% endif %}">
+          {% if payment.status == 'success' %}
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M8 12l3 3 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          {% else %}
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          {% endif %}
+        </div>
+        <div class="pr-receipt__status-label">
+          Payment {% if payment.status == 'success' %}Successful{% else %}{{ payment.get_status_display }}{% endif %}
+        </div>
+        <div class="pr-receipt__amount">₹{{ payment.amount }}</div>
+        <div class="pr-receipt__date">{{ payment.transaction_date|date:"d F Y, H:i" }}</div>
+      </div>
+
+      {% if payment.receipt_number or payment.gateway_payment_id %}
+      <div class="pr-receipt__ref">
+        <span class="pr-receipt__ref-label">Receipt No.</span>
+        <span class="pr-receipt__ref-value">{{ payment.receipt_number|default:payment.gateway_payment_id }}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Tear Line -->
+    <div class="pr-tear-line">
+      <div class="pr-tear-line__dots"></div>
+      <div class="pr-tear-line__scissors no-print">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="18" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M20 4l-8.5 7.5M20 20l-8.5-7.5M8 6.5l8.5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+
+    <!-- Receipt Body -->
+    <div class="pr-receipt__body">
+
+      <!-- Member & Book -->
+      <div class="pr-section">
+        <div class="pr-section__title">Transaction Details</div>
+        <div class="pr-rows">
+          <div class="pr-row">
+            <span class="pr-row__label">Member</span>
+            <span class="pr-row__value">{{ payment.fine.transaction.member.first_name }} {{ payment.fine.transaction.member.last_name }}</span>
+          </div>
+          <div class="pr-row">
+            <span class="pr-row__label">Member ID</span>
+            <span class="pr-row__value pr-row__value--mono">{{ payment.fine.transaction.member.member_id }}</span>
+          </div>
+          <div class="pr-row">
+            <span class="pr-row__label">Book</span>
+            <span class="pr-row__value">{{ payment.fine.transaction.book.title }}</span>
+          </div>
+          <div class="pr-row">
+            <span class="pr-row__label">Transaction</span>
+            <span class="pr-row__value">#{{ payment.fine.transaction.id }}</span>
+          </div>
+          <div class="pr-row">
+            <span class="pr-row__label">Fine ID</span>
+            <span class="pr-row__value">#F{{ payment.fine.id|stringformat:"04d" }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pr-divider"></div>
+
+      <!-- Payment Info -->
+      <div class="pr-section">
+        <div class="pr-section__title">Payment Information</div>
+        <div class="pr-rows">
+          <div class="pr-row">
+            <span class="pr-row__label">Payment Method</span>
+            <span class="pr-row__value">
+              {% if payment.method == 'online' %}
+                <span class="pr-badge pr-badge--online">
+                  <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5 8c0-3 1.5-5 3-5s3 2 3 5-1.5 5-3 5-3-2-3-5z" stroke="currentColor" stroke-width="1.25"/><path d="M2.5 8h11" stroke="currentColor" stroke-width="1.25"/></svg>
+                  Online
+                </span>
+              {% else %}
+                <span class="pr-badge pr-badge--cash">
+                  <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.25"/></svg>
+                  Cash
+                </span>
+              {% endif %}
+            </span>
+          </div>
+          <div class="pr-row">
+            <span class="pr-row__label">Status</span>
+            <span class="pr-row__value">
+              <span class="pr-badge pr-badge--{% if payment.status == 'success' %}success{% elif payment.status == 'pending' %}pending{% else %}failed{% endif %}">
+                {{ payment.get_status_display }}
+              </span>
+            </span>
+          </div>
+          {% if payment.gateway_order_id %}
+          <div class="pr-row">
+            <span class="pr-row__label">Order ID</span>
+            <span class="pr-row__value pr-row__value--mono">{{ payment.gateway_order_id }}</span>
+          </div>
+          {% endif %}
+          {% if payment.gateway_payment_id %}
+          <div class="pr-row">
+            <span class="pr-row__label">Payment ID</span>
+            <span class="pr-row__value pr-row__value--mono">{{ payment.gateway_payment_id }}</span>
+          </div>
+          {% endif %}
+          {% if payment.collected_by %}
+          <div class="pr-row">
+            <span class="pr-row__label">Collected By</span>
+            <span class="pr-row__value">{{ payment.collected_by }}</span>
+          </div>
+          {% endif %}
+          <div class="pr-row">
+            <span class="pr-row__label">Library</span>
+            <span class="pr-row__value">{{ payment.library.name|default:"Dooars Granthika" }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pr-divider"></div>
+
+      <!-- Total -->
+      <div class="pr-total-row">
+        <span class="pr-total-row__label">Total Paid</span>
+        <span class="pr-total-row__value">₹{{ payment.amount }}</span>
+      </div>
+    </div>
+
+    <!-- Receipt Footer -->
+    <div class="pr-receipt__footer">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M8 1l1.5 4.5H14l-3.75 2.75 1.5 4.5L8 10 4.25 12.75l1.5-4.5L2 5.5h4.5z" stroke="currentColor" stroke-width="1.25"/></svg>
+      This is a computer-generated receipt. No signature required.
+    </div>
+
+  </div><!-- /.pr-receipt -->
+
+</div><!-- /.pr-wrapper -->
+{% endblock %}

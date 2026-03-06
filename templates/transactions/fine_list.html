@@ -30,7 +30,6 @@
   </div>
 
   <!-- Fine Summary Cards -->
-  {# All amounts are Decimal aggregates from the view — floatformat:2 prevents raw repr #}
   <div class="fine-summary-row">
     <div class="fine-summary-tile fine-summary-tile--total">
       <div class="fine-summary-tile__icon">
@@ -76,8 +75,6 @@
 
   <!-- Filter Panel -->
   <div class="filter-panel">
-    {# All filter params (q, status, type, date_from, date_to) are preserved across
-       pagination via manual query string construction in the pagination links below. #}
     <form method="GET" action="" class="filter-form" id="fineFilterForm">
       <div class="filter-panel__search">
         <svg class="search-icon" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.75"/><path d="M13.5 13.5l3 3" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
@@ -101,7 +98,6 @@
         </div>
         <div class="filter-group">
           <label class="filter-label">Fine Type</label>
-          {# View reads request.GET.get("type") — name must be "type" to match #}
           <select name="type" class="filter-select">
             <option value="">All Types</option>
             <option value="overdue" {% if request.GET.type == 'overdue' %}selected{% endif %}>Overdue Fine</option>
@@ -111,19 +107,11 @@
         </div>
         <div class="filter-group">
           <label class="filter-label">Date From</label>
-          <input
-            type="date"
-            name="date_from"
-            value="{{ request.GET.date_from }}"
-            class="filter-input filter-input--date">
+          <input type="date" name="date_from" value="{{ request.GET.date_from }}" class="filter-input filter-input--date">
         </div>
         <div class="filter-group">
           <label class="filter-label">Date To</label>
-          <input
-            type="date"
-            name="date_to"
-            value="{{ request.GET.date_to }}"
-            class="filter-input filter-input--date">
+          <input type="date" name="date_to" value="{{ request.GET.date_to }}" class="filter-input filter-input--date">
         </div>
         <button type="submit" class="btn btn--filter">
           <svg viewBox="0 0 20 20" fill="none"><path d="M3 5h14M6 10h8M9 15h2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
@@ -140,9 +128,6 @@
   <div class="table-card">
     <div class="table-card__header">
       <div class="table-card__info">
-        {# fines is a Paginator Page object.
-           fines|length = count on current page only.
-           fines.paginator.count = total matching records across all pages. #}
         Showing <strong>{{ fines|length }}</strong> of <strong>{{ fines.paginator.count }}</strong> record{{ fines.paginator.count|pluralize }}
       </div>
       <div class="table-card__controls">
@@ -202,7 +187,19 @@
             </td>
             <td class="td-member">
               <div class="member-cell">
-                <div class="member-avatar">{{ fine.transaction.member.first_name|first|upper }}</div>
+                <div class="member-avatar">
+                  {% if fine.transaction.member.photo_mime_type %}
+                  <img
+                    src="{% url 'members:member_photo' fine.transaction.member.pk %}"
+                    alt="{{ fine.transaction.member.first_name }}"
+                    class="member-avatar__photo"
+                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+                  >
+                  {% endif %}
+                  <span class="member-avatar__initial" {% if fine.transaction.member.photo_mime_type %}style="display:none"{% endif %}>
+                    {{ fine.transaction.member.first_name|first|upper }}
+                  </span>
+                </div>
                 <div class="member-info">
                   <span class="member-name">{{ fine.transaction.member.first_name }} {{ fine.transaction.member.last_name }}</span>
                   <span class="member-id">{{ fine.transaction.member.member_id }}</span>
@@ -230,14 +227,10 @@
               </span>
             </td>
             <td class="td-fine">
-              {# fine.amount is a Decimal field — floatformat:2 avoids raw repr #}
               <span class="fine-amount-cell fine-amount-cell--{{ fine.status }}">₹{{ fine.amount|floatformat:2 }}</span>
             </td>
             <td class="td-date">{{ fine.created_at|date:"d M Y" }}</td>
-            <td class="td-date">
-              {# paid_date is nullable — chain date filter then default to show "—" when null #}
-              {{ fine.paid_date|date:"d M Y"|default:"—" }}
-            </td>
+            <td class="td-date">{{ fine.paid_date|date:"d M Y"|default:"—" }}</td>
             <td class="td-status">
               <span class="payment-badge payment-badge--{{ fine.status }}">
                 <span class="payment-badge__dot"></span>
@@ -247,8 +240,6 @@
             <td class="td-actions">
               <div class="action-group">
                 {% if fine.status == 'unpaid' %}
-                {# Mark Paid: triggers the confirmation modal via JS.
-                   data-id and data-amount are read by fine_list.js to populate the modal. #}
                 <button
                   class="action-btn action-btn--pay"
                   type="button"
@@ -258,28 +249,16 @@
                   <svg viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   Mark Paid
                 </button>
-                {# Waive: POST-only view (waive_fine) requires a real form submission with CSRF.
-                   A bare <button> with only data-id cannot POST — inline form is required. #}
-                <form
-                  method="POST"
-                  action="{% url 'transactions:waive_fine' fine.id %}"
-                  style="display:inline">
+                <form method="POST" action="{% url 'transactions:waive_fine' fine.id %}" style="display:inline">
                   {% csrf_token %}
-                  {# Redirect back to the current page preserving all active filters #}
-                  <input
-                    type="hidden"
-                    name="next"
-                    value="{{ request.path }}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">
+                  <input type="hidden" name="next" value="{{ request.path }}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">
                   <button type="submit" class="action-btn action-btn--waive" title="Waive this fine">
                     <svg viewBox="0 0 20 20" fill="none"><path d="M4 4l12 12M16 4L4 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                     Waive
                   </button>
                 </form>
                 {% endif %}
-                <a
-                  href="{% url 'transactions:transaction_detail' fine.transaction.id %}"
-                  class="action-btn action-btn--view"
-                  title="View transaction">
+                <a href="{% url 'transactions:transaction_detail' fine.transaction.id %}" class="action-btn action-btn--view" title="View transaction">
                   <svg viewBox="0 0 20 20" fill="none"><path d="M10 4C5.5 4 2 10 2 10s3.5 6 8 6 8-6 8-6-3.5-6-8-6z" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg>
                 </a>
               </div>
@@ -310,9 +289,6 @@
         <button class="btn btn--sm btn--ghost" id="bulkWaiveBtn" type="button">Waive Selected</button>
       </div>
 
-      {# Pagination: every link carries ALL active filter params so filters survive page navigation.
-         urlencode() is not used here because it would also encode the "page" param —
-         instead each param is appended conditionally. #}
       {% if fines.has_other_pages %}
       <nav class="pagination" aria-label="Pagination">
         {% if fines.has_previous %}
@@ -321,7 +297,6 @@
           Prev
         </a>
         {% endif %}
-
         {% for num in fines.paginator.page_range %}
           {% if fines.number == num %}
             <span class="pagination__page pagination__page--active">{{ num }}</span>
@@ -329,7 +304,6 @@
             <a href="?page={{ num }}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.date_from %}&date_from={{ request.GET.date_from }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to }}{% endif %}" class="pagination__page">{{ num }}</a>
           {% endif %}
         {% endfor %}
-
         {% if fines.has_next %}
         <a href="?page={{ fines.next_page_number }}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.date_from %}&date_from={{ request.GET.date_from }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to }}{% endif %}" class="pagination__btn">
           Next
@@ -353,26 +327,17 @@
           <svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </button>
       </div>
-      {# mark_fine_paid URL has no pk — the Fine pk arrives via the hidden fine_id field,
-         populated by fine_list.js from the button's data-id attribute. #}
       <form method="POST" action="{% url 'transactions:mark_fine_paid' %}" id="markPaidForm">
         {% csrf_token %}
         <input type="hidden" name="fine_id" id="markPaidFineId">
-        {# Redirect back to current page (with active filters) after payment is recorded.
-           mark_fine_paid view checks request.POST.get("next") for this redirect target. #}
-        <input
-          type="hidden"
-          name="next"
-          value="{{ request.path }}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">
+        <input type="hidden" name="next" value="{{ request.path }}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">
         <div class="modal__body">
           <div class="payment-confirm-display">
-            {# Populated by fine_list.js with the fine's amount from data-amount on the button #}
             <div class="payment-confirm-display__amount" id="markPaidAmountDisplay">₹0</div>
             <div class="payment-confirm-display__label">Fine Amount to Collect</div>
           </div>
           <div class="form-group">
             <label for="paymentMethod" class="form-label">Payment Method</label>
-            {# payment_method choices must match Fine.PAYMENT_METHOD_CHOICES values #}
             <select name="payment_method" id="paymentMethod" class="form-select">
               <option value="cash">Cash</option>
               <option value="upi">UPI</option>
@@ -384,12 +349,7 @@
             <label for="paymentRef" class="form-label">
               Reference / Receipt No. <span style="font-weight:400">(optional)</span>
             </label>
-            <input
-              type="text"
-              name="payment_ref"
-              id="paymentRef"
-              class="form-input"
-              placeholder="e.g. UPI transaction ID">
+            <input type="text" name="payment_ref" id="paymentRef" class="form-input" placeholder="e.g. UPI transaction ID">
           </div>
         </div>
         <div class="modal__footer">

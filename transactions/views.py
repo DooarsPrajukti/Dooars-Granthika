@@ -8,6 +8,17 @@ the library admin's User object.  We resolve this as  library.user.
 
 Transaction / Fine / MissingBook are scoped by  library = FK(Library)
 and queried via  Model.objects.for_library(library).
+
+Overdue sync strategy
+─────────────────────
+A background daemon thread in fine_sync.py runs
+Transaction.sync_overdue_for_library() for every library every
+FINE_SYNC_INTERVAL seconds (default 60 s).
+
+Views call _sync_overdue_if_stale(library) instead of the raw
+sync method.  That helper is a no-op when the background thread
+has already synced within the last STALE_THRESHOLD_SECONDS — so
+page loads never wait for a slow bulk UPDATE in the hot path.
 """
 
 from django.contrib import messages
@@ -20,6 +31,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from datetime import date, timedelta
 from decimal import Decimal
+import time
 
 from .forms import (
     AddPenaltyForm,
@@ -28,7 +40,8 @@ from .forms import (
     MarkLostForm,
     ReturnBookForm,
 )
-from .models import Fine, MissingBook, Transaction
+from finance.models import Fine
+from .models import MissingBook, Transaction
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -57,6 +70,69 @@ def _get_library_rules(library):
         return None
 
 
+
+
+def _get_borrow_limit(library, member=None):
+    """
+    Return the borrow limit for a member based on their role.
+    Reads student_borrow_limit / teacher_borrow_limit from LibraryRuleSettings.
+    Falls back to MemberSettings.borrow_limit, then 0 (unlimited).
+    """
+    role = getattr(member, "role", "") if member else ""
+
+    # Primary: role-specific limits on LibraryRuleSettings
+    try:
+        rules = library.rules
+        if role in ("teacher", "faculty", "staff"):
+            limit = getattr(rules, "teacher_borrow_limit", None)
+        else:
+            # student / guest / other
+            limit = getattr(rules, "student_borrow_limit", None)
+
+        # Fall back to max_books_per_member if role-specific field is NULL
+        if limit is None:
+            limit = getattr(rules, "max_books_per_member", None)
+        if limit is not None:
+            return int(limit)
+    except Exception:
+        pass
+
+    # Secondary: MemberSettings.borrow_limit
+    try:
+        from accounts.models import MemberSettings
+        ms = MemberSettings.objects.get(library=library)
+        limit = ms.borrow_limit
+        if limit:
+            return int(limit)
+    except Exception:
+        pass
+
+    return 0  # 0 = no limit configured
+
+# ── Throttled overdue sync ────────────────────────────────────────────────────
+# Track the last time we ran a sync per library (library.pk → epoch float).
+# This lives in process memory — resets on server restart, which is fine.
+_last_sync: dict[int, float] = {}
+
+# If the background thread hasn't run a sync within this many seconds since
+# the last view-level sync, do a synchronous sync on the next page load.
+# Keep this > FINE_SYNC_INTERVAL so the background thread almost always wins.
+STALE_THRESHOLD_SECONDS: int = 90
+
+
+def _sync_overdue_if_stale(library) -> None:
+    """
+    Run sync_overdue_for_library only when the last known sync is older
+    than STALE_THRESHOLD_SECONDS.  The background thread normally keeps
+    data fresh so this is a no-op on the vast majority of requests.
+    """
+    now = time.monotonic()
+    last = _last_sync.get(library.pk, 0.0)
+    if now - last >= STALE_THRESHOLD_SECONDS:
+        Transaction.sync_overdue_for_library(library)
+        _last_sync[library.pk] = now
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Transaction List
 # ─────────────────────────────────────────────────────────────────────────────
@@ -65,8 +141,9 @@ def _get_library_rules(library):
 def transaction_list(request):
     library = _get_library_or_404(request)
 
-    # Sync overdue status on every list load (lightweight bulk UPDATE)
-    Transaction.sync_overdue_for_library(library)
+    # Sync overdue status — background thread handles this every 60 s;
+    # _sync_overdue_if_stale is a no-op when data is already fresh.
+    _sync_overdue_if_stale(library)
 
     qs = Transaction.objects.for_library(library).select_related("member", "book")
 
@@ -137,12 +214,7 @@ def transaction_detail(request, pk):
         .aggregate(t=Sum("amount"))["t"] or Decimal("0.00")
     )
 
-    try:
-        from accounts.models import MemberSettings
-        member_settings = MemberSettings.objects.get(library=library)
-        borrow_limit = int(member_settings.borrow_limit or 0)
-    except Exception:
-        borrow_limit = 0
+    borrow_limit = _get_borrow_limit(library, txn.member)
 
     return render(request, "transactions/transaction_detail.html", {
         "transaction":        txn,
@@ -177,14 +249,11 @@ def issue_book(request):
     fine_rate_per_day = rules.late_fine or Decimal("0.00")
     max_renewal_count = rules.max_renewal_count or 0
 
-    # Borrow limit comes from accounts.MemberSettings.borrow_limit,
-    # not from library rules.
-    try:
-        from accounts.models import MemberSettings
-        member_settings      = MemberSettings.objects.get(library=library)
-        max_books_per_member = int(member_settings.borrow_limit or 0)
-    except Exception:
-        max_books_per_member = 0
+    # Borrow limit — read role-specific limit from LibraryRuleSettings.
+    # We don't know the member's role at page-load time, so use the
+    # student limit as the conservative default for the policy card.
+    # The per-member slot count is computed accurately after ID lookup.
+    max_books_per_member = _get_borrow_limit(library)
 
     today = date.today()
     default_due_date = today + timedelta(days=borrowing_period)
@@ -226,8 +295,9 @@ def issue_book(request):
     # -1 signals "no limit configured" so the template can show ∞.
     members = []
     for m in _members_qs:
-        if max_books_per_member:
-            m.slots_available = max(0, max_books_per_member - m.active_loans_count)
+        _limit = _get_borrow_limit(library, m)
+        if _limit:
+            m.slots_available = max(0, _limit - m.active_loans_count)
         else:
             m.slots_available = -1   # unlimited — JS will show ∞
         m.total_due = _fine_totals.get(m.pk, Decimal("0.00"))
@@ -249,6 +319,7 @@ def issue_book(request):
             cd         = form.cleaned_data
             member     = cd["member"]
             book       = cd["book"]
+            book_copy  = cd.get("book_copy")
             issue_date = cd["issue_date"]
 
             due_date = issue_date + timedelta(days=borrowing_period)
@@ -258,6 +329,7 @@ def issue_book(request):
                     library            = library,
                     member             = member,
                     book               = book,
+                    book_copy          = book_copy,
                     issue_date         = issue_date,
                     due_date           = due_date,
                     loan_duration_days = borrowing_period,
@@ -267,8 +339,15 @@ def issue_book(request):
                     notes              = cd.get("notes", ""),
                 )
 
-                book.available_copies = max(0, book.available_copies - 1)
-                book.save(update_fields=["available_copies"])
+                # Mark the specific copy as issued
+                if book_copy is not None:
+                    book_copy.status = "issued"
+                    book_copy.save(update_fields=["status"])
+                else:
+                    # Fallback: decrement available_copies on the Book directly
+                    if hasattr(book, "available_copies"):
+                        book.available_copies = max(0, book.available_copies - 1)
+                        book.save(update_fields=["available_copies"])
 
             messages.success(
                 request,
@@ -340,9 +419,25 @@ def return_book(request, pk):
 
                 txn.save()
 
+                # Mark the specific copy available again on return
                 book = txn.book
-                book.available_copies = min(book.total_copies, book.available_copies + 1)
-                book.save(update_fields=["available_copies"])
+                from books.models import BookCopy as _BookCopy
+                try:
+                    copy_to_return = txn.book_copy or (
+                        _BookCopy.objects
+                        .filter(book=book, status="issued")
+                        .order_by("updated_at")
+                        .first()
+                    )
+                    if copy_to_return:
+                        copy_to_return.status = "available"
+                        copy_to_return.save(update_fields=["status"])
+                except Exception:
+                    pass
+                # Keep Book.available_copies in sync if that field exists
+                if hasattr(book, "available_copies") and hasattr(book, "total_copies"):
+                    book.available_copies = min(book.total_copies, book.available_copies + 1)
+                    book.save(update_fields=["available_copies"])
 
                 fine_status = Fine.STATUS_PAID if txn.fine_paid else Fine.STATUS_UNPAID
                 fine_date   = today if txn.fine_paid else None
@@ -412,6 +507,26 @@ def renew_book(request, pk):
         messages.error(request, "Only active or overdue loans can be renewed.")
         return redirect("transactions:transaction_detail", pk=pk)
 
+    # Block renewal if this transaction has any unpaid fines
+    unpaid_fines = txn.fines.filter(status=Fine.STATUS_UNPAID)
+    if unpaid_fines.exists():
+        total_due = unpaid_fines.aggregate(t=Sum("amount"))["t"]
+        messages.error(
+            request,
+            f"Cannot renew — this loan has an outstanding fine of ₹{total_due}. "
+            f"Please clear the fine before renewing."
+        )
+        return redirect("transactions:transaction_detail", pk=pk)
+
+    # Also block if overdue fine exists as a computed property (not yet a saved Fine row)
+    if txn.fine_amount > 0:
+        messages.error(
+            request,
+            f"Cannot renew — this loan has an outstanding fine of ₹{txn.fine_amount}. "
+            f"Please clear the fine before renewing."
+        )
+        return redirect("transactions:transaction_detail", pk=pk)
+
     rules        = _get_library_rules(library)
     max_renewals = getattr(rules, "max_renewal_count", 1)
 
@@ -443,7 +558,7 @@ def renew_book(request, pk):
 @login_required
 def overdue_list(request):
     library = _get_library_or_404(request)
-    Transaction.sync_overdue_for_library(library)
+    _sync_overdue_if_stale(library)
 
     qs = (
         Transaction.objects.for_library(library)
@@ -786,6 +901,39 @@ def add_penalty(request, pk=None):
     return redirect("transactions:missing_books")
 
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 18. Book Cover  (serves / redirects to the book cover image)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def book_cover_api(request, pk):
+    """
+    GET /transactions/api/book-cover/<pk>/
+    Redirects to the book's cover image URL, or returns 404 if none.
+    Used by <img src="..."> in the issue-book page.
+    """
+    from django.http import HttpResponseRedirect, HttpResponseNotFound
+    from books.models import Book
+
+    try:
+        book = Book.objects.get(pk=pk)
+    except Book.DoesNotExist:
+        return HttpResponseNotFound()
+
+    for _field in ("cover", "cover_image", "cover_photo", "image",
+                   "thumbnail", "book_cover", "photo"):
+        _val = getattr(book, _field, None)
+        if _val:
+            try:
+                if hasattr(_val, "name") and _val.name:
+                    return HttpResponseRedirect(_val.url)
+            except Exception:
+                pass
+
+    return HttpResponseNotFound()
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 14. Member Search API  (AJAX / JSON)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -813,13 +961,7 @@ def member_search_api(request):
             | Q(email__icontains=q)
         )
 
-    # Borrow limit comes from MemberSettings (same source as issue_book view)
-    try:
-        from accounts.models import MemberSettings
-        member_settings = MemberSettings.objects.get(library=library)
-        borrow_limit    = int(member_settings.borrow_limit or 0)
-    except Exception:
-        borrow_limit = 0
+    # Per-member borrow limit is role-specific; computed per member below.
 
     members_list = list(qs.order_by("first_name", "last_name")[:20])
 
@@ -839,7 +981,7 @@ def member_search_api(request):
             "name":         f"{m.first_name} {m.last_name}".strip(),
             "member_id":    m.member_id,
             "active_loans": active_counts.get(m.pk, 0),
-            "borrow_limit": borrow_limit,
+            "borrow_limit": _get_borrow_limit(library, m),
         }
         for m in members_list
     ]
@@ -885,3 +1027,228 @@ def book_search_api(request):
         for b in qs.order_by("title")[:20]
     ]
     return JsonResponse({"results": results})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 16. Member Lookup by exact member_id  (AJAX / JSON)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def member_lookup_api(request):
+    """
+    GET /transactions/api/member-lookup/?member_id=DGDGRST0326001
+    Returns a single member's details or {"found": false}.
+    Used by the issue-book page to preview the member after the field is filled.
+    """
+    library = _get_library_or_404(request)
+    owner   = library.user
+
+    from members.models import Member
+
+    raw_id = request.GET.get("member_id", "").strip().upper()
+    if not raw_id:
+        return JsonResponse({"found": False, "error": "No member_id supplied."})
+
+    try:
+        member = Member.objects.get(member_id=raw_id, owner=owner)
+    except Member.DoesNotExist:
+        return JsonResponse({"found": False, "error": f'Member ID "{raw_id}" not found.'})
+
+    # Active loan count + role-specific borrow limit
+    borrow_limit = _get_borrow_limit(library, member)
+
+    from django.db.models import Count, Sum, DecimalField as _DF
+    active_loans = (
+        Transaction.objects.for_library(library)
+        .filter(member=member, status__in=(Transaction.STATUS_ISSUED, Transaction.STATUS_OVERDUE))
+        .count()
+    )
+    from finance.models import Fine as _Fine
+    total_due = (
+        _Fine.objects.for_library(library)
+        .filter(transaction__member=member, status=_Fine.STATUS_UNPAID)
+        .aggregate(t=Sum("amount", output_field=_DF()))["t"]
+        or Decimal("0.00")
+    )
+
+    slots = max(0, borrow_limit - active_loans) if borrow_limit else -1
+
+    # Build photo URL — check if member actually has a photo file,
+    # then return its absolute URL. Falls back to None so the JS
+    # shows the initial-letter avatar instead of a broken image.
+    photo_url = None
+    # First try common ImageField names to see if a file is actually set
+    for _field in ("photo", "profile_photo", "avatar", "profile_picture",
+                   "image", "profile_image"):
+        _val = getattr(member, _field, None)
+        if _val:
+            try:
+                # Check the file actually has a name (not empty/default)
+                if hasattr(_val, "name") and _val.name:
+                    photo_url = request.build_absolute_uri(_val.url)
+                    break
+            except Exception:
+                pass
+    # If no direct field found, try the members:member_photo URL as fallback
+    if not photo_url:
+        try:
+            from django.urls import reverse
+            photo_url = request.build_absolute_uri(
+                reverse("members:member_photo", args=[member.pk])
+            )
+        except Exception:
+            pass
+
+    return JsonResponse({
+        "found":        True,
+        "pk":           member.pk,
+        "member_id":    member.member_id,
+        "name":         f"{member.first_name} {member.last_name}".strip(),
+        "role":         member.get_role_display() if hasattr(member, "get_role_display") else "",
+        "email":        member.email or "",
+        "status":       member.status,
+        "active_loans": active_loans,
+        "borrow_limit": borrow_limit,
+        "slots":        slots,
+        "total_due":    str(total_due),
+        "photo_url":    photo_url,
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 17. Book Lookup by exact book_id  (AJAX / JSON)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def book_lookup_api(request):
+    """
+    GET /transactions/api/book-lookup/?book_id=DGDGRBK0326001
+
+    Looks up a BookCopy by its copy_id (books_bookcopy table), then returns
+    details of the parent Book so the issue-book page can preview it.
+    """
+    import traceback
+
+    try:
+        library = _get_library_or_404(request)
+        owner   = library.user
+
+        from books.models import Book, BookCopy
+
+        raw_id = request.GET.get("book_id", "").strip()
+        if not raw_id:
+            return JsonResponse({"found": False, "error": "No book_id supplied."})
+
+        # ── Step 1: find the BookCopy row ─────────────────────────────
+        try:
+            copy = (
+                BookCopy.objects
+                .select_related("book")
+                .get(copy_id=raw_id, book__owner=owner)
+            )
+        except BookCopy.DoesNotExist:
+            return JsonResponse({"found": False, "error": f'Book copy ID "{raw_id}" not found.'})
+        except Exception as e:
+            return JsonResponse({"found": False, "error": f"[copy lookup] {type(e).__name__}: {e}"})
+
+        # ── Step 2: get the parent Book ───────────────────────────────
+        book = copy.book
+
+        # ── Step 3: availability — count available copies for this book
+        try:
+            available_copies = (
+                BookCopy.objects
+                .filter(book=book, status="available")
+                .count()
+            )
+            total_copies = BookCopy.objects.filter(book=book).count()
+        except Exception:
+            available_copies = getattr(book, "available_copies", 0) or 0
+            total_copies     = getattr(book, "total_copies", available_copies) or available_copies
+
+        # ── Step 4: category ─────────────────────────────────────────
+        try:
+            category_name = book.category.name if getattr(book, "category_id", None) else ""
+        except Exception:
+            category_name = ""
+
+        # ── Step 5: cover image ──────────────────────────────────────
+        # cover_image is a BLOB — served via book_cover_image view.
+        cover_url = None
+        try:
+            if getattr(book, "cover_image", None):
+                from django.urls import reverse as _reverse
+                cover_url = request.build_absolute_uri(
+                    _reverse("transactions:book_cover_image", args=[book.pk])
+                )
+        except Exception:
+            pass
+
+        return JsonResponse({
+            "found":            True,
+            "pk":               book.pk,
+            "copy_pk":          copy.pk,
+            "book_id":          raw_id,
+            "title":            getattr(book, "title",  "") or "",
+            "author":           getattr(book, "author", "") or "",
+            "isbn":             getattr(book, "isbn",   "") or "",
+            "available_copies": available_copies,
+            "total_copies":     total_copies,
+            "category":         category_name,
+            "cover_url":        cover_url,
+            "copy_status":      getattr(copy, "status",    ""),
+            "copy_condition":   getattr(copy, "condition", ""),
+        })
+
+    except Exception as exc:
+        err_detail = traceback.format_exc()
+        import logging
+        logging.getLogger("transactions.views").error(
+            "book_lookup_api unexpected error: %s", err_detail
+        )
+        return JsonResponse(
+            {"found": False, "error": f"Server error: {type(exc).__name__}: {exc}"},
+            status=200,
+        )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 18. Book Cover Image  — serves BLOB from books_book.cover_image
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def book_cover_image(request, pk):
+    """
+    GET /transactions/api/book-cover/<pk>/
+    Streams books_book.cover_image (BLOB) as an HTTP image response.
+    Falls back to 404 if no cover is stored.
+    """
+    from books.models import Book
+    from django.http import HttpResponse, Http404
+
+    try:
+        book = Book.objects.get(pk=pk)
+    except Book.DoesNotExist:
+        raise Http404
+
+    cover = getattr(book, "cover_image", None)
+    if not cover:
+        raise Http404
+
+    # cover_image may be a BinaryField (bytes) or a FileField
+    if isinstance(cover, (bytes, memoryview)):
+        data      = bytes(cover)
+        mime_type = getattr(book, "cover_mime_type", None) or "image/jpeg"
+    else:
+        # FileField / ImageField
+        try:
+            data      = cover.read()
+            mime_type = getattr(book, "cover_mime_type", None) or "image/jpeg"
+        except Exception:
+            raise Http404
+
+    if not data:
+        raise Http404
+
+    response = HttpResponse(data, content_type=mime_type)
+    response["Cache-Control"] = "private, max-age=86400"
+    return response

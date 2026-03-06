@@ -3,6 +3,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/transactions/issue_book.css' %}">
+<link rel="stylesheet" href="{% static 'css/transactions/issue_book_id.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -49,98 +50,140 @@
         {% endif %}
 
         <!-- Member Selection -->
-        <div class="form-card">
+        <div class="form-card" id="memberCard">
           <div class="form-card__header">
             <div class="form-card__step">01</div>
             <div>
-              <h2 class="form-card__title">Select Member</h2>
-              <p class="form-card__subtitle">Choose the borrower for this transaction</p>
+              <h2 class="form-card__title">Member ID</h2>
+              <p class="form-card__subtitle">Enter or scan the member's library card ID</p>
             </div>
           </div>
           <div class="form-card__body">
 
             <div class="form-group">
-              <label for="memberSearch" class="form-label form-label--required">Search Member</label>
-              <div class="select-search-wrapper">
-                <svg class="select-search-icon" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.75"/><path d="M13.5 13.5l3 3" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
-                <input
-                  type="text"
-                  id="memberSearch"
-                  class="select-search-input"
-                  placeholder="Type member name or ID…"
-                  autocomplete="new-password"
-                  spellcheck="false"
-                >
-                <div class="member-dropdown is-hidden" id="memberDropdown"></div>
+              <label for="memberIdInput" class="form-label form-label--required">Member ID</label>
+              <div class="id-field-wrapper">
+                <div class="id-field-input-row">
+                  <div class="id-field-icon">
+                    <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="3.5" stroke="currentColor" stroke-width="1.5"/><path d="M3 17c0-3.314 3.134-6 7-6s7 2.686 7 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </div>
+                  <input
+                    type="text"
+                    name="member_id"
+                    id="memberIdInput"
+                    class="id-field-input{% if form.member_id.errors %} id-field-input--error{% endif %}"
+                    placeholder="e.g. DGDGRST0326001"
+                    autocomplete="off"
+                    spellcheck="false"
+                    autofocus
+                    value="{{ form.member_id.value|default:'' }}"
+                  >
+                  <span class="id-field-status" id="memberIdStatus"></span>
+                </div>
+                {% if form.member_id.errors %}
+                <p class="form-error" id="memberIdError">
+                  <svg viewBox="0 0 16 16" fill="none" style="width:13px;height:13px;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  {{ form.member_id.errors.0 }}
+                </p>
+                {% else %}
+                <p class="form-error is-hidden" id="memberIdError"></p>
+                {% endif %}
               </div>
-              <input type="hidden" name="member_id" id="memberIdHidden" value="">
-              <select id="memberId" class="visually-hidden">
-                <option value="">Select a member</option>
-                {% for member in members %}
-                <option value="{{ member.id }}"
-                  data-name="{{ member.first_name }} {{ member.last_name }}"
-                  data-id="{{ member.member_id }}"
-                  data-type="{{ member.get_role_display }}"
-                  data-limit="{{ max_books_per_member|default:0 }}"
-                  data-active="{{ member.active_loans_count|default:0 }}"
-                  data-can-borrow="{{ member.slots_available }}"
-                  data-total-due="{{ member.total_due|default:0 }}"
-                  data-email="{{ member.email }}"
-                  {% if form.member_id.value == member.id|stringformat:"i" %}selected{% endif %}
-                >{{ member.first_name }} {{ member.last_name }} — {{ member.member_id }}</option>
-                {% endfor %}
-              </select>
-              {% if form.member_id.errors %}
-              <p class="form-error">{{ form.member_id.errors.0 }}</p>
-              {% endif %}
+
+              <!-- Inline preview — shown after AJAX resolves the ID -->
+              <div class="id-preview id-preview--member is-hidden" id="memberPreview">
+                <div class="id-preview__avatar" id="memberPreviewAvatar">
+                  <img id="memberPreviewPhoto" src="" alt=""
+                       style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;"
+                       onerror="this.style.display='none';document.getElementById('memberPreviewInitial').style.display='flex';">
+                  <span id="memberPreviewInitial"
+                        style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;
+                               background:linear-gradient(135deg,#6366f1,#8b5cf6);
+                               color:#fff;font-weight:700;font-size:1rem;border-radius:50%;">—</span>
+                </div>
+                <div class="id-preview__info">
+                  <span class="id-preview__name" id="memberPreviewName">—</span>
+                  <span class="id-preview__meta" id="memberPreviewMeta">—</span>
+                </div>
+                <div class="id-preview__stats">
+                  <span class="id-preview__stat">
+                    <span class="id-preview__stat-label">Active</span>
+                    <strong id="memberPreviewLoans">—</strong>
+                  </span>
+                  <span class="id-preview__stat-sep">·</span>
+                  <span class="id-preview__stat">
+                    <span class="id-preview__stat-label">Slots</span>
+                    <strong id="memberPreviewSlots">—</strong>
+                  </span>
+                  <span class="id-preview__stat-sep">·</span>
+                  <span class="id-preview__stat">
+                    <span class="id-preview__stat-label">Fines</span>
+                    <strong id="memberPreviewFines">—</strong>
+                  </span>
+                </div>
+              </div>
+
             </div>
 
           </div>
         </div>
 
         <!-- Book Selection -->
-        <div class="form-card">
+        <div class="form-card" id="bookCard">
           <div class="form-card__header">
             <div class="form-card__step">02</div>
             <div>
-              <h2 class="form-card__title">Select Book</h2>
-              <p class="form-card__subtitle">Choose a book to issue</p>
+              <h2 class="form-card__title">Book Copy ID</h2>
+              <p class="form-card__subtitle">Enter or scan the book's accession / copy ID</p>
             </div>
           </div>
           <div class="form-card__body">
 
             <div class="form-group">
-              <label for="bookSearch" class="form-label form-label--required">Search Book</label>
-              <div class="select-search-wrapper">
-                <svg class="select-search-icon" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.75"/><path d="M13.5 13.5l3 3" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
-                <input
-                  type="text"
-                  id="bookSearch"
-                  class="select-search-input"
-                  placeholder="Type book title, author, or ISBN…"
-                  autocomplete="new-password"
-                  spellcheck="false"
-                >
-                <div class="book-dropdown is-hidden" id="bookDropdown"></div>
+              <label for="bookCopyIdInput" class="form-label form-label--required">Book Copy ID</label>
+              <div class="id-field-wrapper">
+                <div class="id-field-input-row">
+                  <div class="id-field-icon">
+                    <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 7h6M7 10h6M7 13h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </div>
+                  <input
+                    type="text"
+                    name="book_copy_id"
+                    id="bookCopyIdInput"
+                    class="id-field-input{% if form.book_copy_id.errors %} id-field-input--error{% endif %}"
+                    placeholder="e.g. BK-001"
+                    autocomplete="off"
+                    spellcheck="false"
+                    value="{{ form.book_copy_id.value|default:'' }}"
+                  >
+                  <span class="id-field-status" id="bookCopyIdStatus"></span>
+                </div>
+                {% if form.book_copy_id.errors %}
+                <p class="form-error" id="bookCopyIdError">
+                  <svg viewBox="0 0 16 16" fill="none" style="width:13px;height:13px;flex-shrink:0"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  {{ form.book_copy_id.errors.0 }}
+                </p>
+                {% else %}
+                <p class="form-error is-hidden" id="bookCopyIdError"></p>
+                {% endif %}
               </div>
-              <input type="hidden" name="book_id" id="bookIdHidden" value="">
-              <select id="bookId" class="visually-hidden">
-                <option value="">Select a book</option>
-                {% for book in books %}
-                <option value="{{ book.id }}"
-                  data-title="{{ book.title }}"
-                  data-author="{{ book.author }}"
-                  data-isbn="{{ book.isbn }}"
-                  data-available="{{ book.available_copies }}"
-                  data-total="{{ book.total_copies }}"
-                  data-category="{{ book.category.name|default:'' }}"
-                  {% if form.book_id.value == book.id|stringformat:"i" %}selected{% endif %}
-                >{{ book.title }} — {{ book.author }}</option>
-                {% endfor %}
-              </select>
-              {% if form.book_id.errors %}
-              <p class="form-error">{{ form.book_id.errors.0 }}</p>
-              {% endif %}
+
+              <!-- Inline preview — shown after AJAX resolves the ID -->
+              <div class="id-preview id-preview--book is-hidden" id="bookPreview">
+                <div class="id-preview__book-icon" id="bookPreviewCoverWrap">
+                  <img id="bookPreviewCover" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:4px;">
+                  <svg id="bookPreviewCoverFallback" viewBox="0 0 32 40" fill="none"><rect x="1" y="1" width="30" height="38" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 12h18M7 18h18M7 24h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </div>
+                <div class="id-preview__info">
+                  <span class="id-preview__name" id="bookPreviewTitle">—</span>
+                  <span class="id-preview__meta" id="bookPreviewAuthor">—</span>
+                  <span class="id-preview__isbn" id="bookPreviewIsbn">—</span>
+                </div>
+                <div class="id-preview__avail" id="bookPreviewAvail">
+                  <span class="avail-badge avail-badge--ok" id="bookPreviewAvailBadge">—</span>
+                </div>
+              </div>
+
             </div>
 
           </div>
@@ -238,7 +281,20 @@
           <!-- Populated state -->
           <div id="sidebarMemberDetails" class="is-hidden">
             <div class="sidebar-member-profile">
-              <div class="sidebar-member-avatar" id="sidebarMemberAvatar">—</div>
+              <div class="sidebar-member-avatar" id="sidebarMemberAvatar"
+                   style="position:relative;overflow:hidden;flex-shrink:0;">
+                {# Populated by issue_book.js via updateSidebarAvatar(memberId, initial) #}
+                <img id="sidebarMemberPhoto"
+                     src=""
+                     alt=""
+                     style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;"
+                     onerror="this.style.display='none';document.getElementById('sidebarMemberInitial').style.display='flex';">
+                <span id="sidebarMemberInitial"
+                      style="display:flex;width:100%;height:100%;border-radius:50%;
+                             align-items:center;justify-content:center;
+                             background:linear-gradient(135deg,#6366f1,#8b5cf6);
+                             color:#fff;font-weight:700;font-size:1.1rem;">—</span>
+              </div>
               <div>
                 <div class="sidebar-member-name" id="sidebarMemberName">—</div>
                 <div class="sidebar-member-meta">
@@ -289,8 +345,9 @@
           <!-- Populated state -->
           <div id="sidebarBookDetails" class="is-hidden">
             <div class="sidebar-book-header">
-              <div class="sidebar-book-cover">
-                <svg viewBox="0 0 32 40" fill="none"><rect x="1" y="1" width="30" height="38" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 12h18M7 18h18M7 24h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <div class="sidebar-book-cover" id="sidebarBookCoverWrap">
+                <img id="sidebarBookCover" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:4px;">
+                <svg id="sidebarBookCoverFallback" viewBox="0 0 32 40" fill="none"><rect x="1" y="1" width="30" height="38" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 12h18M7 18h18M7 24h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
               </div>
               <div class="sidebar-book-info">
                 <div class="sidebar-book-title" id="sidebarBookTitle">—</div>
@@ -358,12 +415,15 @@
 
 {% block extra_js %}
 <script>
+  {# Django-template config — must stay inline so URLs/values are server-rendered #}
   window.LIBRARY_RULES = {
     defaultLoanDays: {{ default_loan_days }},
     fineRatePerDay:  {{ fine_rate_per_day }},
     maxBorrowLimit:  {{ max_books_per_member }},
     maxRenewalCount: {{ max_renewal_count }},
   };
+  window.MEMBER_LOOKUP_URL = "{% url 'transactions:member_lookup_api' %}";
+  window.BOOK_LOOKUP_URL   = "{% url 'transactions:book_lookup_api' %}";
 </script>
 <script src="{% static 'js/transactions/issue_book.js' %}"></script>
 {% endblock %}

@@ -1,62 +1,39 @@
 /**
  * members/members.js
  * ──────────────────
- * Shared utilities loaded on EVERY members page.
+ * Shared utilities for all members-app pages.
  *
  * Provides:
- *   - CSRF helpers:   getCsrfToken(), postJSON(), postForm(), postAction()
- *   - Toast:          showToast(message, type)
- *   - Table search:   live client-side row filter on #memberSearch → #membersTable
- *   - Filter reset:   #resetFilters button
- *   - Delete member:  .delete-member-btn data-delete-url / data-member-name
+ *   postForm(url, formData)  – fetch POST with CSRF, returns Response promise
+ *   postAction(url, body)    – fetch POST with CSRF + JSON body, returns Response promise
+ *   showToast(msg, type)     – display a toast notification (success / error / info)
+ *   applyStatusBadgeColors() – colour .status-badge spans by their CSS class
+ *   initSearch()             – wire #memberSearch to live-filter #membersTable rows
+ *   initSort()               – wire [data-sortable] <th> clicks to sort table
+ *   initFilterReset()        – wire #resetFilters button
  *
- * All POST helpers attach X-CSRFToken automatically — never use raw fetch()
- * for state-changing requests.
+ * All page-specific JS files depend on this file being loaded first.
  */
 
 'use strict';
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 1. CSRF HELPERS
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── CSRF helper ───────────────────────────────────────────────────────────────
 
-/**
- * Read Django's csrftoken cookie.
- * Falls back to the hidden {% csrf_token %} input if the cookie is absent.
- * @returns {string}
- */
 function getCsrfToken() {
-  const name = 'csrftoken';
-  for (let c of document.cookie.split(';')) {
-    c = c.trim();
-    if (c.startsWith(name + '=')) {
-      return decodeURIComponent(c.slice(name.length + 1));
-    }
-  }
+  // 1. Try the cookie (works when SESSION_COOKIE_SAMESITE allows it)
+  const match = document.cookie.match(/csrftoken=([^;]+)/);
+  if (match) return decodeURIComponent(match[1]);
+
+  // 2. Fallback: read from a hidden input in the page
   const el = document.querySelector('[name=csrfmiddlewaretoken]');
   return el ? el.value : '';
 }
 
-/**
- * POST JSON data. Attaches X-CSRFToken header automatically.
- * @param {string} url
- * @param {object} [body={}]
- * @returns {Promise<Response>}
- */
-function postJSON(url, body = {}) {
-  return fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': getCsrfToken(),
-    },
-    body: JSON.stringify(body),
-  });
-}
+
+// ── Network helpers ───────────────────────────────────────────────────────────
 
 /**
- * POST a FormData object (supports file uploads).
- * Do NOT manually set Content-Type — browser sets multipart boundary.
+ * POST a FormData object (e.g. from a <form>) with the CSRF token header.
  * @param {string}   url
  * @param {FormData} formData
  * @returns {Promise<Response>}
@@ -70,332 +47,317 @@ function postForm(url, formData) {
 }
 
 /**
- * POST an empty body — for single-action endpoints (reactivate, mark-cleared, etc.)
+ * POST a plain JSON body (or no body) with the CSRF token header.
+ * Used by action buttons (send reminder, mark cleared, etc.).
  * @param {string} url
+ * @param {object} [body={}]
  * @returns {Promise<Response>}
  */
-function postAction(url) {
-  return postForm(url, new FormData());
+function postAction(url, body = {}) {
+  return fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfToken(),
+    },
+    body: JSON.stringify(body),
+  });
 }
 
-window.getCsrfToken = getCsrfToken;
-window.postJSON     = postJSON;
-window.postForm     = postForm;
-window.postAction   = postAction;
+// Expose globally so page-specific scripts can call them without imports
+window.postForm   = postForm;
+window.postAction = postAction;
 
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 2. TOAST NOTIFICATION
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Toast notifications ───────────────────────────────────────────────────────
 
 /**
- * Display a brief toast at the top-right corner.
+ * Show a toast notification at the bottom-right of the screen.
  * @param {string} message
- * @param {'success'|'error'|'info'|'warning'} [type='success']
+ * @param {'success'|'error'|'info'|'warning'} [type='info']
+ * @param {number} [duration=3500]  ms before auto-dismiss
  */
-function showToast(message, type = 'success') {
+function showToast(message, type = 'info', duration = 3500) {
+  // Ensure toast container exists
   let container = document.getElementById('toastContainer');
   if (!container) {
     container = document.createElement('div');
     container.id = 'toastContainer';
     Object.assign(container.style, {
-      position: 'fixed', top: '1.5rem', right: '1.5rem',
-      zIndex: '9999', display: 'flex', flexDirection: 'column', gap: '.5rem',
+      position:  'fixed',
+      bottom:    '1.5rem',
+      right:     '1.5rem',
+      zIndex:    '9999',
+      display:   'flex',
+      flexDirection: 'column',
+      gap:       '0.5rem',
     });
     document.body.appendChild(container);
   }
 
-  const palette = {
-    success: '#10b981',
-    error:   '#ef4444',
-    info:    '#3b82f6',
-    warning: '#f59e0b',
+  const colors = {
+    success: { bg: '#10b981', icon: 'fa-check-circle' },
+    error:   { bg: '#ef4444', icon: 'fa-exclamation-circle' },
+    warning: { bg: '#f59e0b', icon: 'fa-exclamation-triangle' },
+    info:    { bg: '#3b82f6', icon: 'fa-info-circle' },
   };
+  const { bg, icon } = colors[type] || colors.info;
 
   const toast = document.createElement('div');
-  const icons = { success: 'fa-check-circle', error: 'fa-times-circle', info: 'fa-info-circle', warning: 'fa-exclamation-triangle' };
   Object.assign(toast.style, {
-    background:    palette[type] || palette.info,
-    color:         'white',
-    padding:       '.75rem 1.25rem',
-    borderRadius:  '8px',
-    fontSize:      '.9rem',
-    boxShadow:     '0 4px 12px rgba(0,0,0,.18)',
-    opacity:       '0',
-    transition:    'opacity .3s',
-    maxWidth:      '340px',
-    display:       'flex',
-    alignItems:    'center',
-    gap:           '.5rem',
+    background:   bg,
+    color:        'white',
+    padding:      '0.75rem 1.25rem',
+    borderRadius: '10px',
+    boxShadow:    '0 4px 12px rgba(0,0,0,0.15)',
+    display:      'flex',
+    alignItems:   'center',
+    gap:          '0.6rem',
+    fontSize:     '0.9rem',
+    fontWeight:   '500',
+    minWidth:     '260px',
+    maxWidth:     '400px',
+    opacity:      '0',
+    transform:    'translateY(8px)',
+    transition:   'opacity 0.25s, transform 0.25s',
   });
-  toast.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i> ${message}`;
+  toast.innerHTML = `<i class="fas ${icon}"></i><span>${message}</span>`;
   container.appendChild(toast);
 
-  requestAnimationFrame(() => { toast.style.opacity = '1'; });
+  // Animate in
+  requestAnimationFrame(() => {
+    toast.style.opacity   = '1';
+    toast.style.transform = 'translateY(0)';
+  });
+
+  // Auto dismiss
   setTimeout(() => {
-    toast.style.opacity = '0';
+    toast.style.opacity   = '0';
+    toast.style.transform = 'translateY(8px)';
     setTimeout(() => toast.remove(), 300);
-  }, 3500);
+  }, duration);
 }
 
 window.showToast = showToast;
 
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 3. AUTO-DISMISS DJANGO FLASH MESSAGES
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Status badge colours ──────────────────────────────────────────────────────
 
-function autoDismissMessages() {
-  document.querySelectorAll('.message').forEach((msg) => {
-    setTimeout(() => {
-      msg.style.transition = 'opacity .3s';
-      msg.style.opacity = '0';
-      setTimeout(() => msg.remove(), 300);
-    }, 5000);
+/**
+ * Apply background colours to .status-badge elements based on their CSS class.
+ * Call this after dynamically injecting HTML that contains status badges.
+ */
+function applyStatusBadgeColors() {
+  const palette = {
+    active:   '#10b981',
+    inactive: '#ef4444',
+    passout:  '#f59e0b',
+    cleared:  '#10b981',
+    pending:  '#f59e0b',
+    issued:   '#3b82f6',
+    returned: '#10b981',
+    overdue:  '#ef4444',
+    lost:     '#8b5cf6',
+    student:  '#3b82f6',
+    teacher:  '#8b5cf6',
+    general:  '#6b7280',
+  };
+
+  document.querySelectorAll('.status-badge').forEach((el) => {
+    for (const [cls, color] of Object.entries(palette)) {
+      if (el.classList.contains(cls)) {
+        el.style.background  = color;
+        el.style.color       = 'white';
+        el.style.padding     = '3px 10px';
+        el.style.borderRadius = '12px';
+        el.style.fontSize    = '11px';
+        el.style.fontWeight  = '600';
+        el.style.display     = 'inline-flex';
+        el.style.alignItems  = 'center';
+        el.style.gap         = '4px';
+        break;
+      }
+    }
   });
 }
 
+window.applyStatusBadgeColors = applyStatusBadgeColors;
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 4. CLIENT-SIDE TABLE SEARCH
-// ═══════════════════════════════════════════════════════════════════════════════
 
-function initTableSearch() {
-  const searchInput = document.getElementById('memberSearch');
-  const table       = document.getElementById('membersTable');
-  if (!searchInput || !table) return;
+// ── Live search / filter ──────────────────────────────────────────────────────
 
-  searchInput.addEventListener('input', function () {
-    const q = this.value.toLowerCase().trim();
+/**
+ * Wire the #memberSearch input to filter visible rows in #membersTable.
+ * Searches across all <td> text content (case-insensitive).
+ */
+function initSearch() {
+  const input = document.getElementById('memberSearch');
+  const table = document.getElementById('membersTable');
+  if (!input || !table) return;
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
     table.querySelectorAll('tbody tr').forEach((row) => {
-      row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+      const text = row.textContent.toLowerCase();
+      row.style.display = (!q || text.includes(q)) ? '' : 'none';
     });
   });
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 5. FILTER RESET
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Column sort ───────────────────────────────────────────────────────────────
 
-function initFilterReset() {
-  const resetBtn = document.getElementById('resetFilters');
-  if (!resetBtn) return;
-
-  resetBtn.addEventListener('click', () => {
-    const form = document.getElementById('filterForm');
-    if (form) form.reset();
-    window.location.href = window.location.pathname;
-  });
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 6. TABLE COLUMN SORT (client-side, click column header)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function initTableSort(tableId) {
-  const table = document.getElementById(tableId || 'membersTable');
+/**
+ * Add click-to-sort behaviour to all <th data-sortable> elements in #membersTable.
+ * Sorts alphabetically; clicking the same column toggles asc / desc.
+ */
+function initSort() {
+  const table = document.getElementById('membersTable');
   if (!table) return;
 
-  table.querySelectorAll('th[data-sortable]').forEach((th, colIdx) => {
+  let lastTh   = null;
+  let ascending = true;
+
+  table.querySelectorAll('thead th[data-sortable]').forEach((th) => {
     th.style.cursor = 'pointer';
-    th.dataset.dir  = 'asc';
+    th.title        = 'Click to sort';
 
-    th.addEventListener('click', function () {
-      const dir = this.dataset.dir === 'asc' ? 1 : -1;
-      this.dataset.dir = dir === 1 ? 'desc' : 'asc';
+    th.addEventListener('click', () => {
+      const colIdx = Array.from(th.parentElement.children).indexOf(th);
 
-      // Update sort icon
-      table.querySelectorAll('th[data-sortable]').forEach((h) => {
-        h.querySelector('.sort-icon')?.remove();
-      });
-      const icon = document.createElement('i');
-      icon.className = `fas fa-sort-${dir === 1 ? 'up' : 'down'} sort-icon`;
-      icon.style.marginLeft = '.4rem';
-      this.appendChild(icon);
+      if (lastTh === th) {
+        ascending = !ascending;
+      } else {
+        ascending = true;
+        if (lastTh) lastTh.dataset.sortDir = '';
+      }
+      th.dataset.sortDir = ascending ? 'asc' : 'desc';
+      lastTh = th;
 
       const tbody = table.querySelector('tbody');
       const rows  = Array.from(tbody.querySelectorAll('tr'));
+
       rows.sort((a, b) => {
         const aText = (a.cells[colIdx]?.textContent || '').trim().toLowerCase();
         const bText = (b.cells[colIdx]?.textContent || '').trim().toLowerCase();
-        return aText < bText ? -dir : aText > bText ? dir : 0;
+        return ascending
+          ? aText.localeCompare(bText)
+          : bText.localeCompare(aText);
       });
+
       rows.forEach((r) => tbody.appendChild(r));
     });
   });
 }
 
-window.initTableSort = initTableSort;
+
+// ── Filter reset ──────────────────────────────────────────────────────────────
+
+/**
+ * Wire #resetFilters button to clear all selects inside #filterForm
+ * and submit the form (which reloads with no filters).
+ */
+function initFilterReset() {
+  const btn  = document.getElementById('resetFilters');
+  const form = document.getElementById('filterForm');
+  if (!btn || !form) return;
+
+  btn.addEventListener('click', () => {
+    form.querySelectorAll('select').forEach((s) => { s.value = ''; });
+    form.querySelectorAll('input[type="text"]').forEach((i) => { i.value = ''; });
+    form.submit();
+  });
+}
 
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 7. DELETE MEMBER  (.delete-member-btn)
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Row click → member detail ─────────────────────────────────────────────────
 
-function initMemberDelete() {
+/**
+ * Make table rows clickable if they contain an <a> with class "action-icon view".
+ * Clicking anywhere on the row (except an existing <a> or <button>) navigates
+ * to the member detail URL.
+ */
+function initRowClick() {
+  const table = document.getElementById('membersTable');
+  if (!table) return;
+
+  table.querySelectorAll('tbody tr').forEach((row) => {
+    const viewLink = row.querySelector('a.action-icon.view');
+    if (!viewLink) return;
+
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('a') || e.target.closest('button')) return;
+      window.location.href = viewLink.href;
+    });
+  });
+}
+
+
+// ── Bootstrap on DOMContentLoaded ────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  applyStatusBadgeColors();
+  initSearch();
+  initSort();
+  initFilterReset();
+  initRowClick();
+  initDeleteButtons();
+});
+
+// ── Delete member ─────────────────────────────────────────────────────────────
+
+/**
+ * Wire all .delete-member-btn elements (buttons with data-delete-url and
+ * data-member-name attributes) to a confirm → AJAX POST → redirect flow.
+ *
+ * Markup pattern (members_list, member_detail, etc.):
+ *   <button class="delete-member-btn"
+ *           data-member-name="John Doe"
+ *           data-delete-url="/members/<pk>/delete/">
+ *     <i class="fas fa-trash"></i> Delete Member
+ *   </button>
+ */
+function initDeleteButtons() {
   document.querySelectorAll('.delete-member-btn').forEach((btn) => {
     btn.addEventListener('click', function () {
       const name      = this.dataset.memberName || 'this member';
       const deleteUrl = this.dataset.deleteUrl;
       if (!deleteUrl) return;
 
-      if (!confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) return;
+      if (!confirm(`Are you sure you want to delete ${name}?\nThis action cannot be undone.`)) return;
 
-      postAction(deleteUrl)
-        .then((resp) => {
-          if (resp.ok || resp.redirected) {
-            showToast(`${name} deleted.`, 'success');
-            setTimeout(() => { window.location.href = '/members/'; }, 800);
+      this.disabled  = true;
+      const origHtml = this.innerHTML;
+      this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+      fetch(deleteUrl, {
+        method:  'POST',
+        headers: {
+          'Accept':      'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+      })
+        .then((resp) => resp.json().then((data) => ({ ok: resp.ok, data })))
+        .then(({ ok, data }) => {
+          if (ok && data.success) {
+            showToast(data.message || 'Member deleted.', 'success');
+            setTimeout(() => {
+              window.location.href = data.redirect_url || '/members/';
+            }, 800);
           } else {
-            throw new Error('Server error ' + resp.status);
+            showToast(data.message || 'Could not delete member.', 'error');
+            this.disabled  = false;
+            this.innerHTML = origHtml;
           }
         })
-        .catch((err) => {
-          console.error('Delete failed:', err);
-          showToast('Delete failed. Please try again.', 'error');
+        .catch(() => {
+          showToast('Network error. Please try again.', 'error');
+          this.disabled  = false;
+          this.innerHTML = origHtml;
         });
     });
   });
 }
 
-window.initMemberDelete = initMemberDelete;
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 8. SELECT-OR-CREATE  (dept / course / year / semester on add/edit forms)
-//    When a "new_*" text input is filled, clear the corresponding select.
-//    When the select changes, clear the "new_*" input.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function initSelectOrCreate() {
-  const pairs = [
-    { selectId: 'department',        newId: 'new_department'        },
-    { selectId: 'department_teacher', newId: 'new_department_teacher' },
-    { selectId: 'course',            newId: 'new_course'            },
-    { selectId: 'year',              newId: 'new_year'              },
-    { selectId: 'semester',          newId: 'new_semester'          },
-  ];
-
-  pairs.forEach(({ selectId, newId }) => {
-    const sel   = document.getElementById(selectId);
-    const input = document.getElementById(newId);
-    if (!sel || !input) return;
-
-    // Typing in the "create new" field → deselect dropdown
-    input.addEventListener('input', () => {
-      if (input.value.trim()) sel.value = '';
-    });
-
-    // Choosing from dropdown → clear the "create new" field
-    sel.addEventListener('change', () => {
-      if (sel.value) input.value = '';
-    });
-  });
-}
-
-window.initSelectOrCreate = initSelectOrCreate;
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 9. PHONE FIELD VALIDATION HELPER
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/**
- * Wire digit-only filtering + 10-digit validation for phone inputs.
- * @param {Array<{id:string, required:boolean}>} fields
- */
-function initPhoneValidation(fields) {
-  fields.forEach(({ id, required }) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-
-    el.addEventListener('input', (e) => {
-      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
-      e.target.setCustomValidity('');
-      clearFieldError(e.target);
-    });
-
-    el.addEventListener('blur', (e) => {
-      const v = e.target.value;
-      if (v === '' && !required) { clearFieldError(e.target); return; }
-      if (v.length > 0 && v.length !== 10) {
-        setFieldError(e.target, 'Phone number must be exactly 10 digits.');
-      } else {
-        clearFieldError(e.target);
-      }
-    });
-
-    el.addEventListener('invalid', (e) => {
-      e.preventDefault();
-      const v = e.target.value;
-      setFieldError(e.target, v === '' && required
-        ? 'This field is required.'
-        : 'Phone number must be exactly 10 digits.');
-    });
-  });
-}
-
-window.initPhoneValidation = initPhoneValidation;
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 10. EMAIL VALIDATION HELPER
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function initEmailValidation(inputId) {
-  const el = document.getElementById(inputId || 'email');
-  if (!el) return;
-
-  el.addEventListener('blur', (e) => {
-    const v = e.target.value.trim();
-    if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
-      setFieldError(e.target, 'Please enter a valid email address.');
-    } else {
-      clearFieldError(e.target);
-    }
-  });
-}
-
-window.initEmailValidation = initEmailValidation;
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 11. FIELD ERROR HELPERS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function setFieldError(input, message) {
-  input.style.borderColor = '#ef4444';
-  input.setCustomValidity(message);
-  let errEl = input.closest('.form-group')?.querySelector('.error-message');
-  if (!errEl) {
-    errEl = document.createElement('span');
-    errEl.className = 'error-message';
-    input.closest('.form-group')?.appendChild(errEl);
-  }
-  errEl.textContent = message;
-}
-
-function clearFieldError(input) {
-  input.style.borderColor = '';
-  input.setCustomValidity('');
-  const errEl = input.closest('.form-group')?.querySelector('.error-message');
-  if (errEl) errEl.textContent = '';
-}
-
-window.setFieldError   = setFieldError;
-window.clearFieldError = clearFieldError;
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 12. DOM READY — wire up shared behaviours present on every page
-// ═══════════════════════════════════════════════════════════════════════════════
-
-document.addEventListener('DOMContentLoaded', () => {
-  autoDismissMessages();
-  initTableSearch();
-  initFilterReset();
-  initTableSort();
-  initMemberDelete();
-});
+window.initDeleteButtons = initDeleteButtons;

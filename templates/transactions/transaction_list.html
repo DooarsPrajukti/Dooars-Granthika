@@ -183,8 +183,18 @@
             </td>
             <td class="td-member">
               <div class="member-cell">
-                <div class="member-avatar" data-initials="{{ txn.member.first_name|first|upper }}">
-                  {{ txn.member.first_name|first|upper }}
+                <div class="member-avatar">
+                  {% if txn.member.photo_mime_type %}
+                  <img
+                    src="{% url 'members:member_photo' txn.member.pk %}"
+                    alt="{{ txn.member.first_name }}"
+                    class="member-avatar__photo"
+                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+                  >
+                  {% endif %}
+                  <span class="member-avatar__initial" {% if txn.member.photo_mime_type %}style="display:none"{% endif %}>
+                    {{ txn.member.first_name|first|upper }}
+                  </span>
                 </div>
                 <div class="member-info">
                   <span class="member-name">{{ txn.member.first_name }} {{ txn.member.last_name }}</span>

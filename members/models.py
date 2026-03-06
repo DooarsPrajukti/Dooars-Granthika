@@ -19,13 +19,11 @@ Photo Storage Note:
     No MEDIA_ROOT / MEDIA_URL configuration is required for photos.
 """
 
-import uuid
+import os
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import RegexValidator
 from django.utils import timezone
-
-from core.id_generator import generate_compact_id, get_module_code_for_member
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -234,34 +232,9 @@ class Member(models.Model):
 
     # ── Identity ─────────────────────────────────────────────────────────────
     member_id = models.CharField(
-        max_length=30,
-        unique=True,
+        max_length=50,
         blank=True,
-        db_index=True,
-        help_text=(
-            "Compact random ID — auto-generated on first save. "
-            "Format: DG<LIB><MODULE><YY><8-digit-random>  e.g. DGDOOST2692715482"
-        ),
-    )
-    # Year the member record was created — stored in full (e.g. 2026).
-    # The last 2 digits are embedded in the member_id; this field stores the
-    # full year for reporting / filtering without string parsing.
-    entry_year = models.PositiveSmallIntegerField(
-        null=True,
-        blank=True,
-        editable=False,
-        help_text="Full year the member was registered (auto-set, do not override).",
-    )
-    # ── Internal UUID (two-step migration) ───────────────────────────────────
-    # Step 1: null=True, no default → safe column addition to existing rows.
-    # Step 2: data migration populates NULLs with uuid.uuid4().
-    # Step 3: null=False once backfill is complete.
-    internal_uuid = models.UUIDField(
-        null=True,
-        blank=True,
-        unique=True,
-        editable=False,
-        help_text="Internal immutable UUID — do not expose in public-facing UI.",
+        help_text="Unique member ID per owner. Auto-generated if left blank.",
     )
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
@@ -403,8 +376,8 @@ class Member(models.Model):
     # ─────────────────────────────────────────────────────────────────────────
 
     class Meta:
-        # member_id has unique=True at field level — no need in unique_together.
         unique_together = [
+            ("owner", "member_id"),
             ("owner", "email"),
         ]
         ordering = ["-created_at"]
@@ -457,27 +430,103 @@ class Member(models.Model):
 
     # ── Save hook ─────────────────────────────────────────────────────────────
 
-    def save(self, *args, **kwargs):
-        # ── Auto-generate compact member_id on first save ─────────────────────
-        if not self.member_id:
-            module_code    = get_module_code_for_member(self.role)   # ST / TC / GM
-            self.member_id = generate_compact_id(
-                owner       = self.owner,
-                module_code = module_code,
-                model_class = Member,
-                field_name  = "member_id",
-            )
-            # Store the full year alongside the record for easy querying.
-            from datetime import datetime
-            self.entry_year = datetime.now().year
+    @staticmethod
+    def _generate_member_id(owner, role: str) -> str:
+        """
+        Generate a unique member ID with the format:
+            DG<LIB3><TYPE><MM><YY><SERIAL>
 
-        # ── Manage inactive_since timestamp automatically ──────────────────────
+        Where:
+            DG      – fixed system prefix
+            LIB3    – first 3 characters of the library code (uppercased,
+                      padded with 'X' if shorter than 3 chars)
+            TYPE    – ST (student) | TC (teacher) | GM (general member)
+            MM      – zero-padded current month  (e.g. 03)
+            YY      – two-digit current year     (e.g. 26)
+            SERIAL  – 3-digit auto-increment that resets every month
+
+        Examples:
+            DGDGRST0326001   (student,  library code DGR, March 2026, first)
+            DGDGRTC0326001   (teacher,  library code DGR, March 2026, first)
+            DGDGRGM0326001   (general,  library code DGR, March 2026, first)
+
+        Race-condition safety:
+            The query-then-set pattern is NOT atomic by itself.  Add a
+            UNIQUE constraint on (owner, member_id) — already present in
+            Meta.unique_together — so that a duplicate save raises
+            IntegrityError, which the view layer can catch and retry.
+        """
+        from django.db import models as _dm
+
+        # ── Library code ──────────────────────────────────────────────────────
+        # Derived from the first 3 characters of the library name (uppercased).
+        # The Library model has no dedicated `code` field — name is the source.
+        # If the library or name is unavailable, fall back to "LIB".
+        lib_code = "LIB"   # safe default
+        try:
+            library  = owner.library   # accounts.Library OneToOneField
+            raw_name = (getattr(library, "library_name", "") or "").strip().upper()
+            if len(raw_name) >= 3:
+                lib_code = raw_name[:3]
+            elif raw_name:
+                lib_code = raw_name
+        except Exception:
+            pass
+
+        # ── Role type code ────────────────────────────────────────────────────
+        type_map = {
+            "student": "ST",
+            "teacher": "TC",
+            "general": "GM",
+        }
+        type_code = type_map.get(role, "MB")
+
+        # ── Date fragment ─────────────────────────────────────────────────────
+        now = timezone.now()
+        mm  = now.strftime("%m")   # e.g. "03"
+        yy  = now.strftime("%y")   # e.g. "26"
+
+        # ── Prefix for this owner + role + month/year ─────────────────────────
+        # Pattern: DG + lib_code + type_code + mm + yy
+        # We build the prefix to query existing IDs for this month
+        id_prefix = f"DG{lib_code}{type_code}{mm}{yy}"
+
+        # ── Find the highest existing serial for this owner + prefix ──────────
+        existing = (
+            Member.objects
+            .filter(owner=owner, member_id__startswith=id_prefix)
+            .values_list("member_id", flat=True)
+        )
+        max_serial = 0
+        for mid in existing:
+            try:
+                serial_part = int(mid[len(id_prefix):])
+                if serial_part > max_serial:
+                    max_serial = serial_part
+            except (ValueError, IndexError):
+                pass
+
+        next_serial = max_serial + 1
+        if next_serial > 999:
+            # Safety: if somehow > 999 serials in one month, keep incrementing
+            serial_str = str(next_serial)
+        else:
+            serial_str = f"{next_serial:03d}"
+
+        return f"{id_prefix}{serial_str}"
+
+    def save(self, *args, **kwargs):
+        # Auto-generate member_id on first save if not provided
+        if not self.member_id:
+            self.member_id = self._generate_member_id(self.owner, self.role)
+
+        # Manage inactive_since timestamp automatically
         if self.status == "inactive":
             if not self.inactive_since:
                 self.inactive_since = timezone.now()
         else:
             # Clear inactive metadata when re-activating
-            self.inactive_since  = None
+            self.inactive_since = None
             self.inactive_reason = None
 
         super().save(*args, **kwargs)
@@ -511,35 +560,6 @@ class Transaction(models.Model):
         on_delete=models.CASCADE,
         related_name="member_transactions",
         help_text="Library admin who owns this transaction.",
-    )
-
-    # ── Compact ID ────────────────────────────────────────────────────────────
-    transaction_id = models.CharField(
-        max_length=30,
-        unique=True,
-        blank=True,
-        db_index=True,
-        help_text=(
-            "Compact random ID — auto-generated on first save. "
-            "Format: DG<LIB>TR<YY><8-digit-random>  e.g. DGDOOTR2618273645"
-        ),
-    )
-    entry_year = models.PositiveSmallIntegerField(
-        null=True,
-        blank=True,
-        editable=False,
-        help_text="Full year the transaction was created (auto-set, do not override).",
-    )
-    # ── Internal UUID (two-step migration) ───────────────────────────────────
-    # Step 1: null=True, no default → safe column addition to existing rows.
-    # Step 2: data migration populates NULLs with uuid.uuid4().
-    # Step 3: null=False once backfill is complete.
-    internal_uuid = models.UUIDField(
-        null=True,
-        blank=True,
-        unique=True,
-        editable=False,
-        help_text="Internal immutable UUID for database integrity.",
     )
 
     # ── Core details ──────────────────────────────────────────────────────────
@@ -667,27 +687,44 @@ class Transaction(models.Model):
     # ── Save hook ─────────────────────────────────────────────────────────────
 
     def save(self, *args, **kwargs):
-        # ── Auto-generate compact transaction_id on first save ────────────────
-        if not self.transaction_id:
-            self.transaction_id = generate_compact_id(
-                owner       = self.owner,
-                module_code = "TR",
-                model_class = Transaction,
-                field_name  = "transaction_id",
-            )
-            from datetime import datetime
-            self.entry_year = datetime.now().year
-
-        # ── Auto-flag overdue books ───────────────────────────────────────────
+        # Auto-flag overdue books
         if self.status == "issued" and self.is_overdue:
             self.status = "overdue"
 
-        # ── Auto-set return_date when marking as returned ─────────────────────
+        # Auto-set return_date when marking as returned
         if self.status == "returned" and not self.return_date:
             self.return_date = timezone.now()
 
-        # ── Auto-set fine_paid_date when fine is marked paid ──────────────────
+        # Auto-set fine_paid_date when fine is marked paid
         if self.fine_paid and not self.fine_paid_date:
             self.fine_paid_date = timezone.now()
 
         super().save(*args, **kwargs)
+
+"""
+members/models.py  — add this property to the Member class
+───────────────────────────────────────────────────────────
+Place it alongside the other @property methods on Member,
+e.g. right after the `full_name` property.
+"""
+
+# ── Add inside the Member class ───────────────────────────────────────────────
+
+@property
+def passout_label(self) -> str:
+    """
+    Returns a human-readable status label.
+    For active / inactive members this mirrors get_status_display().
+    For passout members the label is role-aware:
+        student  → "Alumni"
+        teacher  → "Ex-Teacher"
+        general  → "Former Member"
+    """
+    if self.status != "passout":
+        return self.get_status_display()
+
+    return {
+        "student": "Alumni",
+        "teacher": "Ex-Teacher",
+        "general": "Former Member",
+    }.get(self.role, "Passout")   # safe fallback for any future roles

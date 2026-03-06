@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Fine, MissingBook, Transaction
+from finance.models import Fine
+from .models import MissingBook, Transaction
 
 
 @admin.register(Transaction)
@@ -28,7 +29,7 @@ class TransactionAdmin(admin.ModelAdmin):
             "fields": ("issue_date", "due_date", "return_date", "lost_date"),
         }),
         ("Loan Settings", {
-            "fields": ("loan_duration_days", "fine_rate_per_day", "copy_number", "renewal_count"),
+            "fields": ("loan_duration_days", "fine_rate_per_day", "renewal_count"),
         }),
         ("Return Details", {
             "fields": ("return_condition", "damage_charge", "return_notes"),
@@ -58,18 +59,6 @@ class TransactionAdmin(admin.ModelAdmin):
     @admin.display(description="Days Borrowed")
     def days_borrowed_display(self, obj):
         return obj.days_borrowed
-
-
-@admin.register(Fine)
-class FineAdmin(admin.ModelAdmin):
-    list_display  = (
-        "id", "library", "transaction", "fine_type",
-        "amount", "status", "paid_date", "payment_method",
-    )
-    list_filter   = ("fine_type", "status", "library")
-    search_fields = ("transaction__pk", "transaction__member__first_name",
-                     "transaction__member__last_name")
-    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(MissingBook)

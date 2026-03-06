@@ -20,14 +20,11 @@
       </div>
       <div class="page-title-row">
         <h1 class="page-title">Missing &amp; Lost Books</h1>
-        {# missing_books is an unevaluated QuerySet passed from the view — |length forces
-           evaluation and caches the result; no paginator here so this is correct. #}
         <span class="lost-count-badge">{{ missing_books|length }} book{{ missing_books|length|pluralize }}</span>
       </div>
       <p class="page-subtitle">Books reported lost, damaged beyond use, or missing from the library</p>
     </div>
     <div class="page-header__actions">
-      {# Report Missing opens a JS modal — no direct URL needed #}
       <button class="btn btn--danger-outline" id="reportMissingBtn" type="button">
         <svg viewBox="0 0 20 20" fill="none"><path d="M10 3L2 17h16L10 3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 9v4M10 15v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         Report Missing
@@ -64,7 +61,6 @@
         <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.75"/><path d="M12 8v5M12 15v.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
       </div>
       <div class="missing-stat-card__content">
-        {# total_penalty is a Decimal aggregate — floatformat:2 prevents raw repr #}
         <span class="missing-stat-card__number">₹{{ total_penalty|floatformat:2 }}</span>
         <span class="missing-stat-card__label">Total Penalties</span>
       </div>
@@ -105,7 +101,6 @@
         </div>
         <div class="filter-group">
           <label class="filter-label">Penalty Status</label>
-          {# View reads request.GET.get("penalty") — the select name must match exactly #}
           <select name="penalty" class="filter-select">
             <option value="">All</option>
             <option value="pending" {% if request.GET.penalty == 'pending' %}selected{% endif %}>Penalty Pending</option>
@@ -164,14 +159,25 @@
                 <div>
                   <span class="book-title">{{ item.book.title }}</span>
                   <span class="book-author">{{ item.book.author }}</span>
-                  {# isbn is the field name on Book model (confirmed in book_search_api view) #}
                   <span class="book-isbn">ISBN: {{ item.book.isbn|default:"—" }}</span>
                 </div>
               </div>
             </td>
             <td class="td-member">
               <div class="member-cell">
-                <div class="member-avatar">{{ item.transaction.member.first_name|first|upper }}</div>
+                <div class="member-avatar">
+                  {% if item.transaction.member.photo_mime_type %}
+                  <img
+                    src="{% url 'members:member_photo' item.transaction.member.pk %}"
+                    alt="{{ item.transaction.member.first_name }}"
+                    class="member-avatar__photo"
+                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+                  >
+                  {% endif %}
+                  <span class="member-avatar__initial" {% if item.transaction.member.photo_mime_type %}style="display:none"{% endif %}>
+                    {{ item.transaction.member.first_name|first|upper }}
+                  </span>
+                </div>
                 <div class="member-info">
                   <span class="member-name">{{ item.transaction.member.first_name }} {{ item.transaction.member.last_name }}</span>
                   <span class="member-id">{{ item.transaction.member.member_id }}</span>
@@ -191,7 +197,6 @@
             <td class="td-penalty">
               {% if item.penalty_amount > 0 %}
               <div class="penalty-cell">
-                {# penalty_amount is a Decimal — floatformat:2 prevents raw repr #}
                 <span class="penalty-amount">₹{{ item.penalty_amount|floatformat:2 }}</span>
                 <span class="penalty-status {% if item.penalty_paid %}penalty-status--paid{% else %}penalty-status--pending{% endif %}">
                   {{ item.penalty_paid|yesno:"Paid,Pending" }}
@@ -203,9 +208,6 @@
             </td>
             <td class="td-actions">
               <div class="action-group">
-                {# Mark Lost: opens the custom modal via JS using data-txn-id.
-                   The hidden transaction_id input in the modal is populated by missing_books.js.
-                   Only shown for non-recovered records. #}
                 {% if item.status != 'recovered' %}
                 <button
                   class="action-btn action-btn--mark-lost"
@@ -217,9 +219,6 @@
                   Mark Lost
                 </button>
                 {% endif %}
-                {# Penalty: opens the Add/Update Penalty modal via JS.
-                   data-id is the MissingBook pk (used as missing_id in the form).
-                   data-book passes the title for the modal header. #}
                 <button
                   class="action-btn action-btn--penalty"
                   type="button"
@@ -229,13 +228,8 @@
                   <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 7v6M7 10h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                   Penalty
                 </button>
-                {# Recover: inline POST form — no modal needed.
-                   mark_recovered view takes the MissingBook pk from the URL. #}
                 {% if item.status != 'recovered' %}
-                <form
-                  method="POST"
-                  action="{% url 'transactions:mark_recovered' item.id %}"
-                  style="display:inline">
+                <form method="POST" action="{% url 'transactions:mark_recovered' item.id %}" style="display:inline">
                   {% csrf_token %}
                   <button type="submit" class="action-btn action-btn--recover" title="Mark as Recovered">
                     <svg viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -265,8 +259,6 @@
   </div><!-- /.table-card -->
 
   <!-- Mark Lost Modal -->
-  {# mark_lost URL has no pk — the Transaction pk arrives via the hidden transaction_id field,
-     populated by missing_books.js when this modal opens (from data-txn-id on the button). #}
   <div class="modal" id="markLostModal" aria-hidden="true" aria-modal="true" role="dialog">
     <div class="modal__backdrop" id="markLostBackdrop"></div>
     <div class="modal__dialog">
@@ -278,8 +270,6 @@
       </div>
       <form method="POST" action="{% url 'transactions:mark_lost' %}" id="markLostForm">
         {% csrf_token %}
-        {# transaction_id = Transaction pk — view's MarkLostForm.clean() fetches the Transaction
-           by this value. Populated by missing_books.js from the button's data-txn-id attribute. #}
         <input type="hidden" name="transaction_id" id="markLostTxnId">
         <div class="modal__body">
           <div class="modal-warning">
@@ -293,12 +283,7 @@
           </ul>
           <div class="form-group">
             <label for="lostNotes" class="form-label">Reason / Notes</label>
-            <textarea
-              name="notes"
-              id="lostNotes"
-              class="form-textarea"
-              rows="3"
-              placeholder="Describe how or when the book was determined lost…"></textarea>
+            <textarea name="notes" id="lostNotes" class="form-textarea" rows="3" placeholder="Describe how or when the book was determined lost…"></textarea>
           </div>
         </div>
         <div class="modal__footer">
@@ -310,8 +295,6 @@
   </div>
 
   <!-- Add Penalty Modal -->
-  {# add_penalty URL has no pk — the MissingBook pk arrives via hidden missing_id field,
-     populated by missing_books.js when this modal opens (from data-id on the button). #}
   <div class="modal" id="addPenaltyModal" aria-hidden="true" aria-modal="true" role="dialog">
     <div class="modal__backdrop" id="addPenaltyBackdrop"></div>
     <div class="modal__dialog">
@@ -323,28 +306,16 @@
       </div>
       <form method="POST" action="{% url 'transactions:add_penalty' %}" id="addPenaltyForm">
         {% csrf_token %}
-        {# missing_id = MissingBook pk — AddPenaltyForm uses cd["missing_id"] to look up
-           the MissingBook. Populated by missing_books.js from the button's data-id attribute. #}
         <input type="hidden" name="missing_id" id="penaltyMissingId">
         <div class="modal__body">
-          {# JS populates this div with the book title from data-book on the triggering button #}
           <div class="penalty-book-info" id="penaltyBookInfo"></div>
           <div class="form-group">
             <label for="penaltyAmount" class="form-label form-label--required">Penalty Amount (₹)</label>
-            <input
-              type="number"
-              name="penalty_amount"
-              id="penaltyAmount"
-              class="form-input"
-              min="0"
-              step="0.50"
-              placeholder="e.g. 500.00"
-              required>
+            <input type="number" name="penalty_amount" id="penaltyAmount" class="form-input" min="0" step="0.50" placeholder="e.g. 500.00" required>
             <span class="form-hint">Book replacement value: <strong id="bookValueHint">—</strong></span>
           </div>
           <div class="form-group">
             <label for="penaltyReason" class="form-label">Reason</label>
-            {# penalty_reason choices must match MissingBook.REASON_CHOICES values exactly #}
             <select name="penalty_reason" id="penaltyReason" class="form-select">
               <option value="lost">Book Lost</option>
               <option value="damaged">Severely Damaged</option>
@@ -354,12 +325,7 @@
           </div>
           <div class="form-group">
             <label for="penaltyNotes" class="form-label">Notes</label>
-            <textarea
-              name="notes"
-              id="penaltyNotes"
-              class="form-textarea"
-              rows="2"
-              placeholder="Additional notes…"></textarea>
+            <textarea name="notes" id="penaltyNotes" class="form-textarea" rows="2" placeholder="Additional notes…"></textarea>
           </div>
         </div>
         <div class="modal__footer">

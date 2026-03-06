@@ -72,15 +72,22 @@
         </div>
         <div class="info-card__body">
           <div class="member-profile">
-            <div class="member-profile__avatar">
-              {# Try to load member photo (BLOB); fall back to initial letter on error #}
+            <div class="member-profile__avatar" style="position:relative;overflow:hidden;">
+              {% if transaction.member.photo_mime_type %}
               <img
-                src="{% url 'members:member_photo' transaction.member.id %}"
+                src="{% url 'members:member_photo' transaction.member.pk %}"
                 alt="{{ transaction.member.first_name }}"
-                style="width:100%;height:100%;object-fit:cover;border-radius:50%;"
-                onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex';"
+                style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;"
+                onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
               >
-              <span style="display:none">{{ transaction.member.first_name|first|upper }}</span>
+              {% endif %}
+              <span style="{% if transaction.member.photo_mime_type %}display:none;{% else %}display:flex;{% endif %}
+                            width:100%;height:100%;border-radius:50%;
+                            align-items:center;justify-content:center;
+                            background:linear-gradient(135deg,#6366f1,#8b5cf6);
+                            color:#fff;font-size:1.5rem;font-weight:700;text-transform:uppercase;">
+                {{ transaction.member.first_name|first|upper }}
+              </span>
             </div>
             <div class="member-profile__details">
               <h3 class="member-profile__name">{{ transaction.member.first_name }} {{ transaction.member.last_name }}</h3>
@@ -135,7 +142,6 @@
         <div class="info-card__body">
           <div class="book-profile">
             <div class="book-profile__cover">
-             
               <img
                 id="bookCoverImg"
                 src="{% url 'books:book_cover' transaction.book.id %}"
@@ -258,14 +264,16 @@
         </div><!-- /.timeline -->
       </div>
 
-      <!-- Fine Calculation Card -->
+      <!-- Fine Calculation Card — sourced from finance_fine DB table -->
       <div class="fine-card">
         <div class="fine-card__header">
           <h2 class="fine-card__title">Fine Details</h2>
-          {% if transaction.fine_paid %}
-          <span class="fine-status-badge fine-status-badge--paid">Paid</span>
-          {% elif transaction.fine_amount > 0 %}
+          {% if unpaid_fine_amount > 0 %}
           <span class="fine-status-badge fine-status-badge--unpaid">Unpaid</span>
+          {% elif paid_fine_amount > 0 %}
+          <span class="fine-status-badge fine-status-badge--paid">Paid</span>
+          {% elif waived_fine_amount > 0 %}
+          <span class="fine-status-badge fine-status-badge--waived">Waived</span>
           {% else %}
           <span class="fine-status-badge fine-status-badge--nil">No Fine</span>
           {% endif %}
@@ -282,49 +290,61 @@
                 {{ transaction.overdue_days }} days
               </span>
             </div>
+            {% if db_overdue_fine > 0 %}
             <div class="fine-calc__row">
               <span class="fine-calc__label">Overdue Fine</span>
-              <span class="fine-calc__value">₹{{ transaction.overdue_fine }}</span>
-            </div>
-            {% if transaction.damage_charge %}
-            <div class="fine-calc__row">
-              <span class="fine-calc__label">Damage Charge</span>
-              <span class="fine-calc__value fine-calc__value--danger">₹{{ transaction.damage_charge }}</span>
+              <span class="fine-calc__value fine-calc__value--danger">₹{{ db_overdue_fine }}</span>
             </div>
             {% endif %}
-            {% if transaction.status == 'lost' %}
+            {% if db_damage_charge > 0 %}
             <div class="fine-calc__row">
-              <span class="fine-calc__label">Book Lost</span>
-              <span class="fine-calc__value fine-calc__value--danger">See penalty below</span>
+              <span class="fine-calc__label">Damage Charge</span>
+              <span class="fine-calc__value fine-calc__value--danger">₹{{ db_damage_charge }}</span>
+            </div>
+            {% endif %}
+            {% if db_lost_penalty > 0 %}
+            <div class="fine-calc__row">
+              <span class="fine-calc__label">Lost Book Penalty</span>
+              <span class="fine-calc__value fine-calc__value--danger">₹{{ db_lost_penalty }}</span>
+            </div>
+            {% endif %}
+            {% if paid_fine_amount > 0 %}
+            <div class="fine-calc__row">
+              <span class="fine-calc__label">Already Paid</span>
+              <span class="fine-calc__value fine-calc__value--success">−₹{{ paid_fine_amount }}</span>
+            </div>
+            {% endif %}
+            {% if waived_fine_amount > 0 %}
+            <div class="fine-calc__row">
+              <span class="fine-calc__label">Waived</span>
+              <span class="fine-calc__value">−₹{{ waived_fine_amount }}</span>
             </div>
             {% endif %}
             <div class="fine-calc__divider"></div>
             <div class="fine-calc__row fine-calc__row--total">
-              <span class="fine-calc__label">Total Fine</span>
-              <span class="fine-calc__total {% if transaction.fine_amount > 0 %}fine-calc__total--danger{% endif %}">
-                ₹{{ transaction.fine_amount }}
+              <span class="fine-calc__label">Amount Due</span>
+              <span class="fine-calc__total {% if unpaid_fine_amount > 0 %}fine-calc__total--danger{% endif %}">
+                ₹{{ unpaid_fine_amount }}
               </span>
             </div>
           </div>
 
-          {% if transaction.fine_amount > 0 and not transaction.fine_paid %}
-          {% with first_unpaid=fines|dictsort:"id" %}
-          <form method="POST" action="{% url 'transactions:mark_fine_paid' %}" class="inline-pay-form">
-            {% csrf_token %}
-            <input type="hidden" name="fine_id" value="{{ fines.0.id }}">
-            <input type="hidden" name="payment_method" value="cash">
-            <input type="hidden" name="next" value="{% url 'transactions:transaction_detail' transaction.id %}">
-            <button type="submit" class="btn btn--primary btn--block" {% if not fines %}disabled{% endif %}>
-              Mark Fine as Paid
-            </button>
-          </form>
-          {% endwith %}
+          {% if unpaid_fine_amount > 0 %}
+          {% for fine in fines %}{% if fine.status == 'unpaid' %}
+          <a
+            href="{% url 'finance:process_payment' %}?fine_id={{ fine.id }}"
+            class="btn btn--primary btn--block">
+            <svg viewBox="0 0 20 20" fill="none"><rect x="2" y="5" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M2 9h16" stroke="currentColor" stroke-width="1.5"/><path d="M6 13h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Pay ₹{{ unpaid_fine_amount }}
+          </a>
+          {% endif %}{% endfor %}
           {% endif %}
 
-          {% if transaction.fine_paid %}
+          {% if paid_fine_amount > 0 and unpaid_fine_amount == 0 %}
           <div class="fine-paid-info">
             <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Paid on {{ transaction.fine_paid_date|date:"d M Y"|default:"—" }}
+            Fine fully paid
+            {% for fine in fines %}{% if fine.status == 'paid' %} · {{ fine.paid_date|date:"d M Y" }}{% if fine.payment_method %} via {{ fine.get_payment_method_display }}{% endif %}{% endif %}{% endfor %}
           </div>
           {% endif %}
         </div>
@@ -366,14 +386,14 @@
             <th>Amount (₹)</th>
             <th>Status</th>
             <th>Paid Date</th>
-            <th>Method</th>
+            <th>Method / Ref</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for fine in fines %}
           <tr class="table-row">
-            <td><span class="fine-id">#F{{ fine.id|stringformat:"04d" }}</span></td>
+            <td><span class="fine-id">{{ fine.fine_id|default:fine.id }}</span></td>
             <td>{{ fine.get_fine_type_display }}</td>
             <td>₹{{ fine.amount }}</td>
             <td>
@@ -383,21 +403,27 @@
               </span>
             </td>
             <td>{{ fine.paid_date|date:"d M Y"|default:"—" }}</td>
-            <td>{{ fine.get_payment_method_display|default:"—" }}</td>
+            <td>
+              {% if fine.payment_ref %}
+                <span class="ref-id" title="{{ fine.payment_ref }}">{{ fine.payment_ref|truncatechars:20 }}</span>
+              {% else %}
+                {{ fine.get_payment_method_display|default:"—" }}
+              {% endif %}
+            </td>
             <td>
               {% if fine.status == 'unpaid' %}
-              <form method="POST" action="{% url 'transactions:mark_fine_paid' %}" style="display:inline">
-                {% csrf_token %}
-                <input type="hidden" name="fine_id" value="{{ fine.id }}">
-                <input type="hidden" name="payment_method" value="cash">
-                <input type="hidden" name="next" value="{% url 'transactions:transaction_detail' transaction.id %}">
-                <button type="submit" class="action-btn action-btn--pay">Mark Paid</button>
-              </form>
-              <form method="POST" action="{% url 'transactions:waive_fine' fine.id %}" style="display:inline">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="{% url 'transactions:transaction_detail' transaction.id %}">
-                <button type="submit" class="action-btn action-btn--waive">Waive</button>
-              </form>
+              <div class="action-group">
+                <a
+                  href="{% url 'finance:process_payment' %}?fine_id={{ fine.id }}"
+                  class="action-btn action-btn--pay">
+                  Pay the Fine
+                </a>
+                <form method="POST" action="{% url 'transactions:waive_fine' fine.id %}" style="display:inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{% url 'transactions:transaction_detail' transaction.id %}">
+                  <button type="submit" class="action-btn action-btn--waive">Waive</button>
+                </form>
+              </div>
               {% endif %}
             </td>
           </tr>

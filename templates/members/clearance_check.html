@@ -23,6 +23,7 @@
   <!-- Search Card -->
   <div class="clearance-search-card">
     <h2>Search Member</h2>
+    {# CSRF token read by clearance_check.js via getCsrfToken() #}
     <form id="clearanceCheckForm" method="post" action="{% url 'members:clearance_check' %}">
       {% csrf_token %}
       <div class="search-form">
@@ -30,21 +31,23 @@
           <i class="fas fa-search"></i>
           <input
             type="text"
+            id="memberIdInput"
             name="member_id"
             placeholder="Enter Member ID or Phone Number"
             required
             autocomplete="off"
+            value="{{ request.GET.member_id|default:'' }}"
           />
         </div>
-        <button type="submit" class="btn-search">
+        <button type="submit" class="btn-search" id="searchBtn">
           <i class="fas fa-search"></i> Check Status
         </button>
       </div>
     </form>
   </div>
 
-  <!-- Result Card (shown by JS after AJAX response) -->
-  <div id="clearanceResult" class="clearance-result-card"></div>
+  <!-- Result Card — populated by clearance_check.js after AJAX response -->
+  <div id="clearanceResult"></div>
 
   <!-- Quick Links -->
   <div style="background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-top: 2rem;">

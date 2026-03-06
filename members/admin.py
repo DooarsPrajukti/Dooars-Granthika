@@ -231,7 +231,7 @@ class MemberAdmin(OwnerScopedMixin, admin.ModelAdmin):
             '<span style="background:{};color:white;padding:3px 10px;'
             'border-radius:12px;font-size:11px;font-weight:600">{}</span>',
             color,
-            obj.get_status_display(),
+            obj.passout_label,  # role-aware: Alumni / Ex-Teacher / Former Member
         )
 
     @admin.display(description="Clearance")

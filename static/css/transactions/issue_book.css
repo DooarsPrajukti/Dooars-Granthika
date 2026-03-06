@@ -617,3 +617,71 @@ body { font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--grey-70
   .page-header { flex-direction: column; }
   .page-header__actions { width: 100%; }
 }
+/* ── ID input field ──────────────────────────────────────────── */
+.id-field-wrapper { display: flex; flex-direction: column; gap: .4rem; }
+.id-field-input-row {
+  display: flex; align-items: center; gap: 0;
+  border: 1.5px solid var(--border, #e5e7eb);
+  border-radius: 10px; background: var(--surface, #fff);
+  transition: border-color .15s, box-shadow .15s;
+  overflow: hidden;
+}
+.id-field-input-row:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+}
+.id-field-input-row.is-valid   { border-color: #10b981; }
+.id-field-input-row.is-invalid { border-color: #ef4444; }
+.id-field-icon {
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 .75rem; color: #9ca3af; flex-shrink: 0;
+}
+.id-field-icon svg { width: 18px; height: 18px; }
+.id-field-input {
+  flex: 1; border: none; outline: none; background: transparent;
+  padding: .7rem .5rem .7rem 0;
+  font-size: .95rem; font-family: monospace; letter-spacing: .04em;
+  color: var(--text, #111827);
+}
+.id-field-input--error { color: #ef4444; }
+.id-field-status {
+  display: flex; align-items: center; justify-content: center;
+  width: 38px; flex-shrink: 0; color: #9ca3af;
+}
+.id-field-status svg { width: 18px; height: 18px; }
+
+/* ── Inline preview card ─────────────────────────────────────── */
+.id-preview {
+  display: flex; align-items: center; gap: .85rem;
+  margin-top: .6rem; padding: .9rem 1rem;
+  background: #f8fafc; border: 1.5px solid #e5e7eb;
+  border-radius: 10px; transition: opacity .2s;
+}
+.id-preview--member .id-preview__avatar {
+  width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%;
+  overflow: hidden;
+}
+.id-preview--book .id-preview__book-icon {
+  width: 44px; height: 58px; flex-shrink: 0;
+  border-radius: 4px; background: #ede9fe; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.id-preview--book .id-preview__book-icon svg {
+  width: 24px; height: 30px; color: #6366f1;
+}
+.id-preview__info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
+.id-preview__name { font-weight: 600; font-size: .95rem; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.id-preview__meta { font-size: .8rem; color: #6b7280; }
+.id-preview__isbn { font-size: .8rem; color: #9ca3af; font-family: monospace; }
+.id-preview__stats { display: flex; align-items: center; gap: .35rem; flex-shrink: 0; }
+.id-preview__stat  { display: flex; flex-direction: column; align-items: center; font-size: .75rem; }
+.id-preview__stat-label { color: #9ca3af; }
+.id-preview__stat-sep   { color: #e5e7eb; font-size: .9rem; }
+.id-preview__avail { flex-shrink: 0; }
+.avail-badge {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: 3px 10px; border-radius: 20px; font-size: .8rem; font-weight: 600;
+}
+.avail-badge--ok  { background: #d1fae5; color: #065f46; }
+.avail-badge--out { background: #fee2e2; color: #991b1b; }
+.is-hidden { display: none !important; }

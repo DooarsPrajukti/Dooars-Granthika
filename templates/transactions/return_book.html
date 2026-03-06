@@ -59,7 +59,19 @@
             Member
           </div>
           <div class="overview-profile">
-            <div class="overview-avatar">{{ transaction.member.first_name|first|upper }}</div>
+            <div class="overview-avatar">
+              {% if transaction.member.photo_mime_type %}
+              <img
+                src="{% url 'members:member_photo' transaction.member.pk %}"
+                alt="{{ transaction.member.first_name }}"
+                class="member-avatar__photo"
+                onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+              >
+              {% endif %}
+              <span class="member-avatar__initial" {% if transaction.member.photo_mime_type %}style="display:none"{% endif %}>
+                {{ transaction.member.first_name|first|upper }}
+              </span>
+            </div>
             <div class="overview-info">
               <h3 class="overview-name">{{ transaction.member.first_name }} {{ transaction.member.last_name }}</h3>
               <span class="overview-meta">{{ transaction.member.member_id }} · {{ transaction.member.get_role_display }}</span>

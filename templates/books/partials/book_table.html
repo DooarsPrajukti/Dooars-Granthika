@@ -3,6 +3,7 @@
     <thead>
       <tr>
         <th data-sort="sn">#<span class="sort-icon">▲</span></th>
+        <th data-sort="copy_id_range">Copy ID Range <span class="sort-icon">▲</span></th>
         <th data-sort="title">Book Title <span class="sort-icon">▲</span></th>
         <th data-sort="author">Author <span class="sort-icon">▲</span></th>
         <th data-sort="isbn">ISBN <span class="sort-icon">▲</span></th>
@@ -17,6 +18,21 @@
       {% for book in books %}
       <tr>
         <td class="text-muted text-sm">{{ page_obj.start_index|add:forloop.counter0 }}</td>
+        <td class="text-muted text-sm" style="font-family:monospace;letter-spacing:.03em;">
+          {% with first_copy=book.copies.first last_copy=book.copies.last %}
+            {% if first_copy %}
+              {% if first_copy.copy_id == last_copy.copy_id %}
+                {{ first_copy.copy_id }}
+              {% else %}
+                {{ first_copy.copy_id }}<br>
+                <span style="color:var(--text-muted);font-size:.7rem;">↓</span><br>
+                {{ last_copy.copy_id }}
+              {% endif %}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          {% endwith %}
+        </td>
         <td class="book-title-cell">{{ book.title }}</td>
         <td>{{ book.author }}</td>
         <td class="text-muted text-sm">{{ book.isbn }}</td>
@@ -48,7 +64,7 @@
       </tr>
       {% empty %}
       <tr>
-        <td colspan="9">
+        <td colspan="10">
           <div class="empty-state">
             <i class="fas fa-book-open"></i>
             <h3>No books found</h3>

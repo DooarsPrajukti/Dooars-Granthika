@@ -1,44 +1,85 @@
+# finance/admin.py
+
 from django.contrib import admin
+from django.db.models import Sum
+from .models import Expense, Fine, Payment
 
-from .models import RazorpayPayment
+
+@admin.register(Fine)
+class FineAdmin(admin.ModelAdmin):
+    list_display  = ['fine_id', 'member_name', 'book_title', 'fine_type',
+                     'amount', 'status', 'paid_date', 'created_at']
+    list_filter   = ['status', 'fine_type', 'created_at']
+    search_fields = [
+        'fine_id',
+        'transaction__member__first_name',
+        'transaction__member__last_name',
+        'transaction__book__title',
+    ]
+    readonly_fields = ['fine_id', 'created_at', 'updated_at']
+    list_select_related = ['transaction__member', 'transaction__book']
+
+    def member_name(self, obj):
+        m = obj.transaction.member
+        return f'{m.first_name} {m.last_name}'
+    member_name.short_description = 'Member'
+
+    def book_title(self, obj):
+        return obj.transaction.book.title
+    book_title.short_description = 'Book'
+
+    actions = ['mark_as_paid', 'mark_as_waived']
+
+    def mark_as_paid(self, request, queryset):
+        from django.utils import timezone
+        updated = queryset.filter(status=Fine.STATUS_UNPAID).update(
+            status=Fine.STATUS_PAID, paid_date=timezone.now().date()
+        )
+        self.message_user(request, f'{updated} fine(s) marked as paid.')
+    mark_as_paid.short_description = 'Mark selected fines as paid'
+
+    def mark_as_waived(self, request, queryset):
+        from django.utils import timezone
+        updated = queryset.filter(status=Fine.STATUS_UNPAID).update(
+            status=Fine.STATUS_WAIVED, paid_date=timezone.now().date()
+        )
+        self.message_user(request, f'{updated} fine(s) waived.')
+    mark_as_waived.short_description = 'Waive selected fines'
 
 
-@admin.register(RazorpayPayment)
-class RazorpayPaymentAdmin(admin.ModelAdmin):
-    list_display = (
-        "id",
-        "fine",
-        "razorpay_order_id",
-        "razorpay_payment_id",
-        "amount_rupees_display",
-        "currency",
-        "status",
-        "created_at",
-    )
-    list_filter   = ("status", "currency")
-    search_fields = (
-        "razorpay_order_id",
-        "razorpay_payment_id",
-        "fine__transaction__member__first_name",
-        "fine__transaction__member__last_name",
-    )
-    readonly_fields = ("created_at", "updated_at", "amount_rupees_display")
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display  = ['pk', 'member_name', 'amount', 'method',
+                     'status', 'receipt_number', 'collected_by', 'transaction_date']
+    list_filter   = ['method', 'status', 'transaction_date']
+    search_fields = [
+        'fine__fine_id',
+        'fine__transaction__member__first_name',
+        'fine__transaction__member__last_name',
+        'receipt_number',
+        'gateway_payment_id',
+    ]
+    readonly_fields = ['created_at']
+    list_select_related = ['fine__transaction__member']
 
-    fieldsets = (
-        ("Fine", {
-            "fields": ("fine",),
-        }),
-        ("Razorpay Identifiers", {
-            "fields": ("razorpay_order_id", "razorpay_payment_id", "razorpay_signature"),
-        }),
-        ("Amount & Status", {
-            "fields": ("amount_paise", "amount_rupees_display", "currency", "status"),
-        }),
-        ("Audit", {
-            "fields": ("created_at", "updated_at"),
-        }),
-    )
+    def member_name(self, obj):
+        if obj.fine and obj.fine.transaction:
+            m = obj.fine.transaction.member
+            return f'{m.first_name} {m.last_name}'
+        return '-'
+    member_name.short_description = 'Member'
 
-    @admin.display(description="Amount (₹)")
-    def amount_rupees_display(self, obj):
-        return f"₹{obj.amount_rupees:.2f}"
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        qs = self.get_queryset(request).filter(status='success')
+        extra_context['total_collected'] = qs.aggregate(t=Sum('amount'))['t'] or 0
+        return super().changelist_view(request, extra_context)
+
+
+@admin.register(Expense)
+class ExpenseAdmin(admin.ModelAdmin):
+    list_display  = ['date', 'description', 'category', 'amount', 'recorded_by', 'created_at']
+    list_filter   = ['category', 'date']
+    search_fields = ['description', 'notes', 'recorded_by']
+    readonly_fields = ['created_at', 'updated_at']
+    date_hierarchy = 'date'

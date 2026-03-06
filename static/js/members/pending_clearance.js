@@ -1,21 +1,21 @@
 /**
  * members/pending_clearance.js
  * ────────────────────────────
- * Pending clearance page JavaScript.
- * Depends on: members.js (loaded before this file in the template).
+ * Pending clearance page — button UX only.
+ * Depends on: members.js  (provides getCsrfToken, postAction, showToast)
  *
- * Provides:
- *   - sendReminder(memberId)  — POST to /members/<id>/send-reminder/
- *   - markCleared(memberId)   — POST to /members/<id>/mark-cleared/
- *
- * Both use postAction() from members.js (CSRF token attached automatically).
+ * JS role:
+ *   ✓ sendReminder()  – POST to send-reminder, show toast
+ *   ✓ markCleared()   – POST to mark-cleared with Accept: application/json,
+ *                        animate row out on success
+ *   ✓ Highlight high-priority rows (decoration)
  */
 
 'use strict';
 
 /**
- * Send a reminder notification to a member.
- * @param {number} memberId
+ * Send a reminder — POST, show response message as toast.
+ * @param {number} memberId  (the Django pk integer)
  */
 function sendReminder(memberId) {
   const url = `/members/${memberId}/send-reminder/`;
@@ -31,13 +31,8 @@ function sendReminder(memberId) {
       if (!resp.ok) throw new Error('Server error ' + resp.status);
       return resp.json();
     })
-    .then((data) => {
-      showToast(data.message || 'Reminder sent!', 'success');
-    })
-    .catch((err) => {
-      console.error('sendReminder error:', err);
-      showToast('Failed to send reminder. Please try again.', 'error');
-    })
+    .then((data) => showToast(data.message || 'Reminder sent!', 'success'))
+    .catch(() => showToast('Failed to send reminder. Please try again.', 'error'))
     .finally(() => {
       if (btn) {
         btn.disabled  = false;
@@ -46,37 +41,55 @@ function sendReminder(memberId) {
     });
 }
 
+window.sendReminder = sendReminder;
+
+
 /**
- * Mark a member as cleared.
- * Reloads the page on success so they disappear from the pending list.
- * @param {number} memberId
+ * Mark a member as cleared via AJAX.
+ * Sends Accept: application/json so the view returns JSON instead of a redirect.
+ * On success the table row fades out.
+ * @param {number} memberId  (the Django pk integer)
  */
 function markCleared(memberId) {
-  if (!confirm('Mark this member as cleared?\nEnsure all books are returned and fines paid.')) return;
-
   const url = `/members/${memberId}/mark-cleared/`;
   const btn = document.querySelector(`[onclick="markCleared(${memberId})"]`);
+  const row = btn ? btn.closest('tr') : null;
 
   if (btn) {
     btn.disabled  = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
   }
 
-  postAction(url)
-    .then((resp) => {
-      // View redirects to member_detail on success — treat redirect as OK
-      if (resp.ok || resp.redirected) {
-        showToast('Member marked as cleared!', 'success');
-        setTimeout(() => window.location.reload(), 800);
+  fetch(url, {
+    method:  'POST',
+    headers: {
+      'Accept':       'application/json',
+      'X-CSRFToken':  getCsrfToken(),
+    },
+  })
+    .then((resp) => resp.json().then((data) => ({ ok: resp.ok, data })))
+    .then(({ ok, data }) => {
+      if (ok && data.success) {
+        showToast(data.message || 'Member cleared!', 'success');
+        if (row) {
+          row.style.transition = 'opacity 0.4s, transform 0.4s';
+          row.style.opacity    = '0';
+          row.style.transform  = 'translateX(20px)';
+          setTimeout(() => {
+            row.remove();
+            _decrementCount();
+          }, 420);
+        }
       } else {
-        return resp.text().then((t) => {
-          throw new Error(t || 'Server error ' + resp.status);
-        });
+        showToast(data.message || 'Could not clear member.', 'error');
+        if (btn) {
+          btn.disabled  = false;
+          btn.innerHTML = '<i class="fas fa-check"></i>';
+        }
       }
     })
-    .catch((err) => {
-      console.error('markCleared error:', err);
-      showToast('Could not clear member — check pending items.', 'error');
+    .catch(() => {
+      showToast('Network error. Please try again.', 'error');
       if (btn) {
         btn.disabled  = false;
         btn.innerHTML = '<i class="fas fa-check"></i>';
@@ -84,26 +97,30 @@ function markCleared(memberId) {
     });
 }
 
-window.sendReminder = sendReminder;
-window.markCleared  = markCleared;
+window.markCleared = markCleared;
+
+
+/** Update the header count after a row is removed. */
+function _decrementCount() {
+  const tbody    = document.querySelector('#membersTable tbody');
+  if (!tbody) return;
+  const remaining = tbody.querySelectorAll('tr').length;
+
+  // Update table header "Pending Clearance List (N)"
+  const header = document.querySelector('.members-table-container .table-header h2');
+  if (header) {
+    header.textContent = header.textContent.replace(/\(\d+\)/, `(${remaining})`);
+  }
+}
 
 
 document.addEventListener('DOMContentLoaded', () => {
 
-  // ── Row click → detail page ───────────────────────────────────────────────
+  // Highlight rows with high-priority pending days
   document.querySelectorAll('#membersTable tbody tr').forEach((row) => {
-    row.style.cursor = 'pointer';
-    row.addEventListener('click', (e) => {
-      if (e.target.closest('.table-actions')) return;
-      const viewLink = row.querySelector('.action-icon.view');
-      if (viewLink) window.location.href = viewLink.href;
-    });
-  });
-
-  // ── Highlight high-priority pending rows ──────────────────────────────────
-  document.querySelectorAll('#membersTable tbody tr').forEach((row) => {
-    const daysEl = row.querySelector('.days-high');
-    if (daysEl) row.style.background = '#fff7ed';
+    if (row.querySelector('.days-high')) {
+      row.style.background = '#fff7ed';
+    }
   });
 
 });

@@ -34,6 +34,7 @@ urlpatterns = [
     path("clearance/cleared/", views.cleared_members, name="cleared_members"),
     path("clearance/pending/", views.pending_clearance, name="pending_clearance"),
     path("<int:pk>/clearance-certificate/", views.clearance_certificate, name="clearance_certificate"),
+    path("<int:pk>/issue-clearance/", views.issue_clearance, name="issue_clearance"),
 
     # ── Lookup management (settings / admin-like pages) ────────────────────────
     path("settings/departments/", views.department_list, name="department_list"),
