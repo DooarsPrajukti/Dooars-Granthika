@@ -217,7 +217,7 @@
   display: flex; align-items: center; gap: 10px;
   flex-wrap: wrap; margin-bottom: 16px;
 }
-.search-wrapper { position: relative; flex: 1; min-width: 200px; }
+.search-wrapper { position: relative; flex: 1; min-width: 160px; }
 .search-icon {
   position: absolute; left: 12px; top: 50%;
   transform: translateY(-50%);
@@ -238,12 +238,12 @@
   border-color: var(--ink-accent);
   box-shadow: 0 0 0 3px rgba(26, 111, 212, .1);
 }
-.filter-select { min-width: 148px; cursor: pointer; }
+.filter-select { min-width: 110px; cursor: pointer; }
 
 /* ════════════════════════════════════════════════════════════
    BOOKS TABLE
    ════════════════════════════════════════════════════════════ */
-.books-table-wrap { overflow-x: auto; }
+.books-table-wrap { overflow-x: visible; }
 .books-table {
   width: 100%; border-collapse: collapse; font-size: .84rem;
 }
@@ -251,8 +251,8 @@
   background: var(--ink-dark); color: var(--text-light);
   font-weight: 700; font-size: .7rem;
   letter-spacing: .06em; text-transform: uppercase;
-  padding: 13px 15px; text-align: left;
-  white-space: nowrap; cursor: pointer; user-select: none;
+  padding: 10px 12px; text-align: left;
+  cursor: pointer; user-select: none;
   transition: background .15s;
 }
 .books-table thead th:hover { background: var(--ink-mid); }
@@ -648,16 +648,16 @@ select.form-control   { cursor: pointer; }
   background: #fff; color: var(--ink-accent);
   border-bottom: 2px solid var(--ink-accent); margin-bottom: -1px;
 }
-.mini-table-wrap { overflow-x: auto; }
+.mini-table-wrap { overflow-x: visible; }
 .mini-table { width: 100%; border-collapse: collapse; font-size: .7rem; }
 .mini-table thead th {
   background: #0a1628; color: #fff; padding: 7px 10px;
-  text-align: left; white-space: nowrap; font-weight: 700;
+  text-align: left; font-weight: 700;
   font-size: .66rem; letter-spacing: .04em;
 }
 .mini-table tbody td {
   padding: 6px 10px; border-bottom: 1px solid #eef2f7;
-  white-space: nowrap; color: #334155;
+  color: #334155;
 }
 .mini-table tbody tr:nth-child(even) td { background: #f8fafc; }
 .mini-badge {

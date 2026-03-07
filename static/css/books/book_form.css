@@ -183,7 +183,7 @@
 
 
 /* ── Preview table ── */
-.preview-table-wrap { overflow-x: auto; }
+.preview-table-wrap { overflow-x: visible; }
 
 .preview-table {
   width: 100%;
@@ -196,7 +196,6 @@
   color: #fff;
   padding: 8px 10px;
   text-align: left;
-  white-space: nowrap;
   font-size: .68rem;
   letter-spacing: .04em;
   font-weight: 700;

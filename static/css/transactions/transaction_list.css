@@ -72,7 +72,7 @@ body {
 
 /* ── Page Wrapper ───────────────────────────────────────── */
 .page-wrapper {
-  padding: 28px 32px;
+  padding: 20px 24px;
   max-width: 1440px;
   margin: 0 auto;
   animation: fadeUp .35s ease both;
@@ -269,7 +269,7 @@ body {
 .filter-panel__search {
   position: relative;
   flex: 1;
-  min-width: 260px;
+  min-width: 180px;
 }
 
 .search-icon {
@@ -353,7 +353,7 @@ body {
   background: var(--grey-50);
   outline: none;
   transition: border-color var(--transition), box-shadow var(--transition);
-  min-width: 130px;
+  min-width: 100px;
   cursor: pointer;
 }
 
@@ -364,7 +364,7 @@ body {
   box-shadow: 0 0 0 3px rgba(59,130,246,.12);
 }
 
-.filter-input--date { min-width: 150px; }
+.filter-input--date { min-width: 120px; }
 
 /* ── Table Card ─────────────────────────────────────────── */
 .table-card {
@@ -403,7 +403,7 @@ body {
   outline: none;
 }
 
-.table-responsive { overflow-x: auto; }
+.table-responsive { overflow-x: visible; }
 
 /* ── Data Table ─────────────────────────────────────────── */
 .data-table {
@@ -425,11 +425,11 @@ body {
   color: var(--grey-500);
   text-transform: uppercase;
   letter-spacing: .05em;
-  white-space: nowrap;
+
   user-select: none;
 }
 
-.th-check { width: 44px; padding-left: 20px; }
+.th-check { width: 36px; padding-left: 14px; }
 .th-actions { text-align: right; padding-right: 20px; }
 
 .th-sortable {
@@ -500,7 +500,7 @@ body {
 }
 
 /* ── Table Cells ────────────────────────────────────────── */
-.td-check { padding-left: 20px; width: 44px; }
+.td-check { padding-left: 14px; width: 36px; }
 
 .txn-id {
   font-family: 'Sora', sans-serif;
@@ -552,7 +552,6 @@ body {
   font-size: 13.5px;
   font-weight: 500;
   color: var(--grey-800);
-  white-space: nowrap;
 }
 
 .member-id {
@@ -585,7 +584,6 @@ body {
 .td-date {
   font-size: 13px;
   color: var(--grey-600);
-  white-space: nowrap;
 }
 
 .td-date--overdue { color: var(--warning-text); font-weight: 500; }

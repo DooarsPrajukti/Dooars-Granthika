@@ -78,6 +78,47 @@ from .models import MissingBook, Transaction
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Email service
+# ─────────────────────────────────────────────────────────────────────────────
+
+try:
+    from core import email_service as _email_svc
+    _EMAIL_AVAILABLE = True
+except ImportError:
+    _email_svc = None
+    _EMAIL_AVAILABLE = False
+
+
+def _send_email(fn_name: str, *args, **kwargs) -> bool:
+    """
+    Fire-and-forget wrapper around core.email_service.<fn_name>.
+    Never raises — a broken email must never abort a transaction view.
+    """
+    if not _EMAIL_AVAILABLE:
+        return False
+    try:
+        return getattr(_email_svc, fn_name)(*args, **kwargs)
+    except Exception as _exc:
+        import logging
+        logging.getLogger("transactions.email").warning(
+            "_send_email(%s) failed: %s", fn_name, _exc
+        )
+        return False
+
+
+def _member_emails_on(library) -> bool:
+    """
+    Master toggle: True if transactional member emails are enabled.
+    Reads NotificationSettings.email_overdue_reminder as the shared
+    'send member emails' flag (add a dedicated field if you need finer control).
+    """
+    try:
+        return bool(library.notifications.email_overdue_reminder)
+    except Exception:
+        return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -228,6 +269,9 @@ def _block_member_if_overdue(member, library) -> bool:
             try:
                 member.status = "blocked"
                 member.save(update_fields=["status"])
+                # ── Email: account blocked notification ────────────────────────
+                if _member_emails_on(library) and getattr(member, "email", None):
+                    _send_email("send_member_blocked_email", member)
                 return True
             except Exception:
                 pass
@@ -335,6 +379,14 @@ def _auto_mark_lost_overdue_books(library) -> None:
                             fine_type=_Fine.TYPE_LOST,
                             defaults={"amount": txn.fine_amount or Decimal("0.00"), "status": _Fine.STATUS_UNPAID},
                         )
+                # ── Email: book auto-marked lost ───────────────────────────────
+                if _member_emails_on(library):
+                    try:
+                        _member = txn.member if hasattr(txn, "member") else None
+                        if _member and getattr(_member, "email", None):
+                            _send_email("send_book_lost_email", _member, txn)
+                    except Exception:
+                        pass
             except Exception as exc:
                 import logging
                 logging.getLogger("transactions.views").warning(
@@ -360,10 +412,26 @@ def _auto_block_overdue_members(library) -> None:
             .distinct()
         )
         if overdue_member_ids:
+            # Collect members about to be blocked so we can email them
+            if _member_emails_on(library):
+                members_to_notify = list(
+                    Member.objects.filter(
+                        pk__in=overdue_member_ids,
+                        status="active",
+                    ).exclude(email="").only("pk", "email", "first_name", "last_name", "member_id", "status")
+                )
+            else:
+                members_to_notify = []
+
             Member.objects.filter(
                 pk__in=overdue_member_ids,
                 status="active",
             ).update(status="blocked")
+
+            # Send blocked notification to each newly blocked member
+            for _m in members_to_notify:
+                _m.status = "blocked"  # reflect new state for email content
+                _send_email("send_member_blocked_email", _m)
     except Exception:
         pass
 
@@ -739,6 +807,11 @@ def issue_book(request):
                 f'"{book.title}" issued to {member.first_name} {member.last_name}. '
                 f'Due: {due_date.strftime("%d %B %Y")}.',
             )
+
+            # ── Email: book issued confirmation ────────────────────────────────
+            if _member_emails_on(library) and getattr(member, "email", None):
+                _send_email("send_book_issued_email", member, txn)
+
             return redirect("transactions:transaction_detail", pk=txn.pk)
 
         else:
@@ -906,6 +979,12 @@ def return_book(request, pk):
                 request,
                 f'"{txn.book.title}" returned successfully.' + fine_msg,
             )
+
+            # ── Email: book returned confirmation ──────────────────────────────
+            if _member_emails_on(library) and getattr(member, "email", None):
+                total_fine_for_email = overdue_fine + (damage_charge if damage_charge > 0 else Decimal("0.00"))
+                _send_email("send_book_returned_email", member, txn, total_fine_for_email)
+
             return redirect("transactions:transaction_detail", pk=txn.pk)
 
     else:
@@ -1072,6 +1151,16 @@ def renew_book(request, pk):
         })
 
     messages.success(request, msg)
+
+    # ── Email: renewal confirmation ────────────────────────────────────────────
+    if _member_emails_on(library) and getattr(member, "email", None):
+        _send_email(
+            "send_book_renewed_email",
+            member,
+            txn,
+            late_fine_created.amount if late_fine_created else None,
+        )
+
     return redirect("transactions:transaction_detail", pk=pk)
 
 
@@ -1232,6 +1321,10 @@ def mark_fine_paid(request, pk=None):
                 # Reset overdue → issued if all fines now settled
                 _reset_overdue_after_fine_settled(fine.transaction, library)
             messages.success(request, f"Fine of ₹{fine.amount} marked as paid.")
+            # ── Email: fine payment receipt ────────────────────────────────────
+            _member = fine.transaction.member if hasattr(fine.transaction, "member") else None
+            if _member and _member_emails_on(library) and getattr(_member, "email", None):
+                _send_email("send_fine_paid_email", _member, fine, fine.transaction)
         else:
             messages.warning(request, "Fine is already paid.")
     else:
@@ -1349,6 +1442,12 @@ def mark_lost(request, pk=None):
             )
 
     messages.success(request, f'"{txn.book.title}" marked as lost.')
+
+    # ── Email: book marked lost notification ───────────────────────────────────
+    _member = txn.member if hasattr(txn, "member") else None
+    if _member and _member_emails_on(library) and getattr(_member, "email", None):
+        _send_email("send_book_lost_email", _member, txn)
+
     return redirect("transactions:missing_books")
 
 
@@ -1422,6 +1521,20 @@ def add_penalty(request, pk=None):
         )
 
     messages.success(request, f"Penalty of ₹{cd['penalty_amount']} applied.")
+
+    # ── Email: fine applied notification ──────────────────────────────────────
+    if _member_emails_on(library):
+        try:
+            _txn    = missing.transaction
+            _member = _txn.member if hasattr(_txn, "member") else None
+            _fine   = Fine.objects.for_library(library).filter(
+                transaction=_txn, fine_type=Fine.TYPE_LOST
+            ).order_by("-created_at").first()
+            if _member and _fine and getattr(_member, "email", None):
+                _send_email("send_fine_created_email", _member, _fine, _txn)
+        except Exception:
+            pass
+
     return redirect("transactions:missing_books")
 
 
