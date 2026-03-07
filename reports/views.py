@@ -313,7 +313,7 @@ def export_transactions(request):
     def rows():
         for t in qs:
             yield [
-                t.pk,
+                t.transaction_id,
                 t.member.member_id,
                 f"{t.member.first_name} {t.member.last_name}",
                 t.book.title,
@@ -425,13 +425,13 @@ def export_fines(request):
 
     def rows():
         for f in qs:
-            m = f.transaction.member
+            m = f.transaction.member if f.transaction else None
             yield [
-                f.pk,
-                f.transaction_id,
-                m.member_id,
-                f"{m.first_name} {m.last_name}",
-                f.transaction.book.title,
+                f.fine_id,
+                f.transaction_id_snapshot,
+                m.member_id if m else f.member_id_snapshot,
+                f"{m.first_name} {m.last_name}" if m else f.member_name,
+                f.transaction.book.title if f.transaction else f.book_title,
                 f.get_fine_type_display(),
                 f.amount,
                 f.get_status_display(),
@@ -461,7 +461,7 @@ def export_overdue(request):
     def rows():
         for t in qs:
             yield [
-                t.pk,
+                t.transaction_id,
                 t.member.member_id,
                 f"{t.member.first_name} {t.member.last_name}",
                 t.book.title,

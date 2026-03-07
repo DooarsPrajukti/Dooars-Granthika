@@ -16,12 +16,12 @@
         <svg class="breadcrumb-sep" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <a href="{% url 'transactions:transaction_list' %}" class="breadcrumb-item">Transactions</a>
         <svg class="breadcrumb-sep" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <a href="{% url 'transactions:transaction_detail' transaction.id %}" class="breadcrumb-item">#{{ transaction.id }}</a>
+        <a href="{% url 'transactions:transaction_detail' transaction.id %}" class="breadcrumb-item">{{ transaction.transaction_id }}</a>
         <svg class="breadcrumb-sep" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span class="breadcrumb-item breadcrumb-item--active">Return Book</span>
       </div>
       <h1 class="page-title">Process Return</h1>
-      <p class="page-subtitle">Transaction #{{ transaction.id }}</p>
+      <p class="page-subtitle">Transaction {{ transaction.transaction_id }}</p>
     </div>
     <div class="page-header__actions">
       <a href="{% url 'transactions:transaction_detail' transaction.id %}" class="btn btn--ghost">
@@ -182,39 +182,6 @@
             <textarea name="return_notes" id="returnNotes" class="form-textarea" rows="3" placeholder="Any observations about this return…"></textarea>
           </div>
 
-          <!-- Fine Confirmation -->
-          {% if transaction.overdue_days > 0 or transaction.fine_amount > 0 %}
-          <div class="fine-confirm-panel" id="fineConfirmPanel">
-            <div class="fine-confirm-panel__header">
-              <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 7v4M10 13v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              Fine to Collect
-            </div>
-            <div class="fine-confirm-breakdown">
-              <div class="fine-confirm-row">
-                <span>Overdue fine ({{ transaction.overdue_days }} days × ₹{{ transaction.fine_rate_per_day }})</span>
-                <span>₹{{ transaction.overdue_fine|floatformat:2 }}</span>
-              </div>
-              {# Always render damage row — JS shows/hides it based on condition selection #}
-              <div class="fine-confirm-row" id="damageFineRow" style="display:none">
-                <span>Damage charge</span>
-                <span id="damageFineDisplay">₹0.00</span>
-              </div>
-              <div class="fine-confirm-row fine-confirm-row--total">
-                <span>Total Fine</span>
-                <strong id="totalFineDisplay">₹{{ transaction.fine_amount|floatformat:2 }}</strong>
-              </div>
-            </div>
-            <div class="fine-paid-toggle">
-              <label class="toggle-label">
-                <input type="checkbox" name="fine_paid_now" id="finePaidNow" class="toggle-input">
-                <span class="toggle-track">
-                  <span class="toggle-thumb"></span>
-                </span>
-                <span class="toggle-text">Fine collected at time of return</span>
-              </label>
-            </div>
-          </div>
-          {% endif %}
 
           <!-- Submit -->
           <div class="form-actions">
@@ -289,7 +256,7 @@
         <div class="quick-info-list">
           <div class="quick-info-item">
             <span class="quick-info-item__label">Txn ID</span>
-            <span class="quick-info-item__value">#{{ transaction.id }}</span>
+            <span class="quick-info-item__value">{{ transaction.transaction_id }}</span>
           </div>
           <div class="quick-info-item">
             <span class="quick-info-item__label">Issued By</span>

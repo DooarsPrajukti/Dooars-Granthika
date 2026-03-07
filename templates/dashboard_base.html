@@ -64,6 +64,11 @@
         </a>
       </li>
       <li>
+        <a class="nav-item {% block nav_finance %}{% endblock %}" href="{% url 'finance:overview' %}">
+          <span class="nav-icon"><i class="fas fa-coins"></i></span> Finance
+        </a>
+      </li>
+      <li>
         <a class="nav-item {% block nav_settings %}{% endblock %}"
            href="{% url 'accounts:settings' %}">
           <span class="nav-icon"><i class="fas fa-cog"></i></span> Settings

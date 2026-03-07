@@ -22,8 +22,8 @@ urlpatterns = [
 
     # ── Fines ──────────────────────────────────────────────────────────
     path("fines/",                  views.fine_list,          name="fine_list"),
-    path("fines/pay/",              views.mark_fine_paid,     name="mark_fine_paid"),
-    path("fines/<int:pk>/waive/",   views.waive_fine,         name="waive_fine"),
+    # path("fines/pay/",              views.mark_fine_paid,     name="mark_fine_paid"),
+    # path("fines/<int:pk>/waive/",   views.waive_fine,         name="waive_fine"),
 
     # ── Missing / Lost books ───────────────────────────────────────────
     path("missing/",                views.missing_books,      name="missing_books"),
@@ -41,5 +41,11 @@ urlpatterns = [
 
     # ── Book cover image (BLOB served as HTTP response) ───────────────
     path("api/book-cover/<int:pk>/", views.book_cover_image,  name="book_cover_image"),
+
+    # ── Book cover by Copy ID (books_bookcopy → books_book → BLOB) ────
+    path("api/book-cover/copy/<str:copy_id>/", views.book_cover_by_copy_id, name="book_cover_by_copy_id"),
+
+    # ── Book cover upload (POST — saves BLOB) ─────────────────────────
+    # path("api/book-cover/<int:pk>/upload/", views.book_cover_upload, name="book_cover_upload"),
 
 ]

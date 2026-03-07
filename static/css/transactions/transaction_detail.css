@@ -168,6 +168,10 @@ body { font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--grey-70
   padding: 18px 22px 14px;
   border-bottom: 1.5px solid var(--grey-100);
   background: linear-gradient(135deg, var(--blue-50) 0%, var(--white) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .timeline-card__title { font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 700; color: var(--blue-900); }
@@ -251,7 +255,8 @@ body { font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--grey-70
 .fine-status-badge { padding: 3px 10px; border-radius: var(--radius-full); font-size: 11.5px; font-weight: 600; border: 1.5px solid; }
 .fine-status-badge--paid    { background: var(--success-bg); color: var(--success-text); border-color: var(--success-border); }
 .fine-status-badge--unpaid  { background: var(--danger-bg);  color: var(--danger-text);  border-color: var(--danger-border); }
-.fine-status-badge--nil     { background: var(--grey-100); color: var(--grey-500); border-color: var(--grey-200); }
+.fine-status-badge--waived  { background: var(--grey-100);   color: var(--grey-500);     border-color: var(--grey-200); }
+.fine-status-badge--nil     { background: var(--grey-100);   color: var(--grey-500);     border-color: var(--grey-200); }
 
 .fine-card__body { padding: 20px 22px; }
 
@@ -260,11 +265,29 @@ body { font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--grey-70
 .fine-calc__row:last-child { border-bottom: none; }
 .fine-calc__label { font-size: 13px; color: var(--grey-500); }
 .fine-calc__value { font-size: 13px; font-weight: 500; color: var(--grey-700); }
-.fine-calc__value--danger { color: var(--danger-text); font-weight: 600; }
+.fine-calc__value--danger  { color: var(--danger-text);  font-weight: 600; }
+.fine-calc__value--success { color: var(--success-text); font-weight: 600; }
+.fine-calc__value--muted   { color: var(--grey-400);     font-weight: 500; }
 .fine-calc__divider { height: 1px; background: var(--grey-200); margin: 8px 0; }
 .fine-calc__row--total .fine-calc__label { font-weight: 700; color: var(--grey-700); font-size: 14px; }
 .fine-calc__total { font-family: 'Sora', sans-serif; font-size: 20px; font-weight: 700; color: var(--grey-700); }
 .fine-calc__total--danger { color: var(--danger-text); }
+.fine-calc__total--nil    { color: var(--grey-400); }
+
+/* ── Transaction ID chip in timeline header ── */
+.txn-id-chip {
+  display: inline-block;
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--blue-700);
+  background: var(--blue-50);
+  border: 1px solid var(--blue-200);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  letter-spacing: .02em;
+  margin-top: 4px;
+}
 
 .fine-paid-info {
   display: flex;

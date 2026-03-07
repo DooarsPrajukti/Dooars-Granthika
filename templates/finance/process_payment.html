@@ -2,437 +2,383 @@
 {% load static %}
 
 {% block title %}Process Payment — Dooars Granthika{% endblock %}
-{% block nav_transactions %}active{% endblock %}
+{% block nav_finance %}active{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/finance/process_payment.css' %}">
+<link rel="stylesheet" href="{% static 'css/finance/process_payment.css' %}" />
 {% endblock %}
 
 {% block content %}
 <div class="pp-wrapper">
 
   <!-- Breadcrumb -->
-  <nav class="pp-breadcrumb">
-    <a href="{% url 'transactions:transaction_list' %}">Transactions</a>
+  <div class="pp-breadcrumb">
+    <a href="{% url 'finance:overview' %}">Finance</a>
     <svg viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    {% if fine %}
-      <a href="{% url 'transactions:transaction_detail' fine.transaction.id %}">#{{ fine.transaction.id }}</a>
-      <svg viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    {% endif %}
     <span>Process Payment</span>
-  </nav>
+  </div>
 
-  <!-- Page title -->
+  <!-- Page Header -->
   <div class="pp-page-header">
     <div class="pp-page-header__icon">
-      <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="5" width="20" height="14" rx="3" stroke="currentColor" stroke-width="1.75"/><path d="M2 10h20" stroke="currentColor" stroke-width="1.75"/><path d="M6 15h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
+      </svg>
     </div>
     <div>
-      <h1 class="pp-page-title">Collect Fine Payment</h1>
-      <p class="pp-page-sub">Record payment for library fine</p>
+      <div class="pp-page-title">Process Payment</div>
+      <div class="pp-page-sub">Collect fine payments from library members</div>
     </div>
   </div>
 
-  {% if fine %}
-  <div class="pp-grid">
-
-    <!-- Left column -->
-    <div class="pp-left">
-
-      <!-- Fine Details Card -->
-      <div class="pp-card">
-        <div class="pp-card__header">
-          <div class="pp-card__header-icon pp-card__header-icon--receipt">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h10a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2V5a2 2 0 0 1 2-2z" stroke="currentColor" stroke-width="1.75"/><path d="M9 9h6M9 13h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          </div>
-          <div>
-            <h2 class="pp-card__title">Fine Details</h2>
-            <p class="pp-card__subtitle">{{ fine.fine_id }}</p>
-          </div>
-          <span class="pp-fine-status pp-fine-status--{{ fine.status }}">
-            <span class="pp-fine-status__dot"></span>
-            {{ fine.get_status_display|default:"Unpaid" }}
-          </span>
-        </div>
-        <div class="pp-card__body">
-          <div class="pp-detail-grid">
-            <div class="pp-detail-item">
-              <span class="pp-detail-label">Member</span>
-              <span class="pp-detail-value">{{ fine.transaction.member.first_name }} {{ fine.transaction.member.last_name }}</span>
-            </div>
-            <div class="pp-detail-item">
-              <span class="pp-detail-label">Member ID</span>
-              <span class="pp-detail-value">{{ fine.transaction.member.member_id }}</span>
-            </div>
-            <div class="pp-detail-item pp-detail-item--full">
-              <span class="pp-detail-label">Book</span>
-              <span class="pp-detail-value" title="{{ fine.transaction.book.title }}">{{ fine.transaction.book.title }}</span>
-            </div>
-            <div class="pp-detail-item">
-              <span class="pp-detail-label">Issue Date</span>
-              <span class="pp-detail-value">{{ fine.transaction.issue_date|date:"d M Y" }}</span>
-            </div>
-            <div class="pp-detail-item">
-              <span class="pp-detail-label">Due Date</span>
-              <span class="pp-detail-value">{{ fine.transaction.due_date|date:"d M Y" }}</span>
-            </div>
-            {% if fine.transaction.overdue_days %}
-            <div class="pp-detail-item">
-              <span class="pp-detail-label">Overdue</span>
-              <span class="pp-detail-value pp-detail-value--danger">{{ fine.transaction.overdue_days }} day{{ fine.transaction.overdue_days|pluralize }}</span>
-            </div>
-            {% endif %}
-            <div class="pp-detail-item">
-              <span class="pp-detail-label">Fine Type</span>
-              <span class="pp-detail-value">{{ fine.get_fine_type_display|default:"Overdue" }}</span>
-            </div>
-            <div class="pp-detail-item">
-              <span class="pp-detail-label">Transaction</span>
-              <span class="pp-detail-value">#{{ fine.transaction.id }}</span>
-            </div>
-          </div>
-
-          <div class="pp-amount-row">
-            <span class="pp-amount-label">Amount Due</span>
-            <span class="pp-amount-value">₹{{ fine.amount }}</span>
-          </div>
-        </div>
+  {# ── Member selector (shown when no member pre-selected) ── #}
+  {% if not member %}
+  <div class="pp-card" style="margin-bottom:24px;">
+    <div class="pp-card__header">
+      <div class="pp-card__header-icon pp-card__header-icon--receipt">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
       </div>
-
-      <!-- Payment form — only when unpaid -->
-      {% if fine.status == 'unpaid' %}
-      <div class="pp-card">
-        <div class="pp-card__header">
-          <div class="pp-card__header-icon pp-card__header-icon--cash">
-            <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" stroke-width="1.75"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M6 9v.01M18 15v.01" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
-          </div>
-          <div>
-            <h2 class="pp-card__title">Payment Details</h2>
-            <p class="pp-card__subtitle">Choose method and confirm receipt</p>
-          </div>
-        </div>
-        <div class="pp-card__body">
-
-          <!-- Method selector -->
-          <div class="pp-method-selector">
-
-            <label class="pp-method-option pp-method-option--selected" id="label-cash" for="method-cash">
-              <input type="radio" id="method-cash" name="payment_method_ui" value="cash" class="pp-method-radio" checked>
-              <span class="pp-method-icon pp-method-icon--cash">
-                <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" stroke-width="1.75"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/></svg>
-              </span>
-              <span class="pp-method-text">
-                <span class="pp-method-name">Cash</span>
-                <span class="pp-method-desc">Collected at counter</span>
-              </span>
-              <span class="pp-method-check">
-                <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </span>
-            </label>
-
-            <label class="pp-method-option" id="label-online" for="method-online">
-              <input type="radio" id="method-online" name="payment_method_ui" value="online" class="pp-method-radio">
-              <span class="pp-method-icon pp-method-icon--online">
-                <svg viewBox="0 0 24 24" fill="none"><rect x="5" y="2" width="14" height="20" rx="3" stroke="currentColor" stroke-width="1.75"/><path d="M10 18h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              </span>
-              <span class="pp-method-text">
-                <span class="pp-method-name">Online</span>
-                <span class="pp-method-desc">UPI / Bank Transfer</span>
-              </span>
-              <span class="pp-method-check">
-                <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </span>
-            </label>
-
-          </div>
-
-          <!-- CASH form -->
-          <form method="POST" action="{% url 'finance:cash_payment' %}" id="form-cash">
-            {% csrf_token %}
-            <input type="hidden" name="fine_id" value="{{ fine.pk }}">
-            <input type="hidden" name="method"  value="cash">
-            <input type="hidden" name="next"    value="{% url 'transactions:transaction_detail' fine.transaction.id %}">
-
-            <div class="pp-form-row">
-              <div class="pp-form-group">
-                <label class="pp-label" for="cash_receipt">
-                  Receipt Number <span class="pp-optional">optional</span>
-                </label>
-                <input type="text" id="cash_receipt" name="receipt_number"
-                       class="pp-input" placeholder="e.g. RCP-2025-0042" autocomplete="off">
-              </div>
-              <div class="pp-form-group">
-                <label class="pp-label" for="cash_collected_by">Collected By</label>
-                <input type="text" id="cash_collected_by" name="collected_by"
-                       class="pp-input"
-                       value="{{ request.user.get_full_name|default:request.user.username }}"
-                       placeholder="Staff name">
-              </div>
-            </div>
-
-            <div class="pp-confirm-box">
-              <input type="checkbox" id="cash-confirm-chk" class="pp-confirm-chk"
-                     onchange="document.getElementById('cash-submit-btn').disabled = !this.checked;">
-              <label for="cash-confirm-chk" class="pp-confirm-label">
-                I confirm that <strong>₹{{ fine.amount }}</strong> has been received
-                <strong>in cash</strong> from
-                <strong>{{ fine.transaction.member.first_name }} {{ fine.transaction.member.last_name }}</strong>
-                and authorise marking Fine <strong>{{ fine.fine_id|default:fine.pk }}</strong> as paid.
-              </label>
-            </div>
-
-            <button type="submit" id="cash-submit-btn" class="pp-submit-btn" disabled>
-              <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Confirm &amp; Record Cash Payment
-            </button>
-          </form>
-
-          <!-- ONLINE form -->
-          <form method="POST" action="{% url 'finance:cash_payment' %}" id="form-online" style="display:none;">
-            {% csrf_token %}
-            <input type="hidden" name="fine_id" value="{{ fine.pk }}">
-            <input type="hidden" name="method"  value="online">
-            <input type="hidden" name="next"    value="{% url 'transactions:transaction_detail' fine.transaction.id %}">
-
-            <div class="pp-form-row">
-              <div class="pp-form-group" style="grid-column:1/-1;">
-                <label class="pp-label" for="upi_ref">
-                  UPI / Transaction Reference <span style="color:#dc2626;font-size:.8rem;">*</span>
-                </label>
-                <input type="text" id="upi_ref" name="transaction_ref"
-                       class="pp-input" placeholder="e.g. 123456789012"
-                       autocomplete="off" required>
-                <span style="font-size:.75rem;color:#6b7280;margin-top:4px;display:block;">
-                  Enter the UPI ref or bank transfer number sent by the member
-                </span>
-              </div>
-            </div>
-
-            <div class="pp-form-row">
-              <div class="pp-form-group">
-                <label class="pp-label" for="online_receipt">
-                  Receipt Number <span class="pp-optional">optional</span>
-                </label>
-                <input type="text" id="online_receipt" name="receipt_number"
-                       class="pp-input" placeholder="Auto-generated if blank" autocomplete="off">
-              </div>
-              <div class="pp-form-group">
-                <label class="pp-label" for="online_verified_by">Verified By</label>
-                <input type="text" id="online_verified_by" name="collected_by"
-                       class="pp-input"
-                       value="{{ request.user.get_full_name|default:request.user.username }}"
-                       placeholder="Staff name">
-              </div>
-            </div>
-
-            <div class="pp-confirm-box" style="border-color:#bfdbfe;background:#eff6ff;">
-              <input type="checkbox" id="online-confirm-chk" class="pp-confirm-chk"
-                     onchange="document.getElementById('online-submit-btn').disabled = !this.checked;">
-              <label for="online-confirm-chk" class="pp-confirm-label">
-                I confirm that <strong>₹{{ fine.amount }}</strong> has been received
-                <strong>online</strong> from
-                <strong>{{ fine.transaction.member.first_name }} {{ fine.transaction.member.last_name }}</strong>
-                and authorise marking Fine <strong>{{ fine.fine_id|default:fine.pk }}</strong> as paid.
-              </label>
-            </div>
-
-            <button type="submit" id="online-submit-btn" class="pp-submit-btn" disabled>
-              <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Confirm &amp; Record Online Payment
-            </button>
-          </form>
-
-        </div>
+      <div>
+        <div class="pp-card__title">Find Member</div>
+        <div class="pp-card__subtitle">Select a member with outstanding fines</div>
       </div>
+    </div>
+    <div class="pp-card__body">
+      <form method="get" action="">
+        <div class="pp-form-row" style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;">
+          <div>
+            <label class="pp-label" for="member_select">Member with unpaid fines</label>
+            <select id="member_select" name="member_id" class="pp-input" style="width:100%;margin-top:6px;"
+                    onchange="this.form.submit()">
+              <option value="">— Select a member —</option>
+              {% for m in members_with_fines %}
+              <option value="{{ m.pk }}">{{ m.first_name }} {{ m.last_name }} ({{ m.member_id }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="pp-submit-btn" style="width:auto;padding:10px 22px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Search
+          </button>
+        </div>
+      </form>
 
+      {% if members_with_fines %}
+      <p style="margin-top:14px;font-size:12.5px;color:var(--grey-400);">
+        <i class="fas fa-circle-info" style="margin-right:4px;"></i>
+        {{ members_with_fines|length }} member(s) have outstanding fines.
+      </p>
       {% else %}
-      <div class="pp-card pp-card--settled">
-        <div class="pp-card__body">
-          <div class="pp-settled">
-            {% if fine.status == 'paid' %}
-              <div class="pp-settled__icon pp-settled__icon--paid">
-                <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/><path d="M8 12l3 3 5-5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </div>
-              <h3 class="pp-settled__title">Fine Already Paid</h3>
-              {% if fine.paid_date %}<p class="pp-settled__sub">Paid on {{ fine.paid_date|date:"d M Y" }}</p>{% endif %}
-            {% else %}
-              <div class="pp-settled__icon pp-settled__icon--waived">
-                <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/><path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
-              </div>
-              <h3 class="pp-settled__title">Fine Has Been Waived</h3>
-            {% endif %}
-            <a href="{% url 'transactions:transaction_detail' fine.transaction.id %}" class="pp-settled__link">
-              <svg viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Back to Transaction #{{ fine.transaction.id }}
-            </a>
-          </div>
+      <div class="pp-settled" style="padding:24px 0 8px;">
+        <div class="pp-settled__icon pp-settled__icon--paid">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
+        <div class="pp-settled__title">All Clear!</div>
+        <div class="pp-settled__sub">No members have outstanding fines right now.</div>
       </div>
       {% endif %}
-
-    </div><!-- /pp-left -->
-
-    <!-- Right sidebar -->
-    <div class="pp-right">
-      <div class="pp-summary-card">
-        <div class="pp-summary-card__top">
-          <div class="pp-summary-amount">
-            <span class="pp-summary-amount__label">Amount to Collect</span>
-            <span class="pp-summary-amount__value">₹{{ fine.amount }}</span>
-          </div>
-          <div class="pp-summary-member">
-            <div class="pp-summary-member__avatar">{{ fine.transaction.member.first_name|first|upper }}</div>
-            <div>
-              <div class="pp-summary-member__name">{{ fine.transaction.member.first_name }} {{ fine.transaction.member.last_name }}</div>
-              <div class="pp-summary-member__id">{{ fine.transaction.member.member_id }}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="pp-summary-rows">
-          <div class="pp-summary-row">
-            <span class="pp-summary-row__key">Transaction</span>
-            <span class="pp-summary-row__val">#{{ fine.transaction.id }}</span>
-          </div>
-          <div class="pp-summary-row">
-            <span class="pp-summary-row__key">Fine ID</span>
-            <span class="pp-summary-row__val">{{ fine.fine_id|default:fine.pk }}</span>
-          </div>
-          <div class="pp-summary-row">
-            <span class="pp-summary-row__key">Fine Rate</span>
-            <span class="pp-summary-row__val">₹{{ fine.transaction.fine_rate_per_day|default:"—" }} / day</span>
-          </div>
-          <div class="pp-summary-row">
-            <span class="pp-summary-row__key">Overdue Days</span>
-            <span class="pp-summary-row__val" style="color:#b91c1c;font-weight:600;">{{ fine.transaction.overdue_days|default:"0" }} days</span>
-          </div>
-          <div class="pp-summary-row">
-            <span class="pp-summary-row__key">Payment Method</span>
-            <span class="pp-summary-row__val" id="summary-method">
-              <svg viewBox="0 0 16 16" fill="none" style="width:13px;height:13px;color:#ca8a04;"><rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.25"/></svg>
-              Cash
-            </span>
-          </div>
-          <div class="pp-summary-row pp-summary-row--total">
-            <span class="pp-summary-row__key">Total Payable</span>
-            <span class="pp-summary-row__val pp-summary-row__val--total">₹{{ fine.amount }}</span>
-          </div>
-        </div>
-
-        <div class="pp-note" id="summary-note">
-          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 7v4M8 5.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          Cash collected at the library counter. A payment record is created immediately on confirmation.
-        </div>
-      </div>
-
-      <a href="{% url 'transactions:transaction_detail' fine.transaction.id %}" class="pp-cancel-link">
-        <svg viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Cancel &amp; go back
-      </a>
-    </div><!-- /pp-right -->
-
-  </div><!-- /.pp-grid -->
-
-  {% else %}
-  <div class="pp-card pp-card--no-fine">
-    <div class="pp-card__body">
-      <div class="pp-settled">
-        <div class="pp-settled__icon pp-settled__icon--warn">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M12 9v5M12 16.5v.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="M10.27 4.26a2 2 0 0 1 3.46 0l7.27 12.6A2 2 0 0 1 19.27 20H4.73a2 2 0 0 1-1.73-3.14l7.27-12.6z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/></svg>
-        </div>
-        <h3 class="pp-settled__title">No Fine Specified</h3>
-        <p class="pp-settled__sub">Please navigate here from a transaction's fine record.</p>
-        <a href="{% url 'transactions:transaction_list' %}" class="pp-settled__link">
-          <svg viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Back to Transactions
-        </a>
-      </div>
     </div>
   </div>
   {% endif %}
 
+  {# ── Main layout: fine details (left) + summary (right) ── #}
+  {% if member %}
+  <div class="pp-grid">
+
+    <!-- LEFT COLUMN -->
+    <div class="pp-left">
+
+      {# Fine detail card #}
+      <div class="pp-card">
+        <div class="pp-card__header">
+          <div class="pp-card__header-icon pp-card__header-icon--receipt">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div>
+            <div class="pp-card__title">Fine Details</div>
+            <div class="pp-card__subtitle">
+              {% if fine %}{{ fine.fine_id }}{% else %}No fine selected{% endif %}
+            </div>
+          </div>
+          {% if fine %}
+          <div class="pp-fine-status pp-fine-status--{{ fine.status }}">
+            <span class="pp-fine-status__dot"></span>
+            {{ fine.get_status_display }}
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="pp-card__body">
+          {% if fine %}
+          <div class="pp-detail-grid">
+            <div class="pp-detail-item">
+              <span class="pp-detail-label">Fine Type</span>
+              <span class="pp-detail-value">{{ fine.get_fine_type_display }}</span>
+            </div>
+            <div class="pp-detail-item">
+              <span class="pp-detail-label">Amount</span>
+              <span class="pp-detail-value pp-detail-value--danger">&#8377;{{ fine.amount }}</span>
+            </div>
+            <div class="pp-detail-item">
+              <span class="pp-detail-label">Book</span>
+              <span class="pp-detail-value">{{ fine.book_title|default:fine.transaction.book.title|default:"—" }}</span>
+            </div>
+            <div class="pp-detail-item">
+              <span class="pp-detail-label">Transaction ID</span>
+              <span class="pp-detail-value">{{ fine.transaction_id_snapshot|default:fine.transaction_id|default:"—" }}</span>
+            </div>
+            {% if fine.issue_date_snapshot %}
+            <div class="pp-detail-item">
+              <span class="pp-detail-label">Issue Date</span>
+              <span class="pp-detail-value">{{ fine.issue_date_snapshot }}</span>
+            </div>
+            {% endif %}
+            {% if fine.due_date_snapshot %}
+            <div class="pp-detail-item">
+              <span class="pp-detail-label">Due Date</span>
+              <span class="pp-detail-value">{{ fine.due_date_snapshot }}</span>
+            </div>
+            {% endif %}
+          </div>
+
+          {# All unpaid fines list #}
+          {% if all_unpaid_fines|length > 1 %}
+          <div class="pp-pay-all-row">
+            <label class="pp-pay-all-label" for="pay_all_chk">
+              <input type="checkbox" id="pay_all_chk" name="pay_all_chk">
+              Pay all {{ all_unpaid_fines|length }} outstanding fines for this member
+            </label>
+            <span class="pp-pay-all-total">&#8377;{{ total_fine }}</span>
+          </div>
+          {% endif %}
+
+          {# Fine amount display #}
+          <div class="pp-amount-row" id="pp-amount-row">
+            <span class="pp-amount-label">
+              <i class="fas fa-rupee-sign" style="margin-right:4px;"></i>
+              Amount Due
+            </span>
+            <span class="pp-amount-value" id="pp-amount-display">&#8377;{{ fine.amount }}</span>
+          </div>
+
+          {% else %}
+          <div class="pp-settled">
+            <div class="pp-settled__icon pp-settled__icon--warn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div class="pp-settled__title">No Outstanding Fines</div>
+            <div class="pp-settled__sub">This member has no unpaid fines at the moment.</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      {# Payment form — only shown for unpaid fines #}
+      {% if fine and fine.status == 'unpaid' %}
+      <div class="pp-card">
+        <div class="pp-card__header">
+          <div class="pp-card__header-icon pp-card__header-icon--cash">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </div>
+          <div>
+            <div class="pp-card__title">Collect Payment</div>
+            <div class="pp-card__subtitle">Choose method and confirm</div>
+          </div>
+        </div>
+        <div class="pp-card__body">
+          <form method="post" action="{% url 'finance:cash_payment' %}" id="payment-form">
+            {% csrf_token %}
+            <input type="hidden" name="fine_id"  value="{{ fine_id }}">
+            <input type="hidden" name="pay_all"  value="0"     id="pay_all_hidden">
+            <input type="hidden" name="method"   value="cash"  id="method_hidden">
+
+            {# Payment method selector #}
+            <div class="pp-method-selector">
+              {% for val, label in payment_method_choices %}
+              <label class="pp-method-option {% if val == 'cash' %}pp-method-option--selected{% endif %}"
+                     data-method="{{ val }}"
+                     onclick="selectMethod('{{ val }}')">
+                <input type="radio" class="pp-method-radio" name="method_display" value="{{ val }}"
+                       {% if val == 'cash' %}checked{% endif %}>
+                <div class="pp-method-icon {% if val == 'upi' or val == 'card' %}pp-method-icon--online{% endif %}">
+                  {% if val == 'cash' %}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
+                  {% elif val == 'upi' %}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                  {% elif val == 'card' %}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>
+                  {% else %}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                  {% endif %}
+                </div>
+                <div class="pp-method-text">
+                  <span class="pp-method-name">{{ label }}</span>
+                  <span class="pp-method-desc">
+                    {% if val == 'cash' %}Physical currency{% elif val == 'upi' %}UPI / QR transfer{% elif val == 'card' %}Debit or credit card{% else %}Other method{% endif %}
+                  </span>
+                </div>
+                <div class="pp-method-check">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              </label>
+              {% endfor %}
+            </div>
+
+            {# Optional reference #}
+            <div style="margin-bottom:20px;">
+              <label class="pp-label" for="transaction_ref">
+                Transaction Reference
+                <span class="pp-optional">Optional</span>
+              </label>
+              <input type="text" id="transaction_ref" name="transaction_ref"
+                     class="pp-input" style="width:100%;margin-top:6px;"
+                     placeholder="UPI ref / receipt no / cheque no">
+              <div class="pp-hint">Leave blank for cash payments. Enter reference ID for digital payments.</div>
+            </div>
+
+            {# Confirm checkbox #}
+            <div class="pp-confirm-box" id="pp-confirm-box">
+              <input type="checkbox" class="pp-confirm-chk" id="confirm_chk"
+                     onchange="toggleSubmit()">
+              <label class="pp-confirm-label" for="confirm_chk">
+                I confirm that <strong>&#8377;<span id="confirm-amount">{{ fine.amount }}</span></strong>
+                has been received from <strong>{{ member.first_name }} {{ member.last_name }}</strong>
+                in <strong id="confirm-method">Cash</strong>.
+              </label>
+            </div>
+
+            <button type="submit" class="pp-submit-btn" id="pp-submit-btn" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Confirm &amp; Collect Payment
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+
+    </div><!-- /.pp-left -->
+
+    <!-- RIGHT COLUMN: summary sidebar -->
+    <div class="pp-right">
+      <div class="pp-summary-card">
+
+        <!-- Member info header -->
+        <div class="pp-summary-card__top">
+          <div class="pp-summary-amount">
+            <div class="pp-summary-amount__label">Total Due</div>
+            <div class="pp-summary-amount__value" id="sidebar-total">
+              &#8377;{% if fine and fine.status == 'unpaid' %}{{ fine.amount }}{% else %}0.00{% endif %}
+            </div>
+          </div>
+          <div class="pp-summary-member">
+            <div class="pp-summary-member__avatar">
+              {% if member_has_photo %}
+              <img src="{% url 'members:member_photo' member.pk %}" alt="{{ member.first_name }}">
+              {% else %}
+              <span class="pp-avatar-initial">{{ member.first_name|first|upper }}</span>
+              {% endif %}
+            </div>
+            <div>
+              <div class="pp-summary-member__name">{{ member.first_name }} {{ member.last_name }}</div>
+              <div class="pp-summary-member__id">{{ member.member_id }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fine rows -->
+        <div class="pp-summary-rows">
+          <div class="pp-summary-row">
+            <span class="pp-summary-row__key">Member ID</span>
+            <span class="pp-summary-row__val">{{ member.member_id }}</span>
+          </div>
+          <div class="pp-summary-row">
+            <span class="pp-summary-row__key">Total Fines</span>
+            <span class="pp-summary-row__val">{{ all_unpaid_fines|length }}</span>
+          </div>
+          {% for f in all_unpaid_fines %}
+          <div class="pp-summary-row">
+            <span class="pp-summary-row__key">{{ f.get_fine_type_display }}</span>
+            <span class="pp-summary-row__val">&#8377;{{ f.amount }}</span>
+          </div>
+          {% endfor %}
+          <div class="pp-summary-row pp-summary-row--total">
+            <span class="pp-summary-row__key">Total Outstanding</span>
+            <span class="pp-summary-row__val pp-summary-row__val--total" id="sidebar-total-2">
+              &#8377;{{ total_fine }}
+            </span>
+          </div>
+        </div>
+
+        <div class="pp-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>A receipt will be generated automatically after payment is confirmed.</span>
+        </div>
+
+      </div><!-- /.pp-summary-card -->
+
+      <a href="{% url 'finance:overview' %}" class="pp-cancel-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back to Finance Overview
+      </a>
+    </div><!-- /.pp-right -->
+
+  </div><!-- /.pp-grid -->
+  {% endif %}
+
 </div><!-- /.pp-wrapper -->
+{% endblock %}
 
-<style>
-.pp-method-selector { display:flex; gap:12px; margin-bottom:24px; }
-.pp-method-option {
-  flex:1; display:flex; align-items:center; gap:12px;
-  padding:14px 16px; border:2px solid #e5e7eb; border-radius:10px;
-  cursor:pointer; transition:border-color .15s, background .15s; user-select:none;
-}
-.pp-method-option:hover { border-color:#93c5fd; }
-.pp-method-option--selected { border-color:#1e40af; background:#eff6ff; }
-.pp-method-radio { display:none; }
-.pp-method-icon {
-  width:36px; height:36px; border-radius:8px; background:#fef3c7;
-  display:flex; align-items:center; justify-content:center;
-  color:#b45309; flex-shrink:0;
-}
-.pp-method-icon svg { width:18px; height:18px; }
-.pp-method-icon--online { background:#dbeafe; color:#1d4ed8; }
-.pp-method-text { flex:1; }
-.pp-method-name { display:block; font-weight:600; font-size:.9rem; color:#111827; }
-.pp-method-desc { display:block; font-size:.75rem; color:#6b7280; margin-top:1px; }
-.pp-method-check { color:#9ca3af; }
-.pp-method-check svg { width:18px; height:18px; }
-.pp-method-option--selected .pp-method-check { color:#1e40af; }
 
-/* Avatar fix — ensure the initials circle always renders */
-.pp-summary-member__avatar {
-  width: 38px !important;
-  height: 38px !important;
-  min-width: 38px;
-  border-radius: 50% !important;
-  background: #1e40af !important;
-  color: #fff !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  font-weight: 700 !important;
-  font-size: 1rem !important;
-  line-height: 1 !important;
-  flex-shrink: 0;
-}
-</style>
-
+{% block extra_js %}
 <script>
 (function () {
-  var radios  = document.querySelectorAll('.pp-method-radio');
-  var labels  = { cash: document.getElementById('label-cash'), online: document.getElementById('label-online') };
-  var forms   = { cash: document.getElementById('form-cash'), online: document.getElementById('form-online') };
-  var summary = document.getElementById('summary-method');
-  var noteEl  = document.getElementById('summary-note');
+  const singleAmount = "{{ fine.amount|default:'0' }}";
+  const totalAmount  = "{{ total_fine }}";
 
-  if (!radios.length) return;
-
-  var SUMMARIES = {
-    cash:   '<svg viewBox="0 0 16 16" fill="none" style="width:13px;height:13px;color:#ca8a04"><rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.25"/></svg> Cash',
-    online: '<svg viewBox="0 0 16 16" fill="none" style="width:13px;height:13px;color:#2563eb"><rect x="3" y="1" width="10" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 12h4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg> Online',
-  };
-  var NOTES = {
-    cash:   'Cash collected at the library counter. A payment record is created immediately on confirmation.',
-    online: 'Online payment via UPI or bank transfer. Enter the transaction reference number to confirm.',
+  /* Method selection */
+  window.selectMethod = function (val) {
+    document.getElementById('method_hidden').value = val;
+    document.querySelectorAll('.pp-method-option').forEach(el => {
+      el.classList.toggle('pp-method-option--selected', el.dataset.method === val);
+    });
+    const names = { cash:'Cash', upi:'UPI', card:'Card', other:'Other' };
+    const el = document.getElementById('confirm-method');
+    if (el) el.textContent = names[val] || val;
   };
 
-  function switchTo(val) {
-    Object.keys(labels).forEach(function(k) {
-      if (labels[k]) labels[k].classList.toggle('pp-method-option--selected', k === val);
+  /* Pay-all toggle */
+  const payAllChk    = document.getElementById('pay_all_chk');
+  const payAllHidden = document.getElementById('pay_all_hidden');
+  const sidebarTotal = document.getElementById('sidebar-total');
+  const amountDisplay = document.getElementById('pp-amount-display');
+  const confirmAmount = document.getElementById('confirm-amount');
+
+  if (payAllChk) {
+    payAllChk.addEventListener('change', function () {
+      const isAll = this.checked;
+      payAllHidden.value = isAll ? '1' : '0';
+      const amt = isAll ? totalAmount : singleAmount;
+      if (sidebarTotal)   sidebarTotal.textContent  = '₹' + amt;
+      if (amountDisplay)  amountDisplay.textContent = '₹' + amt;
+      if (confirmAmount)  confirmAmount.textContent  = amt;
+      // Reset confirm checkbox
+      const chk = document.getElementById('confirm_chk');
+      if (chk) { chk.checked = false; toggleSubmit(); }
     });
-    Object.keys(forms).forEach(function(k) {
-      if (forms[k]) forms[k].style.display = (k === val) ? '' : 'none';
-    });
-    if (summary) summary.innerHTML = SUMMARIES[val] || '';
-    if (noteEl) {
-      var svg = noteEl.querySelector('svg');
-      noteEl.textContent = ' ' + (NOTES[val] || '');
-      if (svg) noteEl.insertBefore(svg, noteEl.firstChild);
-    }
   }
 
-  radios.forEach(function(r) {
-    r.addEventListener('change', function() { switchTo(this.value); });
-  });
-}());
+  /* Submit toggle */
+  window.toggleSubmit = function () {
+    const chk = document.getElementById('confirm_chk');
+    const btn = document.getElementById('pp-submit-btn');
+    if (btn) btn.disabled = !(chk && chk.checked);
+  };
+})();
 </script>
-
 {% endblock %}

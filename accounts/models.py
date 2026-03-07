@@ -187,11 +187,6 @@ class MemberSettings(models.Model):
         help_text="Max books a general member can borrow at once (used for non-Institution types).")
     membership_validity_days  = models.PositiveIntegerField(default=365)
 
-    member_id_format = models.CharField(
-        max_length=50,
-        default="MEM-{0001}"
-    )
-
     allow_self_registration   = models.BooleanField(default=False)
     require_admin_approval    = models.BooleanField(default=True)
     enable_member_id_download = models.BooleanField(default=True)

@@ -1,35 +1,26 @@
 """
 transactions/forms.py
 
-All forms accept a `library` kwarg (the tenant Library instance).
-IssueBookForm uses library.user as the `owner` when looking up books.Book
-and members.Member, because those models are scoped by owner=FK(User)
-rather than by library directly.
+All forms used by the transactions app.
+
+Key design note
+───────────────
+MarkFinePaidForm.fine_id is a CharField (not IntegerField) because it holds
+the human-readable Fine.fine_id column value (e.g. "DGDOOFN032512345")
+from the dooars_granthika_db.finance_fine table — NOT the integer primary key.
+
+The view (mark_fine_paid) looks up the Fine with:
+    Fine.objects.for_library(library).get(fine_id=cd["fine_id"])
+
+and the template sets the field via:
+    data-fine-id="{{ fine.fine_id }}"   ← string, e.g. DGDOOFN032512345
 """
 
-from django import forms
+from __future__ import annotations
+
 from datetime import date
-from decimal import Decimal
 
-from finance.models import Fine
-from .models import MissingBook, Transaction
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _active_loans_count(member, library):
-    """
-    Count active (issued + overdue) loans for a member within a library.
-
-    Member has no active_loans_count property — we compute it from the
-    Transaction table which is the single source of truth.
-    """
-    return Transaction.objects.for_library(library).filter(
-        member=member,
-        status__in=(Transaction.STATUS_ISSUED, Transaction.STATUS_OVERDUE),
-    ).count()
+from django import forms
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -38,159 +29,51 @@ def _active_loans_count(member, library):
 
 class IssueBookForm(forms.Form):
     """
-    Accepts the human-readable library card ID and book accession ID.
-
-    Fields posted by the form:
-      member_id    — member.member_id  e.g. "DGDGRST0326001"
-      book_copy_id — book.book_id      e.g. "BK-001"
-
-    clean() resolves both to ORM objects and attaches them as
-    cleaned_data["member"] and cleaned_data["book"].
+    Accepts the hidden member/book/copy PKs submitted by the issue_book
+    page (populated by AJAX autocomplete widgets).
     """
 
-    member_id = forms.CharField(
-        max_length=50,
-        error_messages={"required": "Member ID is required."},
-    )
-    book_copy_id = forms.CharField(
-        max_length=50,
-        error_messages={"required": "Book Copy ID is required."},
-    )
+    member    = forms.IntegerField(widget=forms.HiddenInput)
+    book      = forms.IntegerField(widget=forms.HiddenInput)
+    book_copy = forms.IntegerField(widget=forms.HiddenInput, required=False)
     issue_date = forms.DateField(
         widget=forms.DateInput(attrs={"type": "date"}),
         initial=date.today,
     )
-    loan_duration = forms.IntegerField(
-        initial=14,
-        required=False,
-        min_value=1,
-        widget=forms.HiddenInput,
-    )
     notes = forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 3}),
+        widget=forms.Textarea(attrs={"rows": 2}),
         required=False,
     )
 
     def __init__(self, *args, library=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self._library = library
-        self._owner   = library.user if library else None
+        self.library = library
 
-    def _get_borrow_limit(self, member=None):
-        """Role-specific borrow limit from LibraryRuleSettings."""
-        role = getattr(member, "role", "") if member else ""
-        try:
-            rules = self._library.rules
-            if role in ("teacher", "faculty", "staff"):
-                limit = getattr(rules, "teacher_borrow_limit", None)
-            else:
-                limit = getattr(rules, "student_borrow_limit", None)
-            if limit is None:
-                limit = getattr(rules, "max_books_per_member", None)
-            if limit is not None:
-                return int(limit)
-        except Exception:
-            pass
-        try:
-            from accounts.models import MemberSettings
-            ms = MemberSettings.objects.get(library=self._library)
-            if ms.borrow_limit:
-                return int(ms.borrow_limit)
-        except Exception:
-            pass
-        return 0
-
-    def clean_member_id(self):
-        return self.cleaned_data["member_id"].strip().upper()
-
-    def clean_book_copy_id(self):
-        return self.cleaned_data["book_copy_id"].strip()
-
-    def clean(self):
-        cleaned = super().clean()
-
+    def clean_member(self):
+        pk = self.cleaned_data["member"]
         from members.models import Member
+        try:
+            return Member.objects.get(pk=pk, owner=self.library.user)
+        except Member.DoesNotExist:
+            raise forms.ValidationError("Member not found.")
+
+    def clean_book(self):
+        pk = self.cleaned_data["book"]
         from books.models import Book
+        try:
+            return Book.objects.get(pk=pk, owner=self.library.user)
+        except Book.DoesNotExist:
+            raise forms.ValidationError("Book not found.")
 
-        raw_member_id   = cleaned.get("member_id", "")
-        raw_book_copy_id = cleaned.get("book_copy_id", "")
-
-        # ── Member: look up by library card ID (member.member_id) ─────────
-        member = None
-        if raw_member_id:
-            try:
-                member = Member.objects.get(
-                    member_id=raw_member_id,
-                    owner=self._owner,
-                )
-            except Member.DoesNotExist:
-                self.add_error(
-                    "member_id",
-                    f'Member ID "{raw_member_id}" not found in this library.'
-                )
-            else:
-                if member.status != "active":
-                    self.add_error(
-                        "member_id",
-                        f"{member.first_name} {member.last_name} is not an active "
-                        f"member (status: {member.get_status_display()}).",
-                    )
-                    member = None
-                else:
-                    active_loans = _active_loans_count(member, self._library)
-                    borrow_limit = self._get_borrow_limit(member)
-
-                    if borrow_limit and active_loans >= borrow_limit:
-                        self.add_error(
-                            "member_id",
-                            f"{member.first_name} {member.last_name} has reached "
-                            f"their borrowing limit ({borrow_limit} books).",
-                        )
-                        member = None
-
-        if member:
-            cleaned["member"] = member
-
-        # ── Book: look up BookCopy by copy_id, then get parent Book ─────────
-        book = None
-        book_copy = None
-        if raw_book_copy_id:
-            from books.models import BookCopy
-            try:
-                book_copy = (
-                    BookCopy.objects
-                    .select_related("book")
-                    .get(copy_id=raw_book_copy_id, book__owner=self._owner)
-                )
-            except BookCopy.DoesNotExist:
-                self.add_error(
-                    "book_copy_id",
-                    f'Book copy ID "{raw_book_copy_id}" not found in this library.'
-                )
-            except Exception as exc:
-                self.add_error(
-                    "book_copy_id",
-                    f'Book copy lookup error: {exc}'
-                )
-            else:
-                book = book_copy.book
-                # Check this specific copy is available
-                copy_status = getattr(book_copy, "status", "available")
-                if copy_status != "available":
-                    self.add_error(
-                        "book_copy_id",
-                        f'Copy "{raw_book_copy_id}" of "{book.title}" is not available '
-                        f'(status: {copy_status}).'
-                    )
-                    book = None
-                    book_copy = None
-
-        if book:
-            cleaned["book"] = book
-        if book_copy:
-            cleaned["book_copy"] = book_copy
-
-        return cleaned
+    def clean_book_copy(self):
+        pk = self.cleaned_data.get("book_copy")
+        if not pk:
+            return None
+        from books.models import BookCopy
+        try:
+            return BookCopy.objects.get(pk=pk)
+        except BookCopy.DoesNotExist:
+            return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -204,37 +87,28 @@ class ReturnBookForm(forms.Form):
         ("damaged", "Damaged"),
     ]
 
-    transaction_id = forms.IntegerField(widget=forms.HiddenInput)
-    return_date    = forms.DateField(widget=forms.HiddenInput)
-    condition      = forms.ChoiceField(choices=CONDITION_CHOICES, initial="good")
-    damage_charge  = forms.DecimalField(
+    transaction_id = forms.IntegerField(widget=forms.HiddenInput, required=False)
+    return_date    = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date"}),
         required=False,
-        min_value=Decimal("0.00"),
+    )
+    condition = forms.ChoiceField(
+        choices=CONDITION_CHOICES,
+        initial="good",
+        required=False,
+    )
+    damage_charge = forms.DecimalField(
+        max_digits=8,
         decimal_places=2,
+        min_value=0,
+        required=False,
+        initial=0,
     )
     return_notes  = forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 3}),
+        widget=forms.Textarea(attrs={"rows": 2}),
         required=False,
     )
     fine_paid_now = forms.BooleanField(required=False)
-
-    def clean_damage_charge(self):
-        return self.cleaned_data.get("damage_charge") or Decimal("0.00")
-
-    def clean(self):
-        cleaned = super().clean()
-        try:
-            txn = Transaction.objects.select_related("book", "member").get(
-                pk=cleaned.get("transaction_id")
-            )
-        except Transaction.DoesNotExist:
-            raise forms.ValidationError("Transaction not found.")
-
-        if txn.status == Transaction.STATUS_RETURNED:
-            raise forms.ValidationError("This book has already been returned.")
-
-        cleaned["transaction"] = txn
-        return cleaned
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -242,12 +116,35 @@ class ReturnBookForm(forms.Form):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class MarkFinePaidForm(forms.Form):
-    fine_id        = forms.IntegerField()
+    """
+    IMPORTANT: fine_id is a CharField that holds the human-readable Fine.fine_id
+    value (e.g. "DGDOOFN032512345") from the finance_fine table — NOT the
+    integer primary key.  The template populates it from {{ fine.fine_id }}.
+    """
+
+    fine_id = forms.CharField(
+        max_length=20,
+        widget=forms.HiddenInput,
+    )
     payment_method = forms.ChoiceField(
-        choices=Fine.PAYMENT_METHOD_CHOICES,
+        choices=[
+            ("cash",  "Cash"),
+            ("upi",   "UPI"),
+            ("card",  "Card"),
+            ("other", "Other"),
+        ],
         initial="cash",
     )
-    payment_ref = forms.CharField(required=False, max_length=100)
+    payment_ref = forms.CharField(
+        max_length=100,
+        required=False,
+    )
+
+    def clean_fine_id(self):
+        val = self.cleaned_data.get("fine_id", "").strip()
+        if not val:
+            raise forms.ValidationError("Fine ID is required.")
+        return val
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -255,24 +152,36 @@ class MarkFinePaidForm(forms.Form):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class MarkLostForm(forms.Form):
-    transaction_id = forms.IntegerField()
+    REASON_CHOICES = [
+        ("lost",     "Book Lost"),
+        ("damaged",  "Severely Damaged"),
+        ("missing",  "Missing - Not Returned"),
+        ("other",    "Other"),
+    ]
+
+    transaction_id = forms.IntegerField(widget=forms.HiddenInput)
+    reason         = forms.ChoiceField(choices=REASON_CHOICES, required=False)
     notes          = forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 3}),
+        widget=forms.Textarea(attrs={"rows": 2}),
         required=False,
     )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Add / Update Penalty Form
+# Add Penalty Form
 # ─────────────────────────────────────────────────────────────────────────────
 
 class AddPenaltyForm(forms.Form):
-    missing_id     = forms.IntegerField()
-    penalty_amount = forms.DecimalField(
-        min_value=Decimal("0.00"),
-        decimal_places=2,
-    )
-    penalty_reason = forms.ChoiceField(choices=MissingBook.REASON_CHOICES)
+    REASON_CHOICES = [
+        ("lost",     "Book Lost"),
+        ("damaged",  "Severely Damaged"),
+        ("missing",  "Missing - Not Returned"),
+        ("other",    "Other"),
+    ]
+
+    missing_id     = forms.IntegerField(widget=forms.HiddenInput)
+    penalty_amount = forms.DecimalField(max_digits=10, decimal_places=2, min_value=0)
+    penalty_reason = forms.ChoiceField(choices=REASON_CHOICES, required=False)
     notes          = forms.CharField(
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False,

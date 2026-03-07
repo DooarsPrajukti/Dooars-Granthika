@@ -50,7 +50,8 @@ def get_overview_stats(library):
     High-level KPIs displayed on the reports landing page.
     Returns a plain dict — safe to pass directly into a template context.
     """
-    from transactions.models import Fine, Transaction
+    from finance.models import Fine
+    from transactions.models import Transaction
     from books.models import Book
     from members.models import Member
 
@@ -216,7 +217,8 @@ def get_member_report(library, date_from, date_to, role=None, status=None):
     """
     Members with loan and fine summaries. Returns list of dicts.
     """
-    from transactions.models import Fine, Transaction
+    from finance.models import Fine
+    from transactions.models import Transaction
     from members.models import Member
 
     owner = library.user
@@ -286,7 +288,7 @@ def get_fine_report(library, date_from, date_to, fine_status=None):
     """
     Fines created within the date range.  Returns an annotated queryset.
     """
-    from transactions.models import Fine
+    from finance.models import Fine
 
     qs = (
         Fine.objects.for_library(library)
@@ -302,7 +304,7 @@ def get_fine_summary(library, date_from, date_to):
     """
     Aggregate fine totals by status for the given period.
     """
-    from transactions.models import Fine
+    from finance.models import Fine
 
     qs = Fine.objects.for_library(library).filter(
         created_at__date__gte=date_from,

@@ -789,7 +789,6 @@ def settings_view(request):
             else:
                 member_cfg.member_borrow_limit       = _int(request.POST.get("member_borrow_limit"),      member_cfg.member_borrow_limit)
             member_cfg.membership_validity_days  = _int(request.POST.get("membership_validity_days"), member_cfg.membership_validity_days)
-            member_cfg.member_id_format          = request.POST.get("member_id_format", member_cfg.member_id_format).strip()
             member_cfg.allow_self_registration   = request.POST.get("allow_self_registration")   == "on"
             member_cfg.require_admin_approval    = request.POST.get("require_admin_approval")    == "on"
             member_cfg.enable_member_id_download = request.POST.get("enable_member_id_download") == "on"

@@ -4,6 +4,160 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/transactions/issue_book.css' %}">
 <link rel="stylesheet" href="{% static 'css/transactions/issue_book_id.css' %}">
+<style>
+/* ── Suggestion Dropdown ──────────────────────────────────────── */
+.suggest-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  z-index: 400;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow:
+    0 4px 6px -1px rgba(0,0,0,.07),
+    0 10px 24px -4px rgba(0,0,0,.10);
+  overflow: hidden;
+  max-height: 288px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.suggest-dropdown::-webkit-scrollbar { width: 5px; }
+.suggest-dropdown::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+
+.suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: background 0.13s;
+  border-bottom: 1px solid #f1f5f9;
+  user-select: none;
+}
+.suggest-item:last-child { border-bottom: none; }
+.suggest-item:hover,
+.suggest-item.is-active {
+  background: #f0f4ff;
+}
+
+/* Member suggestion */
+.suggest-item__avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+/* Book suggestion */
+.suggest-item__book-icon {
+  width: 34px; height: 40px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #f1f5f9;
+  border-radius: 4px;
+  color: #64748b;
+}
+.suggest-item__book-icon svg { width: 18px; height: 18px; }
+
+.suggest-item__body {
+  flex: 1;
+  min-width: 0;
+}
+.suggest-item__name {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.suggest-item__meta {
+  display: block;
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.suggest-item__badge {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: #f1f5f9;
+  color: #475569;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+.suggest-item__badge--ok   { background: #dcfce7; color: #15803d; }
+.suggest-item__badge--warn { background: #fef9c3; color: #854d0e; }
+.suggest-item__badge--full { background: #fee2e2; color: #b91c1c; }
+
+.suggest-empty {
+  padding: 16px 14px;
+  font-size: 0.83rem;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.suggest-loading {
+  padding: 14px;
+  text-align: center;
+  font-size: 0.83rem;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.suggest-spinner {
+  width: 14px; height: 14px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Make input wrappers position:relative so dropdown anchors correctly */
+.id-field-wrapper { position: relative; }
+
+/* Highlight match text */
+.suggest-match { color: #6366f1; font-weight: 700; }
+
+/* ── Policy role labels (institute mode) ──────────────────────── */
+.policy-role-label {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-right: 5px;
+  vertical-align: middle;
+  line-height: 1.6;
+}
+.policy-role-label--student {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.policy-role-label--teacher {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -37,6 +191,11 @@
     <div class="issue-grid__form">
       <form method="POST" action="" id="issueBookForm" novalidate>
         {% csrf_token %}
+
+        {# Hidden PK fields — populated by issue_book.js after AJAX lookup resolves #}
+        {{ form.member }}
+        {{ form.book }}
+        {{ form.book_copy }}
 
         {% if form.non_field_errors %}
         <div class="form-error-banner" role="alert">
@@ -88,6 +247,9 @@
                 {% else %}
                 <p class="form-error is-hidden" id="memberIdError"></p>
                 {% endif %}
+
+                <!-- Member Suggestions Dropdown (inside wrapper so position:absolute anchors correctly) -->
+                <div class="suggest-dropdown is-hidden" id="memberSuggest" role="listbox" aria-label="Member suggestions"></div>
               </div>
 
               <!-- Inline preview — shown after AJAX resolves the ID -->
@@ -166,6 +328,9 @@
                 {% else %}
                 <p class="form-error is-hidden" id="bookCopyIdError"></p>
                 {% endif %}
+
+                <!-- Book Suggestions Dropdown (inside wrapper so position:absolute anchors correctly) -->
+                <div class="suggest-dropdown is-hidden" id="bookSuggest" role="listbox" aria-label="Book suggestions"></div>
               </div>
 
               <!-- Inline preview — shown after AJAX resolves the ID -->
@@ -400,7 +565,22 @@
         <ul class="policy-list">
           <li>Standard loan period is {{ default_loan_days }} days</li>
           <li>Fine: ₹{{ fine_rate_per_day }} per overdue day</li>
-          <li>Maximum {{ max_books_per_member }} books per member</li>
+
+          {% if is_institute %}
+            {# Institute libraries — show per-role borrow limits #}
+            <li>
+              <span class="policy-role-label policy-role-label--student">Students</span>
+              Maximum {{ student_borrow_limit }} book{{ student_borrow_limit|pluralize }} at a time
+            </li>
+            <li>
+              <span class="policy-role-label policy-role-label--teacher">Teachers</span>
+              Maximum {{ teacher_borrow_limit }} book{{ teacher_borrow_limit|pluralize }} at a time
+            </li>
+          {% else %}
+            {# General / public library — single limit for all members #}
+            <li>Maximum {{ max_books_per_member }} book{{ max_books_per_member|pluralize }} per member</li>
+          {% endif %}
+
           <li>Renewals allowed up to {{ max_renewal_count }} time{{ max_renewal_count|pluralize }} — request before due date</li>
           <li>Lost books incur replacement cost</li>
         </ul>
@@ -417,13 +597,18 @@
 <script>
   {# Django-template config — must stay inline so URLs/values are server-rendered #}
   window.LIBRARY_RULES = {
-    defaultLoanDays: {{ default_loan_days }},
-    fineRatePerDay:  {{ fine_rate_per_day }},
-    maxBorrowLimit:  {{ max_books_per_member }},
-    maxRenewalCount: {{ max_renewal_count }},
+    defaultLoanDays:     {{ default_loan_days }},
+    fineRatePerDay:      {{ fine_rate_per_day }},
+    maxBorrowLimit:      {{ max_books_per_member }},
+    maxRenewalCount:     {{ max_renewal_count }},
+    isInstitute:         {{ is_institute|yesno:"true,false" }},
+    studentBorrowLimit:  {{ student_borrow_limit }},
+    teacherBorrowLimit:  {{ teacher_borrow_limit }},
   };
-  window.MEMBER_LOOKUP_URL = "{% url 'transactions:member_lookup_api' %}";
-  window.BOOK_LOOKUP_URL   = "{% url 'transactions:book_lookup_api' %}";
+  window.MEMBER_LOOKUP_URL  = "{% url 'transactions:member_lookup_api' %}";
+  window.BOOK_LOOKUP_URL    = "{% url 'transactions:book_lookup_api' %}";
+  window.MEMBER_SEARCH_URL  = "{% url 'transactions:member_search_api' %}";
+  window.BOOK_SEARCH_URL    = "{% url 'transactions:book_search_api' %}";
 </script>
 <script src="{% static 'js/transactions/issue_book.js' %}"></script>
 {% endblock %}

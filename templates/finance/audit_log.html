@@ -162,21 +162,21 @@
             <td>
               <div class="al-member">
                 <div class="al-member__avatar">
-                  {{ payment.fine.transaction.member.first_name|first|upper }}
+                  {{ payment.member_name|first|upper|default:payment.fine.transaction.member.first_name|first|upper|default:"?" }}
                 </div>
                 <div>
                   <div class="al-member__name">
-                    {{ payment.fine.transaction.member.first_name }} {{ payment.fine.transaction.member.last_name }}
+                    {{ payment.member_name|default:payment.fine.transaction.member.first_name|add:" "|add:payment.fine.transaction.member.last_name|default:"—" }}
                   </div>
-                  <div class="al-member__id">{{ payment.fine.transaction.member.member_id }}</div>
+                  <div class="al-member__id">{{ payment.member_id_snapshot|default:payment.fine.transaction.member.member_id|default:"—" }}</div>
                 </div>
               </div>
             </td>
             <td>
-              <div class="al-book-title" title="{{ payment.fine.transaction.book.title }}">
-                {{ payment.fine.transaction.book.title }}
+              <div class="al-book-title" title="{{ payment.book_title|default:payment.fine.transaction.book.title|default:'' }}">
+                {{ payment.book_title|default:payment.fine.transaction.book.title|default:"—" }}
               </div>
-              <div class="al-txn-id">#{{ payment.fine.transaction.id }}</div>
+              <div class="al-txn-id">{{ payment.transaction_id_snapshot|default:payment.fine.transaction.transaction_id|default:"—" }}</div>
             </td>
             <td>
               {% if payment.method == 'online' %}
@@ -238,8 +238,9 @@
     <!-- Pagination -->
     {% if page_obj.has_other_pages %}
     <div class="al-pagination">
+      {% with qs=request.GET.urlencode %}
       {% if page_obj.has_previous %}
-        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}" class="al-page-btn">
+        <a href="?page={{ page_obj.previous_page_number }}&{{ qs }}" class="al-page-btn">
           <svg viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
       {% endif %}
@@ -247,14 +248,15 @@
         {% if page_obj.number == num %}
           <span class="al-page-btn al-page-btn--active">{{ num }}</span>
         {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
-          <a href="?page={{ num }}" class="al-page-btn">{{ num }}</a>
+          <a href="?page={{ num }}&{{ qs }}" class="al-page-btn">{{ num }}</a>
         {% endif %}
       {% endfor %}
       {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}" class="al-page-btn">
+        <a href="?page={{ page_obj.next_page_number }}&{{ qs }}" class="al-page-btn">
           <svg viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
       {% endif %}
+      {% endwith %}
     </div>
     {% endif %}
 

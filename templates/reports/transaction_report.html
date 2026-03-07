@@ -74,7 +74,7 @@
         <tbody>
           {% for t in transactions %}
           <tr>
-            <td class="rpt-cell-mono rpt-cell-muted">{{ t.pk }}</td>
+            <td class="rpt-cell-mono rpt-cell-muted">{{ t.transaction_id }}</td>
             <td><div class="rpt-cell-name">{{ t.member.first_name }} {{ t.member.last_name }}</div><div class="rpt-cell-sub">{{ t.member.member_id }}</div></td>
             <td><div class="rpt-cell-name">{{ t.book.title }}</div><div class="rpt-cell-sub">{{ t.book.author }}</div></td>
             <td class="rpt-cell-mono rpt-cell-muted">{{ t.issue_date }}</td>

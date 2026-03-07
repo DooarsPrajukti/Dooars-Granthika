@@ -179,7 +179,9 @@
               </label>
             </td>
             <td class="td-id">
-              <span class="txn-id">#{{ txn.id }}</span>
+              <span class="txn-id">
+                {% if txn.transaction_id %}{{ txn.transaction_id }}{% else %}#{{ txn.id }}{% endif %}
+              </span>
             </td>
             <td class="td-member">
               <div class="member-cell">

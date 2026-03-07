@@ -77,7 +77,7 @@
         <tbody>
           {% for f in fines %}
           <tr>
-            <td class="rpt-cell-mono rpt-cell-muted">{{ f.pk }}</td>
+            <td class="rpt-cell-mono rpt-cell-muted">{{ f.fine_id }}</td>
             <td><div class="rpt-cell-name">{{ f.transaction.member.first_name }} {{ f.transaction.member.last_name }}</div><div class="rpt-cell-sub">{{ f.transaction.member.member_id }}</div></td>
             <td class="rpt-cell-muted">{{ f.transaction.book.title }}</td>
             <td><span class="rpt-badge rpt-fine-type--{{ f.fine_type }}">{{ f.get_fine_type_display }}</span></td>

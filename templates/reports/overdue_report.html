@@ -48,7 +48,7 @@
         <tbody>
           {% for t in overdues %}
           <tr class="rpt-row--{{ t.overdue_severity }}">
-            <td class="rpt-cell-mono rpt-cell-muted">{{ t.pk }}</td>
+            <td class="rpt-cell-mono rpt-cell-muted">{{ t.transaction_id }}</td>
             <td>
               <div class="rpt-cell-name">{{ t.member.first_name }} {{ t.member.last_name }}</div>
               <div class="rpt-cell-sub">{{ t.member.member_id }}</div>

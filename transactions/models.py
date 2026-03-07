@@ -16,6 +16,57 @@ from accounts.models import Library
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Transaction ID generator
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _generate_transaction_id(library, issue_date: date) -> str:
+    """
+    Build a human-readable transaction ID:
+
+        DG<LIB3>TR<MM><YY><SERIAL>
+
+    e.g. for library "Dooars Granthika", issued on 2026-03-15, 3rd txn
+    of that month:
+
+        DGDOOTR032600003
+
+    Components
+    ----------
+    DG        — Dooars Granthika prefix (fixed)
+    LIB3      — first 3 uppercase alpha chars of library.name
+    TR        — "transaction" literal
+    MM        — zero-padded 2-digit month of issue_date
+    YY        — 2-digit year of issue_date
+    SERIAL    — 5-digit zero-padded count of transactions for this
+                library in this calendar month (1-based)
+    """
+    # ── Library prefix: first 3 alphabetic characters of library.name ────
+    lib_name    = getattr(library, "library_name", "") or ""
+    alpha_chars = [c.upper() for c in lib_name if c.isalpha()]
+    lib_prefix  = "".join(alpha_chars[:3]).ljust(3, "X")   # pad with X if < 3 chars
+
+    mm = issue_date.strftime("%m")   # "03"
+    yy = issue_date.strftime("%y")   # "26"
+
+    # ── Serial: count existing transactions for this library in this month ─
+    month_start = issue_date.replace(day=1)
+    if issue_date.month == 12:
+        month_end = issue_date.replace(year=issue_date.year + 1, month=1, day=1)
+    else:
+        month_end = issue_date.replace(month=issue_date.month + 1, day=1)
+
+    existing = (
+        Transaction.objects
+        .for_library(library)
+        .filter(issue_date__gte=month_start, issue_date__lt=month_end)
+        .count()
+    )
+    serial = existing + 1   # next slot (1-based)
+
+    return f"DG{lib_prefix}TR{mm}{yy}{serial:05d}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Tenant isolation helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -78,6 +129,18 @@ class Transaction(TenantModelMixin):
         (CONDITION_FAIR,    "Fair"),
         (CONDITION_DAMAGED, "Damaged"),
     ]
+
+    # ── Human-readable transaction ID ─────────────────────────────────────
+    transaction_id = models.CharField(
+        max_length=30,
+        unique=True,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Auto-generated: DG<LIB3>TR<MM><YY><SERIAL>  "
+            "e.g. DGDOOTR032600003"
+        ),
+    )
 
     # ── Relations ─────────────────────────────────────────────────────────
     member = models.ForeignKey(
@@ -154,7 +217,17 @@ class Transaction(TenantModelMixin):
         ]
 
     def __str__(self):
-        return f"Txn #{self.pk} — {self.member} / {self.book}"
+        tid = self.transaction_id or f"#{self.pk}"
+        return f"Txn {tid} — {self.member} / {self.book}"
+
+    # ── Auto-generate transaction_id on first save ────────────────────────
+
+    def save(self, *args, **kwargs):
+        if not self.transaction_id:
+            self.transaction_id = _generate_transaction_id(
+                self.library, self.issue_date or date.today()
+            )
+        super().save(*args, **kwargs)
 
     # ── Fine computation ──────────────────────────────────────────────────
 

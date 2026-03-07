@@ -12,98 +12,44 @@ app_name = 'finance'
 
 urlpatterns = [
 
+    # ── Media — binary-served assets ─────────────────────────────────────────
+    path('logo/',                views.library_logo,        name='library_logo'),
+
     # ── Payment flow ──────────────────────────────────────────────────────────
-    # Step 1: Show fine details + cash form (auto-detects from ?fine_id=)
-    path(
-        'process-payment/',
-        views.process_payment,
-        name='process_payment',
-    ),
+    path('process/',             views.process_payment,    name='process_payment'),
+    path('cash/',                views.cash_payment,       name='cash_payment'),
+    path('receipt/<int:payment_id>/', views.payment_receipt, name='payment_receipt'),
+    path('confirm/',             views.confirm_recovery,   name='confirm_recovery'),
 
-    # Step 2: Receive form POST, create Payment, mark fine paid, redirect back
-    path(
-        'cash-payment/',
-        views.cash_payment,
-        name='cash_payment',
-    ),
+    # ── Legacy URL aliases (old hyphenated paths → same views, no redirect overhead) ──
+    path('process-payment/',     views.process_payment,    name='process_payment_legacy'),
+    path('cash-payment/',        views.cash_payment,       name='cash_payment_legacy'),
+    path('confirm-recovery/',    views.confirm_recovery,   name='confirm_recovery_legacy'),
+    path('payment-receipt/<int:payment_id>/', views.payment_receipt, name='payment_receipt_legacy'),
 
-    # Receipt view for a completed payment
-    path(
-        'receipt/<int:payment_id>/',
-        views.payment_receipt,
-        name='payment_receipt',
-    ),
+    # ── Online / Razorpay ─────────────────────────────────────────────────────
+    path('order/',               views.create_online_order,  name='create_online_order'),
+    path('success/',             views.payment_success,      name='payment_success'),
+    path('webhook/razorpay/<int:library_id>/', views.razorpay_webhook, name='razorpay_webhook'),
 
-    # Legacy confirm-recovery page (redirects through cash_payment logic)
-    path(
-        'confirm-recovery/<int:fine_id>/',
-        views.confirm_recovery,
-        name='confirm_recovery',
-    ),
-
-    # ── Fine management ───────────────────────────────────────────────────────
-    # Waive a fine (POST only) — used by the Waive button in transaction_detail
-    path(
-        'waive-fine/<int:fine_id>/',
-        views.waive_fine,
-        name='waive_fine',
-    ),
+    # ── Member self-service ───────────────────────────────────────────────────
+    path('my-fines/',            views.member_fine_summary, name='member_fine_summary'),
 
     # ── Income ────────────────────────────────────────────────────────────────
-    path(
-        'income/',
-        views.income_list,
-        name='income_list',
-    ),
+    path('income/',              views.income_list,         name='income_list'),
 
     # ── Expenses ──────────────────────────────────────────────────────────────
-    path(
-        'expenses/',
-        views.expense_list,
-        name='expense_list',
-    ),
-    path(
-        'expenses/add/',
-        views.add_expense,
-        name='add_expense',
-    ),
-    path(
-        'expenses/<int:expense_id>/edit/',
-        views.add_expense,          # same view, expense_id kwarg triggers edit mode
-        name='edit_expense',
-    ),
-    path(
-        'expenses/<int:expense_id>/delete/',
-        views.delete_expense,
-        name='delete_expense',
-    ),
+    path('expenses/',            views.expense_list,        name='expense_list'),
+    path('expenses/add/',        views.add_expense,         name='add_expense'),
+    path('expenses/<int:expense_id>/edit/',   views.add_expense,    name='edit_expense'),
+    path('expenses/<int:expense_id>/delete/', views.delete_expense, name='delete_expense'),
 
-    # ── Reports ───────────────────────────────────────────────────────────────
-    path(
-        'reports/',
-        views.finance_reports,
-        name='finance_reports',
-    ),
-    path(
-        'daily-collection/',
-        views.daily_collection,
-        name='daily_collection',
-    ),
-    path(
-        'cash-book/',
-        views.cash_book,
-        name='cash_book',
-    ),
-    path(
-        'profit-loss/',
-        views.profit_loss,
-        name='profit_loss',
-    ),
+    # ── Reports (finance:overview is the canonical name for finance_reports) ──
+    path('reports/',             views.finance_reports,     name='overview'),
+    path('daily/',               views.daily_collection,    name='daily_collection'),
+    path('cash-book/',           views.cash_book,           name='cash_book'),
+    path('profit-loss/',         views.profit_loss,         name='profit_loss'),
 
     # ── Audit log ─────────────────────────────────────────────────────────────
-    path(
-        'audit/',
-        views.audit_log,
-        name='audit_log',
-    ),
+    path('audit/',               views.audit_log,           name='audit_log'),
 ]

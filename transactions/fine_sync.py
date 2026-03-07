@@ -58,24 +58,52 @@ def _sync_fine_amounts(library, Transaction, Fine) -> int:
     For every active (issued/overdue) transaction that has accrued a fine,
     create or update an unpaid Fine row so the amount is always in the DB.
 
+    Rule 7: Fine rows are only created/updated if auto_fine is ON for the library.
+    Rule 6: After syncing, block any active members who have overdue loans.
+
     Returns the number of Fine rows created or updated.
     """
     from django.db import transaction as db_tx
 
-    today = date.today()
+    # Rule 7: honour auto_fine setting
+    auto_fine = True
+    try:
+        auto_fine = bool(library.rules.auto_fine)
+    except Exception:
+        pass
+
+    if not auto_fine:
+        # Auto-fine is OFF — still auto-block overdue members (Rule 6) but
+        # do NOT create or update any Fine rows.
+        _auto_block_overdue_members_sync(library, Transaction)
+        return 0
 
     # All active loans that have accrued any fine amount
+    # Read grace period from library rules
+    grace_period_days = 0
+    try:
+        grace_period_days = int(library.rules.grace_period or 0)
+    except Exception:
+        pass
+
     active_txns = (
         Transaction.objects
         .for_library(library)
         .filter(status__in=(Transaction.STATUS_OVERDUE, Transaction.STATUS_ISSUED))
-        .select_related("transaction_ptr" if False else None)  # no-op, just clarity
     )
 
     touched = 0
 
     for txn in active_txns:
-        overdue_fine  = txn.overdue_fine    # Decimal, computed @property
+        # Apply grace period: reduce overdue_days by grace_period before computing fine
+        raw_overdue_days = txn.overdue_days
+        effective_overdue_days = max(0, raw_overdue_days - grace_period_days)
+        try:
+            rate = library.rules.late_fine
+            fine_rate = Decimal(rate) if rate is not None else txn.fine_rate_per_day
+        except Exception:
+            fine_rate = txn.fine_rate_per_day
+        overdue_fine  = Decimal(effective_overdue_days) * fine_rate    # grace-adjusted
         damage_charge = txn.damage_charge   # stored field
 
         # ── Overdue fine row ──────────────────────────────────────────────
@@ -92,7 +120,6 @@ def _sync_fine_amounts(library, Transaction, Fine) -> int:
                         },
                     )
                     if not created and fine_obj.status == Fine.STATUS_UNPAID:
-                        # Update amount only if it has changed
                         if fine_obj.amount != overdue_fine:
                             fine_obj.amount = overdue_fine
                             fine_obj.save(update_fields=["amount", "updated_at"])
@@ -127,7 +154,109 @@ def _sync_fine_amounts(library, Transaction, Fine) -> int:
                     txn.pk, exc,
                 )
 
+    # Rule 6: auto-block members who still have overdue loans
+    _auto_block_overdue_members_sync(library, Transaction)
+
+    # Rule: auto-mark severely overdue books as lost (if toggle ON)
+    _auto_mark_lost_sync(library, Transaction, Fine)
+
     return touched
+
+
+def _auto_mark_lost_sync(library, Transaction, Fine) -> None:
+    """
+    Background-thread version of auto_mark_lost:
+    If rules.auto_mark_lost is ON, flip severely overdue (>60 days) transactions
+    to STATUS_LOST and create a Fine(TYPE_LOST) row if auto_fine is also ON.
+    """
+    try:
+        auto_mark_lost = bool(library.rules.auto_mark_lost)
+    except Exception:
+        auto_mark_lost = False
+
+    if not auto_mark_lost:
+        return
+
+    AUTO_LOST_THRESHOLD_DAYS = 60
+    from datetime import date as _date
+    cutoff = _date.today() - __import__("datetime").timedelta(days=AUTO_LOST_THRESHOLD_DAYS)
+
+    try:
+        from members.models import Member
+        from books.models import Book
+        from transactions.models import MissingBook
+    except Exception:
+        return
+
+    overdue_qs = (
+        Transaction.objects
+        .for_library(library)
+        .filter(status=Transaction.STATUS_OVERDUE, due_date__lt=cutoff)
+        .select_related("book")
+    )
+
+    auto_fine = True
+    try:
+        auto_fine = bool(library.rules.auto_fine)
+    except Exception:
+        pass
+
+    for txn in overdue_qs:
+        try:
+            from django.db import transaction as _dbt
+            with _dbt.atomic():
+                txn.status    = Transaction.STATUS_LOST
+                txn.lost_date = _date.today()
+                txn.notes     = (txn.notes or "") + " [Auto-marked lost: overdue > 60 days]"
+                txn.save(update_fields=["status", "lost_date", "notes", "updated_at"])
+                book = txn.book
+                book.total_copies     = max(0, book.total_copies - 1)
+                book.available_copies = min(book.available_copies, book.total_copies)
+                book.save(update_fields=["total_copies", "available_copies"])
+                MissingBook.objects.update_or_create(
+                    transaction=txn,
+                    defaults={
+                        "library":       library,
+                        "book":          book,
+                        "status":        MissingBook.STATUS_LOST,
+                        "reported_date": _date.today(),
+                        "notes":         "Auto-marked lost: overdue > 60 days",
+                    },
+                )
+                if auto_fine:
+                    Fine.objects.get_or_create(
+                        library=library,
+                        transaction=txn,
+                        fine_type=Fine.TYPE_LOST,
+                        defaults={
+                            "amount": Decimal(txn.overdue_days) * txn.fine_rate_per_day,
+                            "status": Fine.STATUS_UNPAID,
+                        },
+                    )
+        except Exception as exc:
+            logger.warning("fine_sync: auto_mark_lost failed for txn %s: %s", txn.pk, exc)
+
+
+def _auto_block_overdue_members_sync(library, Transaction) -> None:
+    """
+    Rule 6 (background thread version): block any active members who have
+    at least one STATUS_OVERDUE transaction for this library.
+    """
+    try:
+        from members.models import Member
+        overdue_member_ids = set(
+            Transaction.objects.for_library(library)
+            .filter(status=Transaction.STATUS_OVERDUE)
+            .values_list("member_id", flat=True)
+            .distinct()
+        )
+        if overdue_member_ids:
+            Member.objects.filter(
+                pk__in=overdue_member_ids,
+                status="active",
+            ).update(status="blocked")
+    except Exception as exc:
+        logger.warning("fine_sync: auto-block failed for library %s: %s", library.pk, exc)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

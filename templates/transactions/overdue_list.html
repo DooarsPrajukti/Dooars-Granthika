@@ -125,7 +125,9 @@
               </label>
             </td>
             <td class="td-id">
-              <a href="{% url 'transactions:transaction_detail' txn.id %}" class="txn-id-link">#{{ txn.id }}</a>
+              <a href="{% url 'transactions:transaction_detail' txn.id %}" class="txn-id-link">
+                {% if txn.transaction_id %}{{ txn.transaction_id }}{% else %}#{{ txn.id }}{% endif %}
+              </a>
             </td>
             <td class="td-member">
               <div class="member-cell">
