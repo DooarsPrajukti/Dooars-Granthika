@@ -62,6 +62,39 @@ def _send_email(fn_name, *args, **kwargs):
         return False
 
 
+# ── WhatsApp Business service ──────────────────────────────────
+# All WhatsApp functions available:
+#   send_account_credentials_whatsapp(phone, password, username)
+#   send_password_reset_whatsapp(user, new_password, lib_name, username)
+#   send_member_confirmation_whatsapp(member)
+#   send_member_reactivation_whatsapp(member)
+#   send_clearance_confirmation_whatsapp(member)
+#   send_overdue_reminder_whatsapp(member, overdue_transactions)
+#   send_member_deletion_whatsapp(member_name, member_id, member_phone)
+try:
+    from core import whatsapp_service
+    WHATSAPP_ENABLED = True
+except ImportError:
+    whatsapp_service  = None
+    WHATSAPP_ENABLED  = False
+
+
+def _send_whatsapp(fn_name, *args, **kwargs):
+    """
+    Safe wrapper — calls whatsapp_service.<fn_name>(*args) and silently
+    swallows any exception so a WhatsApp failure never breaks a view.
+    Returns True on success, False on failure / unavailable.
+    """
+    if not WHATSAPP_ENABLED or whatsapp_service is None:
+        return False
+    try:
+        fn = getattr(whatsapp_service, fn_name)
+        return fn(*args, **kwargs)
+    except Exception as exc:
+        print(f"[whatsapp_service] {fn_name} failed: {exc}")
+        return False
+
+
 # ==========================================================
 # 🔐 SIGN IN
 # ==========================================================
@@ -239,6 +272,10 @@ def register_library(request):
         # ── Email credentials to new admin ────────────────────────
         _send_email("send_account_credentials", institute_email, password, username)
 
+        # ── WhatsApp credentials to new admin ─────────────────────
+        if phone_number:
+            _send_whatsapp("send_account_credentials_whatsapp", phone_number, password, username)
+
         messages.success(request, f"✅ Library registered! Your login username is: {username}")
         return redirect("/authentication/sign_in/")
 
@@ -263,6 +300,7 @@ def view_forget_password(request):
 
             # send_password_reset_email(user, new_password, lib_name, username)
             _send_email("send_password_reset_email", user, new_password, lib_name, user.username)
+            _send_whatsapp("send_password_reset_whatsapp", user, new_password, lib_name, user.username)
 
         messages.success(request, "If this email exists, a new password has been sent.")
         return redirect("/authentication/sign_in/")

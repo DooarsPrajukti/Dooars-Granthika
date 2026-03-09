@@ -807,11 +807,12 @@ def issue_book(request):
                 f'"{book.title}" issued to {member.first_name} {member.last_name}. '
                 f'Due: {due_date.strftime("%d %B %Y")}.',
             )
-
+            # import core.whatsapp_service
+            # core.whatsapp_service.send_book_issued_whatsapp(txn)
             # ── Email: book issued confirmation ────────────────────────────────
             if _member_emails_on(library) and getattr(member, "email", None):
                 _send_email("send_book_issued_email", member, txn)
-
+                
             return redirect("transactions:transaction_detail", pk=txn.pk)
 
         else:

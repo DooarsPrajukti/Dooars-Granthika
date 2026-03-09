@@ -39,6 +39,11 @@ _lock    = threading.Lock()
 
 SYNC_INTERVAL_SECONDS: int = int(getattr(settings, "FINE_SYNC_INTERVAL", 60))
 
+# ── Daily reminder: track the last date reminders were sent per library ───────
+# Key: library.pk  →  Value: date on which the last reminder batch was sent
+_last_reminder_date: dict = {}
+_reminder_lock = threading.Lock()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 1 — flip issued → overdue  (existing logic, unchanged)
@@ -260,6 +265,99 @@ def _auto_block_overdue_members_sync(library, Transaction) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Step 3 — send daily fine reminder emails (once per calendar day per library)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _send_daily_fine_reminders(library, Fine) -> int:
+    """
+    Once per calendar day, email every member who has at least one unpaid fine
+    for this library.
+
+    Controlled by settings.FINE_DAILY_REMINDER (default: True).
+
+    Returns the number of reminder emails sent.
+    """
+    # Honour opt-out setting
+    if not getattr(settings, "FINE_DAILY_REMINDER", True):
+        return 0
+
+    today = date.today()
+
+    with _reminder_lock:
+        if _last_reminder_date.get(library.pk) == today:
+            return 0  # already sent today for this library
+        _last_reminder_date[library.pk] = today
+
+    try:
+        from core.email_service import send_fine_daily_reminder
+        from members.models import Member
+    except Exception as exc:
+        logger.warning(
+            "fine_sync: daily reminder — could not import dependencies: %s", exc
+        )
+        return 0
+
+    library_name = getattr(library, "name", "Dooars Granthika")
+
+    # Fetch all unpaid fines for this library, grouped by member
+    try:
+        unpaid_fines = (
+            Fine.objects
+            .filter(library=library, status=Fine.STATUS_UNPAID)
+            .select_related("transaction__member", "transaction__book")
+        )
+    except Exception as exc:
+        logger.warning(
+            "fine_sync: daily reminder — could not query fines for library %s: %s",
+            library.pk, exc,
+        )
+        return 0
+
+    # Group fines by member
+    member_fines: dict = {}
+    for fine in unpaid_fines:
+        try:
+            member = fine.transaction.member
+            if member and member.email:
+                member_fines.setdefault(member, []).append(fine)
+        except Exception:
+            continue
+
+    sent = 0
+    for member, fines in member_fines.items():
+        try:
+            success = send_fine_daily_reminder(
+                member=member,
+                unpaid_fines=fines,
+                library_name=library_name,
+            )
+            if success:
+                sent += 1
+                logger.debug(
+                    "fine_sync: reminder sent to member %s (%s fine(s)).",
+                    getattr(member, "member_id", member.pk),
+                    len(fines),
+                )
+            else:
+                logger.warning(
+                    "fine_sync: reminder email failed for member %s.",
+                    getattr(member, "member_id", member.pk),
+                )
+        except Exception as exc:
+            logger.warning(
+                "fine_sync: daily reminder error for member %s: %s",
+                getattr(member, "member_id", member.pk), exc,
+            )
+
+    if sent:
+        logger.info(
+            "fine_sync: daily reminders sent for library '%s' — %d email(s).",
+            library_name, sent,
+        )
+    return sent
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Combined sync — called every cycle
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -279,10 +377,12 @@ def _run_sync_once() -> int:
         try:
             _sync_overdue_status(library, Transaction)
             touched = _sync_fine_amounts(library, Transaction, Fine)
+            reminded = _send_daily_fine_reminders(library, Fine)
             logger.debug(
-                "fine_sync: library %s — %d fine row(s) created/updated.",
+                "fine_sync: library %s — %d fine row(s) created/updated, %d reminder(s) sent.",
                 getattr(library, "name", library.pk),
                 touched,
+                reminded,
             )
             synced += 1
         except Exception as exc:

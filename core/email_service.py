@@ -882,3 +882,991 @@ Thank you for being a member of Dooars Granthika.
 
     html_message = build_html_email("Membership Closed", body_content)
     return send_basic_email(subject, plain_message, html_message, member_email)
+
+
+# ==============================
+# 9️⃣ Book Issued Confirmation Email
+# ==============================
+def send_book_issued_email(member, transaction):
+    """
+    Send a book-issued confirmation to a member.
+
+    Args:
+        member      – Member model instance
+        transaction – Transaction model instance with .book.title,
+                      .issue_date, .due_date, .copy_id (optional),
+                      .fine_rate_per_day populated.
+    """
+    subject = "📖 Book Issued Successfully | Dooars Granthika"
+
+    issue_date_str = (
+        transaction.issue_date.strftime('%d %b %Y')
+        if transaction.issue_date else 'N/A'
+    )
+    due_date_str = (
+        transaction.due_date.strftime('%d %b %Y')
+        if transaction.due_date else 'N/A'
+    )
+    copy_id_str = getattr(transaction, 'copy_id', None) or getattr(transaction, 'book_copy_id', 'N/A')
+    fine_rate   = getattr(transaction, 'fine_rate_per_day', 'N/A')
+
+    plain_message = f"""
+Hello {member.full_name},
+
+A book has been successfully issued to you at Dooars Granthika Library.
+
+Member ID  : {member.member_id}
+Book Title : {transaction.book.title}
+Issue Date : {issue_date_str}
+Due Date   : {due_date_str}
+
+Please return the book on or before the due date to avoid late fines.
+
+Happy Reading!
+Dooars Granthika
+"""
+
+    body_content = f"""
+        <p class="greeting">Book Issued! 📖</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, a book has been successfully issued to you from <span class="highlight">Dooars Granthika Library</span>.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Book Title:</strong> <span>{transaction.book.title}</span></p>
+            <p><strong>Copy ID:</strong> <span>{copy_id_str}</span></p>
+            <p><strong>Issue Date:</strong> <span>{issue_date_str}</span></p>
+            <p><strong>Due Date:</strong> <span>{due_date_str}</span></p>
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Issued On</div>
+                <div class="info-value">{issue_date_str}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Return By</div>
+                <div class="info-value" style="color:#e5a000;">{due_date_str}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Fine / Day</div>
+                <div class="info-value" style="font-size:13px;">₹{fine_rate}</div>
+            </div>
+        </div>
+
+        <div class="warning-box">
+            📅 <strong>Return Reminder:</strong> Please return <strong>{transaction.book.title}</strong> on or before <strong>{due_date_str}</strong> to avoid late fines of ₹{fine_rate} per day.
+        </div>
+
+        <hr class="divider"/>
+        <p>You can track your borrowing history and due dates from your member portal. If you need an extension, please contact the library in advance.</p>
+        <p style="margin-top: 24px; font-size: 18px;">Happy Reading! 🌟</p>
+    """
+
+    html_message = build_html_email("Book Issued", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 🔟 Book Returned Confirmation Email
+# ==============================
+def send_book_returned_email(member, transaction, total_fine=None):
+    """
+    Send a book-returned confirmation to a member.
+
+    Args:
+        member      – Member model instance
+        transaction – Transaction model instance with .book.title,
+                      .issue_date, .due_date, .return_date.
+        total_fine  – Decimal or None; the combined overdue + damage fine
+                      created at return time (passed from views.py).
+                      Falls back to transaction.fine_amount if not supplied.
+    """
+    subject = "✅ Book Returned Successfully | Dooars Granthika"
+
+    issue_date_str  = (
+        transaction.issue_date.strftime('%d %b %Y')
+        if transaction.issue_date else 'N/A'
+    )
+    due_date_str    = (
+        transaction.due_date.strftime('%d %b %Y')
+        if transaction.due_date else 'N/A'
+    )
+    return_date_str = (
+        transaction.return_date.strftime('%d %b %Y')
+        if getattr(transaction, 'return_date', None) else 'N/A'
+    )
+
+    # Use the caller-supplied total_fine; fall back to the model property
+    if total_fine is None:
+        total_fine = getattr(transaction, 'fine_amount', None) or 0
+    fine_paid = float(total_fine) > 0
+
+    fine_block = f"""
+        <div class="danger-box">
+            💳 <strong>Outstanding Fine:</strong> A fine of <strong>₹{total_fine}</strong> has been recorded on your account for this transaction. Please clear it at the library counter.
+        </div>
+    """ if fine_paid else f"""
+        <div class="success-box">
+            ✅ <strong>No fines accrued.</strong> This book was returned on time — great job!
+        </div>
+    """
+
+    plain_message = f"""
+Hello {member.full_name},
+
+Your book has been successfully returned at Dooars Granthika Library.
+
+Member ID   : {member.member_id}
+Book Title  : {transaction.book.title}
+Issue Date  : {issue_date_str}
+Due Date    : {due_date_str}
+Return Date : {return_date_str}
+Fine Amount : ₹{total_fine}
+
+Thank you for returning the book.
+Dooars Granthika
+"""
+
+    body_content = f"""
+        <p class="greeting">Book Returned! ✅</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, your book has been successfully returned to <span class="highlight">Dooars Granthika Library</span>. Thank you!</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Book Title:</strong> <span>{transaction.book.title}</span></p>
+            <p><strong>Issue Date:</strong> <span>{issue_date_str}</span></p>
+            <p><strong>Due Date:</strong> <span>{due_date_str}</span></p>
+            <p><strong>Returned On:</strong> <span>{return_date_str}</span></p>
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Issued On</div>
+                <div class="info-value">{issue_date_str}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Returned On</div>
+                <div class="info-value" style="color:#38a169;">{return_date_str}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Fine</div>
+                <div class="info-value" style="color:{'#e53e3e' if fine_paid else '#38a169'};">₹{total_fine}</div>
+            </div>
+        </div>
+
+        {fine_block}
+
+        <hr class="divider"/>
+        <p>Your borrowing record has been updated. You are now eligible to borrow another book from our collection.</p>
+        <p style="margin-top: 24px; font-size: 18px;">Thank you and Happy Reading! 📚</p>
+    """
+
+    html_message = build_html_email("Book Returned", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 1️⃣1️⃣ Fine Payment Confirmation Email
+# ==============================
+def send_fine_payment_confirmation_email(member, fine, payment_reference=None):
+    """
+    Send a fine payment confirmation to a member.
+
+    Args:
+        member            – Member model instance
+        fine              – Fine model instance with .fine_type, .amount,
+                            .transaction.book.title, .updated_at.
+        payment_reference – Optional string reference / receipt number.
+    """
+    subject = "💳 Fine Payment Confirmed | Dooars Granthika"
+
+    fine_type_display = fine.get_fine_type_display() if hasattr(fine, 'get_fine_type_display') else str(fine.fine_type)
+    paid_on_str       = (
+        fine.updated_at.strftime('%d %b %Y, %I:%M %p')
+        if getattr(fine, 'updated_at', None) else 'N/A'
+    )
+    book_title        = 'N/A'
+    try:
+        book_title = fine.transaction.book.title
+    except Exception:
+        pass
+
+    ref_row = (
+        f'<p><strong>Receipt Ref:</strong> <span>{payment_reference}</span></p>'
+        if payment_reference else ''
+    )
+    ref_plain = f"Receipt Ref : {payment_reference}\n" if payment_reference else ""
+
+    plain_message = f"""
+Hello {member.full_name},
+
+Your fine payment has been confirmed at Dooars Granthika Library.
+
+Member ID  : {member.member_id}
+Book       : {book_title}
+Fine Type  : {fine_type_display}
+Amount Paid: ₹{fine.amount}
+Paid On    : {paid_on_str}
+{ref_plain}
+Your account is now clear of this fine.
+
+Dooars Granthika
+"""
+
+    body_content = f"""
+        <p class="greeting">Payment Confirmed! 💳</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, your fine payment at <span class="highlight">Dooars Granthika Library</span> has been successfully processed.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Book:</strong> <span>{book_title}</span></p>
+            <p><strong>Fine Type:</strong> <span>{fine_type_display}</span></p>
+            <p><strong>Amount Paid:</strong> <span>₹{fine.amount}</span></p>
+            <p><strong>Paid On:</strong> <span>{paid_on_str}</span></p>
+            {ref_row}
+        </div>
+
+        <div class="success-box">
+            ✅ <strong>Payment received.</strong> This fine has been marked as <strong>Paid</strong> on your account. No further action is required.
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Fine Type</div>
+                <div class="info-value" style="font-size:13px;">{fine_type_display}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Amount Paid</div>
+                <div class="info-value" style="color:#38a169;">₹{fine.amount}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Status</div>
+                <div class="info-value" style="color:#38a169;">Paid ✓</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+        <p>Please retain this email as your payment confirmation. If you have any queries regarding this transaction, please contact our library team with your Member ID and receipt reference.</p>
+        <p style="margin-top: 24px;">Thank you for settling your dues promptly! 🙏</p>
+    """
+
+    html_message = build_html_email("Fine Payment Confirmed", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 1️⃣2️⃣ Membership Renewal Reminder Email
+# ==============================
+def send_membership_renewal_reminder_email(member, expiry_date, days_remaining):
+    """
+    Send a membership renewal reminder to a member.
+
+    Args:
+        member         – Member model instance
+        expiry_date    – date object representing membership expiry
+        days_remaining – int, number of days until expiry
+    """
+    subject = "🔔 Membership Renewal Reminder | Dooars Granthika"
+
+    expiry_date_str = (
+        expiry_date.strftime('%d %b %Y')
+        if hasattr(expiry_date, 'strftime') else str(expiry_date)
+    )
+
+    # Urgency styling based on days remaining
+    if days_remaining <= 7:
+        urgency_box = f"""
+        <div class="danger-box">
+            🚨 <strong>Urgent:</strong> Your membership expires in <strong>{days_remaining} day(s)</strong> on <strong>{expiry_date_str}</strong>. Renew immediately to avoid losing access.
+        </div>
+        """
+        urgency_colour = "#e53e3e"
+    elif days_remaining <= 30:
+        urgency_box = f"""
+        <div class="warning-box">
+            ⚠️ <strong>Reminder:</strong> Your membership expires in <strong>{days_remaining} day(s)</strong> on <strong>{expiry_date_str}</strong>. Please renew soon to avoid any interruption.
+        </div>
+        """
+        urgency_colour = "#e5a000"
+    else:
+        urgency_box = f"""
+        <div class="success-box">
+            📅 <strong>Heads up:</strong> Your membership will expire on <strong>{expiry_date_str}</strong> ({days_remaining} days remaining). Renew early to enjoy uninterrupted access.
+        </div>
+        """
+        urgency_colour = "#38a169"
+
+    plain_message = f"""
+Hello {member.full_name},
+
+This is a reminder that your library membership at Dooars Granthika
+will expire soon.
+
+Member ID      : {member.member_id}
+Expiry Date    : {expiry_date_str}
+Days Remaining : {days_remaining} day(s)
+
+Please visit the library or contact us to renew your membership before
+it expires to avoid any interruption to your borrowing privileges.
+
+Dooars Granthika
+"""
+
+    body_content = f"""
+        <p class="greeting">Renewal Reminder 🔔</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, this is a friendly reminder that your membership at <span class="highlight">Dooars Granthika Library</span> is approaching its expiry date.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Full Name:</strong> <span>{member.full_name}</span></p>
+            <p><strong>Expiry Date:</strong> <span>{expiry_date_str}</span></p>
+            <p><strong>Days Remaining:</strong> <span style="color:{urgency_colour}; font-weight:700;">{days_remaining} day(s)</span></p>
+        </div>
+
+        {urgency_box}
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Member ID</div>
+                <div class="info-value">{member.member_id}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Expires On</div>
+                <div class="info-value" style="color:{urgency_colour}; font-size:13px;">{expiry_date_str}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Days Left</div>
+                <div class="info-value" style="color:{urgency_colour};">{days_remaining}</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+        <p>To renew your membership, please visit the library in person or contact our team. Renewing on time ensures you continue to enjoy uninterrupted access to our full catalogue and member benefits.</p>
+        <p style="margin-top: 24px;">We look forward to seeing you! 📚</p>
+    """
+
+    html_message = build_html_email("Membership Renewal Reminder", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 1️⃣3️⃣ Book Renewed Email  ← NEW
+# ==============================
+def send_book_renewed_email(member, transaction, late_fine_amount=None):
+    """
+    Send a loan-renewal confirmation to a member.
+
+    Args:
+        member           – Member model instance
+        transaction      – Transaction after renewal (.due_date is the NEW due date,
+                           .renewal_count is the updated count,
+                           .loan_duration_days for the period).
+        late_fine_amount – Decimal or None; the overdue fine created at renewal time.
+    """
+    subject = "🔄 Book Loan Renewed | Dooars Granthika"
+
+    new_due_date_str = (
+        transaction.due_date.strftime('%d %b %Y')
+        if transaction.due_date else 'N/A'
+    )
+    max_renewals = getattr(transaction, 'max_renewal_count', '—')
+
+    fine_block = ""
+    if late_fine_amount and float(late_fine_amount) > 0:
+        fine_block = f"""
+        <div class="warning-box">
+            ⚠️ <strong>Late Renewal Fine:</strong> Because this loan was overdue at the time of renewal,
+            a fine of <strong>₹{late_fine_amount}</strong> has been applied to your account.
+            Please clear it at the library counter.
+        </div>
+        """
+    else:
+        fine_block = """
+        <div class="success-box">
+            ✅ <strong>No late fine.</strong> Your loan was renewed on time — no extra charges applied.
+        </div>
+        """
+
+    plain_message = f"""
+Hello {member.full_name},
+
+Your book loan has been successfully renewed at Dooars Granthika Library.
+
+Member ID     : {member.member_id}
+Book Title    : {transaction.book.title}
+New Due Date  : {new_due_date_str}
+Renewal Count : {transaction.renewal_count}
+Late Fine     : {'₹' + str(late_fine_amount) if late_fine_amount and float(late_fine_amount) > 0 else 'None'}
+
+Please return the book on or before the new due date to avoid further fines.
+
+Dooars Granthika
+"""
+
+    body_content = f"""
+        <p class="greeting">Loan Renewed! 🔄</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, your book loan at <span class="highlight">Dooars Granthika Library</span> has been successfully renewed.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Book Title:</strong> <span>{transaction.book.title}</span></p>
+            <p><strong>New Due Date:</strong> <span>{new_due_date_str}</span></p>
+            <p><strong>Renewal Count:</strong> <span>{transaction.renewal_count}</span></p>
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Renewal #</div>
+                <div class="info-value">{transaction.renewal_count}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">New Due Date</div>
+                <div class="info-value" style="color:#e5a000; font-size:13px;">{new_due_date_str}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Late Fine</div>
+                <div class="info-value" style="color:{'#e53e3e' if late_fine_amount and float(late_fine_amount) > 0 else '#38a169'};">
+                    {'₹' + str(late_fine_amount) if late_fine_amount and float(late_fine_amount) > 0 else '₹0'}
+                </div>
+            </div>
+        </div>
+
+        {fine_block}
+
+        <div class="warning-box">
+            📅 <strong>New Return Deadline:</strong> Please return <strong>{transaction.book.title}</strong>
+            on or before <strong>{new_due_date_str}</strong> to avoid further late fines.
+        </div>
+
+        <hr class="divider"/>
+        <p>If you need another extension, please contact the library before the new due date. Further renewals may be subject to library policy.</p>
+        <p style="margin-top: 24px; font-size: 18px;">Happy Reading! 📚</p>
+    """
+
+    html_message = build_html_email("Book Loan Renewed", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 1️⃣4️⃣ Book Lost Notification Email  ← NEW
+# ==============================
+def send_book_lost_email(member, transaction):
+    """
+    Notify a member that their borrowed book has been marked as lost
+    (either manually via mark_lost or automatically by the overdue daemon).
+
+    Args:
+        member      – Member model instance
+        transaction – Transaction instance (.book.title, .lost_date, .fine_amount).
+    """
+    subject = "📕 Book Marked as Lost | Dooars Granthika"
+
+    lost_date_str = (
+        transaction.lost_date.strftime('%d %b %Y')
+        if getattr(transaction, 'lost_date', None) else 'N/A'
+    )
+    fine_amount = getattr(transaction, 'fine_amount', None) or 0
+
+    plain_message = f"""
+Hello {member.full_name},
+
+The following book on your account has been marked as LOST at Dooars Granthika Library.
+
+Member ID  : {member.member_id}
+Book Title : {transaction.book.title}
+Lost Date  : {lost_date_str}
+Fine / Penalty : ₹{fine_amount}
+
+Please visit the library at the earliest to discuss replacement or payment.
+
+Dooars Granthika
+"""
+
+    body_content = f"""
+        <p class="greeting">Book Marked as Lost 📕</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, the following book on your account has been marked as <strong>Lost</strong> at <span class="highlight">Dooars Granthika Library</span>.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Book Title:</strong> <span>{transaction.book.title}</span></p>
+            <p><strong>Marked Lost On:</strong> <span>{lost_date_str}</span></p>
+            <p><strong>Fine / Penalty:</strong> <span>₹{fine_amount}</span></p>
+        </div>
+
+        <div class="danger-box">
+            🚨 <strong>Action Required:</strong> A lost-book penalty of <strong>₹{fine_amount}</strong> has been
+            applied to your account. Please visit the library to arrange replacement or payment at the earliest.
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Book</div>
+                <div class="info-value" style="font-size:12px;">{transaction.book.title[:20]}{'…' if len(transaction.book.title) > 20 else ''}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Lost On</div>
+                <div class="info-value" style="font-size:13px;">{lost_date_str}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Penalty</div>
+                <div class="info-value" style="color:#e53e3e;">₹{fine_amount}</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+        <p>If you believe this is an error or have already returned the book, please contact our library team immediately with your Member ID so we can investigate and update your record.</p>
+    """
+
+    html_message = build_html_email("Book Marked as Lost", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 1️⃣5️⃣ Member Account Blocked Email  ← NEW
+# ==============================
+def send_member_blocked_email(member):
+    """
+    Notify a member that their account has been blocked due to overdue loans.
+
+    Args:
+        member – Member model instance (.full_name, .member_id, .email).
+    """
+    subject = "🚫 Your Library Account Has Been Blocked | Dooars Granthika"
+
+    plain_message = f"""
+Hello {member.full_name},
+
+Your library account at Dooars Granthika has been blocked.
+
+Member ID : {member.member_id}
+Reason    : One or more overdue books have not been returned.
+
+Your borrowing privileges are suspended until all overdue books are returned
+and any outstanding fines are cleared.
+
+Please visit the library as soon as possible.
+
+Dooars Granthika
+"""
+
+    body_content = f"""
+        <p class="greeting">Account Blocked 🚫</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, your library account at <span class="highlight">Dooars Granthika</span> has been <strong>blocked</strong>.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Full Name:</strong> <span>{member.full_name}</span></p>
+            <p><strong>Status:</strong> <span style="color:#e53e3e;">Blocked</span></p>
+            <p><strong>Reason:</strong> <span>Overdue book(s) not returned</span></p>
+        </div>
+
+        <div class="danger-box">
+            🚫 <strong>Account Suspended.</strong> You cannot borrow new books or renew existing loans
+            until all overdue books are returned and outstanding fines are cleared.
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Member ID</div>
+                <div class="info-value">{member.member_id}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Status</div>
+                <div class="info-value" style="color:#e53e3e;">Blocked</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Action</div>
+                <div class="info-value" style="font-size:11px; color:#e53e3e;">Return Books</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+        <p>To restore your account, please visit the library and return all overdue books. Once all loans are cleared, your account will be automatically reactivated.</p>
+        <p>If you have any questions, our library team is happy to assist.</p>
+    """
+
+    html_message = build_html_email("Account Blocked", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 1️⃣6️⃣ Fine Paid Receipt Email  ← NEW
+# ==============================
+def send_fine_paid_email(member, fine, transaction):
+    """
+    Send a fine-paid receipt to a member when a fine is marked paid
+    via the mark_fine_paid view.
+
+    Args:
+        member      – Member model instance
+        fine        – Fine model instance (.fine_type, .amount, .paid_date or .updated_at)
+        transaction – Transaction instance (.book.title)
+    """
+    subject = "✅ Fine Payment Receipt | Dooars Granthika"
+
+    fine_type_display = (
+        fine.get_fine_type_display()
+        if hasattr(fine, 'get_fine_type_display') else str(fine.fine_type)
+    )
+    paid_on_str = 'N/A'
+    if getattr(fine, 'paid_date', None):
+        paid_on_str = fine.paid_date.strftime('%d %b %Y')
+    elif getattr(fine, 'updated_at', None):
+        paid_on_str = fine.updated_at.strftime('%d %b %Y, %I:%M %p')
+
+    book_title = 'N/A'
+    try:
+        book_title = transaction.book.title
+    except Exception:
+        pass
+
+    plain_message = f"""
+Hello {member.full_name},
+
+Your fine payment has been received at Dooars Granthika Library.
+
+Member ID  : {member.member_id}
+Book       : {book_title}
+Fine Type  : {fine_type_display}
+Amount Paid: ₹{fine.amount}
+Paid On    : {paid_on_str}
+
+Thank you for clearing your dues.
+Dooars Granthika
+"""
+
+    body_content = f"""
+        <p class="greeting">Fine Receipt ✅</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, we confirm that your fine payment at
+        <span class="highlight">Dooars Granthika Library</span> has been received and your account updated.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Book:</strong> <span>{book_title}</span></p>
+            <p><strong>Fine Type:</strong> <span>{fine_type_display}</span></p>
+            <p><strong>Amount Paid:</strong> <span>₹{fine.amount}</span></p>
+            <p><strong>Paid On:</strong> <span>{paid_on_str}</span></p>
+        </div>
+
+        <div class="success-box">
+            ✅ <strong>Payment received.</strong> This fine is now marked as <strong>Paid</strong>.
+            No further action is required for this charge.
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Fine Type</div>
+                <div class="info-value" style="font-size:12px;">{fine_type_display}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Amount</div>
+                <div class="info-value" style="color:#38a169;">₹{fine.amount}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Status</div>
+                <div class="info-value" style="color:#38a169;">Paid ✓</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+        <p>Please retain this email as your receipt. For any queries, contact the library with your Member ID.</p>
+        <p style="margin-top: 24px;">Thank you! 🙏</p>
+    """
+
+    html_message = build_html_email("Fine Payment Receipt", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 1️⃣7️⃣ Fine Created / Applied Email  ← NEW
+# ==============================
+def send_fine_created_email(member, fine, transaction):
+    """
+    Notify a member when a new fine is applied to their account
+    (e.g. lost-book penalty via add_penalty view).
+
+    Args:
+        member      – Member model instance
+        fine        – Fine model instance (.fine_type, .amount)
+        transaction – Transaction instance (.book.title)
+    """
+    subject = "⚠️ Fine Applied to Your Account | Dooars Granthika"
+
+    fine_type_display = (
+        fine.get_fine_type_display()
+        if hasattr(fine, 'get_fine_type_display') else str(fine.fine_type)
+    )
+    created_on_str = (
+        fine.created_at.strftime('%d %b %Y')
+        if getattr(fine, 'created_at', None) else 'N/A'
+    )
+
+    book_title = 'N/A'
+    try:
+        book_title = transaction.book.title
+    except Exception:
+        pass
+
+    plain_message = f"""
+Hello {member.full_name},
+
+A fine has been applied to your library account at Dooars Granthika.
+
+Member ID  : {member.member_id}
+Book       : {book_title}
+Fine Type  : {fine_type_display}
+Amount     : ₹{fine.amount}
+Applied On : {created_on_str}
+
+Please visit the library to clear this fine at your earliest convenience.
+
+Dooars Granthika
+"""
+
+    body_content = f"""
+        <p class="greeting">Fine Applied ⚠️</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, a new fine has been applied to your account
+        at <span class="highlight">Dooars Granthika Library</span>.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Book:</strong> <span>{book_title}</span></p>
+            <p><strong>Fine Type:</strong> <span>{fine_type_display}</span></p>
+            <p><strong>Amount Due:</strong> <span>₹{fine.amount}</span></p>
+            <p><strong>Applied On:</strong> <span>{created_on_str}</span></p>
+        </div>
+
+        <div class="danger-box">
+            💳 <strong>Payment Required:</strong> Please visit the library counter or contact us to
+            clear this fine of <strong>₹{fine.amount}</strong> as soon as possible.
+            Outstanding fines may restrict your borrowing privileges.
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Fine Type</div>
+                <div class="info-value" style="font-size:12px;">{fine_type_display}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Amount Due</div>
+                <div class="info-value" style="color:#e53e3e;">₹{fine.amount}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Status</div>
+                <div class="info-value" style="color:#e53e3e;">Unpaid</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+        <p>If you believe this fine was applied in error, please visit the library with your Member ID so we can review the record.</p>
+    """
+
+    html_message = build_html_email("Fine Applied", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 1️⃣8️⃣ Book Recovered Email  ← NEW
+# ==============================
+def send_book_recovered_email(member, missing):
+    """
+    Notify a member that a book previously marked as lost/missing has
+    been recovered.
+
+    Args:
+        member  – Member model instance
+        missing – MissingBook model instance (.book.title, .status,
+                  .reported_date).
+    """
+    subject = "📗 Book Recovered | Dooars Granthika"
+
+    book_title    = 'N/A'
+    reported_date = 'N/A'
+    try:
+        book_title    = missing.book.title
+        reported_date = missing.reported_date.strftime('%d %b %Y') if missing.reported_date else 'N/A'
+    except Exception:
+        pass
+
+    recovered_on_str = timezone.now().strftime('%d %b %Y')
+
+    plain_message = f"""
+Hello {member.full_name},
+
+Good news! A book previously reported as lost/missing on your account has been recovered.
+
+Member ID    : {member.member_id}
+Book Title   : {book_title}
+Reported On  : {reported_date}
+Recovered On : {recovered_on_str}
+
+Please visit the library if you have any questions about fines or penalties
+related to this book.
+
+Dooars Granthika
+"""
+
+    body_content = f"""
+        <p class="greeting">Book Recovered! 📗</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, we're pleased to let you know that a book
+        previously reported as lost or missing on your account has been <strong>recovered</strong>.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Book Title:</strong> <span>{book_title}</span></p>
+            <p><strong>Originally Reported:</strong> <span>{reported_date}</span></p>
+            <p><strong>Recovered On:</strong> <span>{recovered_on_str}</span></p>
+        </div>
+
+        <div class="success-box">
+            ✅ <strong>Book recovered.</strong> The library inventory has been updated to reflect this.
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Book</div>
+                <div class="info-value" style="font-size:12px;">{book_title[:20]}{'…' if len(book_title) > 20 else ''}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Recovered On</div>
+                <div class="info-value" style="font-size:13px;">{recovered_on_str}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Status</div>
+                <div class="info-value" style="color:#38a169;">Recovered ✓</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+        <p>If any fines or penalties were applied in relation to this book, please visit the library counter
+        and our team will review your account accordingly.</p>
+        <p style="margin-top: 24px;">Thank you! 📚</p>
+    """
+
+    html_message = build_html_email("Book Recovered", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
+
+
+# ==============================
+# 1️⃣9️⃣ Daily Fine Reminder Email
+# ==============================
+def send_fine_daily_reminder(member, unpaid_fines, library_name="Dooars Granthika"):
+    """
+    Send a daily reminder to a member who has one or more unpaid fines.
+
+    Called automatically by the fine_sync background daemon once per day
+    (when FINE_DAILY_REMINDER is True in settings).
+
+    Args:
+        member        – Member model instance (.full_name, .member_id, .email)
+        unpaid_fines  – QuerySet / list of unpaid Fine instances, each with:
+                          .fine_type, .amount, .transaction.book.title
+        library_name  – Display name of the library (default: Dooars Granthika)
+
+    Returns:
+        True if the email was sent successfully, False otherwise.
+    """
+    if not unpaid_fines:
+        return False
+
+    subject = f"🔔 Outstanding Fine Reminder | {library_name}"
+
+    # ── Aggregate totals ──────────────────────────────────────────────────
+    total_amount = sum(f.amount for f in unpaid_fines)
+    fine_count   = len(unpaid_fines)
+
+    # ── Build plain-text fine rows ────────────────────────────────────────
+    plain_rows = ""
+    for idx, fine in enumerate(unpaid_fines, 1):
+        fine_type_label = (
+            fine.get_fine_type_display()
+            if hasattr(fine, "get_fine_type_display") else str(fine.fine_type)
+        )
+        try:
+            book_title = fine.transaction.book.title
+        except Exception:
+            book_title = "N/A"
+        plain_rows += f"  {idx}. {book_title} — {fine_type_label}: ₹{fine.amount}\n"
+
+    plain_message = f"""
+Hello {member.full_name},
+
+This is a friendly reminder that you have {fine_count} outstanding fine(s) on your
+library account at {library_name}.
+
+Member ID : {member.member_id}
+
+Outstanding Fines:
+{plain_rows}
+Total Due : ₹{total_amount}
+
+Please visit the library counter at your earliest convenience to clear your dues.
+Unpaid fines may restrict your borrowing privileges.
+
+{library_name}
+"""
+
+    # ── Build HTML fine rows ──────────────────────────────────────────────
+    html_fine_rows = ""
+    for fine in unpaid_fines:
+        fine_type_label = (
+            fine.get_fine_type_display()
+            if hasattr(fine, "get_fine_type_display") else str(fine.fine_type)
+        )
+        try:
+            book_title = fine.transaction.book.title
+        except Exception:
+            book_title = "N/A"
+        html_fine_rows += f"""
+            <p>
+                <strong>{fine_type_label}:</strong>
+                <span>{book_title}</span>
+                &nbsp;—&nbsp;
+                <span style="color:#e53e3e; font-weight:700;">₹{fine.amount}</span>
+            </p>"""
+
+    body_content = f"""
+        <p class="greeting">Outstanding Fine Reminder 🔔</p>
+        <p>Hello <span class="highlight">{member.full_name}</span>, this is a daily reminder
+        from <span class="highlight">{library_name}</span> that you have unpaid fine(s) on your account.
+        Please clear your dues at the earliest to avoid any borrowing restrictions.</p>
+
+        <div class="credential-box">
+            <p><strong>Member ID:</strong> <span>{member.member_id}</span></p>
+            <p><strong>Total Fines:</strong> <span>{fine_count} unpaid</span></p>
+            {html_fine_rows}
+            <p style="margin-top:10px; border-top:1px solid #c5d5f0; padding-top:10px;">
+                <strong>Total Due:</strong>
+                <span style="color:#e53e3e; font-weight:700; font-size:15px;">₹{total_amount}</span>
+            </p>
+        </div>
+
+        <div class="danger-box">
+            ⚠️ <strong>Action Required:</strong> You have <strong>{fine_count} unpaid fine(s)</strong>
+            totalling <strong>₹{total_amount}</strong>. Fines continue to accrue daily until cleared.
+            Outstanding fines may restrict your borrowing privileges.
+        </div>
+
+        <div class="info-strip">
+            <div class="info-strip-item">
+                <div class="info-label">Fines Due</div>
+                <div class="info-value" style="color:#e53e3e;">{fine_count}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Total Amount</div>
+                <div class="info-value" style="color:#e53e3e;">₹{total_amount}</div>
+            </div>
+            <div class="info-strip-item">
+                <div class="info-label">Status</div>
+                <div class="info-value" style="color:#e53e3e;">Unpaid</div>
+            </div>
+        </div>
+
+        <hr class="divider"/>
+        <p>Please visit the library counter with your Member ID to settle these dues.
+        If you have already paid, kindly disregard this reminder.</p>
+        <p style="margin-top: 24px;">Thank you for being a valued member! 📚</p>
+    """
+
+    html_message = build_html_email("Outstanding Fine Reminder", body_content)
+    return send_basic_email(subject, plain_message, html_message, member.email)
