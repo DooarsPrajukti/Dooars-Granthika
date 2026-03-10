@@ -188,7 +188,7 @@
                 <div class="member-avatar">
                   {% if txn.member.photo_mime_type %}
                   <img
-                    src="{% url 'members:member_photo' txn.member.pk %}"
+                    src="{% url 'transactions:member_photo_image' txn.member.pk %}"
                     alt="{{ txn.member.first_name }}"
                     class="member-avatar__photo"
                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
@@ -241,7 +241,7 @@
                   <svg viewBox="0 0 20 20" fill="none"><path d="M10 4C5.5 4 2 10 2 10s3.5 6 8 6 8-6 8-6-3.5-6-8-6z" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg>
                   View
                 </a>
-                {% if txn.status == 'issued' or txn.status == 'overdue' %}
+                {% if txn.status == 'issued' or txn.status == 'overdue' or txn.status == 'overdue_settled' %}
                 <a href="{% url 'transactions:return_book' txn.id %}" class="action-btn action-btn--return" title="Process Return">
                   <svg viewBox="0 0 20 20" fill="none"><path d="M4 10h10M10 6l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   Return

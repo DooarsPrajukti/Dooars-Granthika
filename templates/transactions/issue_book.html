@@ -605,10 +605,11 @@
     studentBorrowLimit:  {{ student_borrow_limit }},
     teacherBorrowLimit:  {{ teacher_borrow_limit }},
   };
-  window.MEMBER_LOOKUP_URL  = "{% url 'transactions:member_lookup_api' %}";
-  window.BOOK_LOOKUP_URL    = "{% url 'transactions:book_lookup_api' %}";
-  window.MEMBER_SEARCH_URL  = "{% url 'transactions:member_search_api' %}";
-  window.BOOK_SEARCH_URL    = "{% url 'transactions:book_search_api' %}";
+  window.MEMBER_LOOKUP_URL      = "{% url 'transactions:member_lookup_api' %}";
+  window.BOOK_LOOKUP_URL        = "{% url 'transactions:book_lookup_api' %}";
+  window.MEMBER_SEARCH_URL      = "{% url 'transactions:member_suggestions_api' %}";
+  window.MEMBER_SUGGESTIONS_URL = "{% url 'transactions:member_suggestions_api' %}";
+  window.BOOK_SEARCH_URL        = "{% url 'transactions:book_search_api' %}";
 </script>
 <script src="{% static 'js/transactions/issue_book.js' %}"></script>
 {% endblock %}

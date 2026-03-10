@@ -17,6 +17,10 @@ Fine row upsert rules
   • If the transaction is no longer overdue the fine row is left as-is
     (amount frozen at the day it was returned / cleared).
 
+Daily reminder window:
+  • Emails are only sent between 11:00 AM and 11:00 PM (local server time).
+  • Once per calendar day per library (first cycle inside that window wins).
+
 Override the sync interval in settings.py:
     FINE_SYNC_INTERVAL = 300   # every 5 minutes (default: 60)
 """
@@ -25,7 +29,7 @@ import logging
 import os
 import threading
 import time
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from django.conf import settings
@@ -43,6 +47,16 @@ SYNC_INTERVAL_SECONDS: int = int(getattr(settings, "FINE_SYNC_INTERVAL", 60))
 # Key: library.pk  →  Value: date on which the last reminder batch was sent
 _last_reminder_date: dict = {}
 _reminder_lock = threading.Lock()
+
+# ── Daily reminder window (inclusive, 24-hour clock) ─────────────────────────
+REMINDER_START_HOUR: int = 11   # 11:00 AM
+REMINDER_END_HOUR:   int = 23   # 11:00 PM  (hour < 23 means up to 22:59:59)
+
+
+def _is_within_reminder_window() -> bool:
+    """Return True if the current local time is between 11:00 AM and 11:00 PM."""
+    now_hour = datetime.now().hour          # 0–23, local server time
+    return REMINDER_START_HOUR <= now_hour < REMINDER_END_HOUR
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -83,7 +97,6 @@ def _sync_fine_amounts(library, Transaction, Fine) -> int:
         _auto_block_overdue_members_sync(library, Transaction)
         return 0
 
-    # All active loans that have accrued any fine amount
     # Read grace period from library rules
     grace_period_days = 0
     try:
@@ -91,6 +104,8 @@ def _sync_fine_amounts(library, Transaction, Fine) -> int:
     except Exception:
         pass
 
+    # All active loans — include BOTH issued and overdue so newly-flipped
+    # overdue transactions (like txn #9) are picked up in the same cycle.
     active_txns = (
         Transaction.objects
         .for_library(library)
@@ -265,13 +280,13 @@ def _auto_block_overdue_members_sync(library, Transaction) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 3 — send daily fine reminder emails (once per calendar day per library)
+# Step 3 — send daily fine reminder emails (once per calendar day, 11 AM–11 PM)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _send_daily_fine_reminders(library, Fine) -> int:
     """
-    Once per calendar day, email every member who has at least one unpaid fine
-    for this library.
+    Once per calendar day (and only between 11:00 AM – 11:00 PM local time),
+    email every member who has at least one unpaid fine for this library.
 
     Controlled by settings.FINE_DAILY_REMINDER (default: True).
 
@@ -281,11 +296,21 @@ def _send_daily_fine_reminders(library, Fine) -> int:
     if not getattr(settings, "FINE_DAILY_REMINDER", True):
         return 0
 
+    # ── Time-window guard: only send between 11:00 AM and 11:00 PM ───────────
+    if not _is_within_reminder_window():
+        logger.debug(
+            "fine_sync: reminder skipped for library %s — outside 11 AM–11 PM window "
+            "(current hour: %d).",
+            library.pk, datetime.now().hour,
+        )
+        return 0
+
     today = date.today()
 
     with _reminder_lock:
         if _last_reminder_date.get(library.pk) == today:
             return 0  # already sent today for this library
+        # Mark as sent *before* sending to avoid a second thread racing in
         _last_reminder_date[library.pk] = today
 
     try:
@@ -295,6 +320,9 @@ def _send_daily_fine_reminders(library, Fine) -> int:
         logger.warning(
             "fine_sync: daily reminder — could not import dependencies: %s", exc
         )
+        # Roll back the date guard so the next cycle retries
+        with _reminder_lock:
+            _last_reminder_date.pop(library.pk, None)
         return 0
 
     library_name = getattr(library, "name", "Dooars Granthika")
@@ -311,6 +339,9 @@ def _send_daily_fine_reminders(library, Fine) -> int:
             "fine_sync: daily reminder — could not query fines for library %s: %s",
             library.pk, exc,
         )
+        # Roll back the date guard so the next cycle retries
+        with _reminder_lock:
+            _last_reminder_date.pop(library.pk, None)
         return 0
 
     # Group fines by member
@@ -351,8 +382,8 @@ def _send_daily_fine_reminders(library, Fine) -> int:
 
     if sent:
         logger.info(
-            "fine_sync: daily reminders sent for library '%s' — %d email(s).",
-            library_name, sent,
+            "fine_sync: daily reminders sent for library '%s' — %d email(s) at %s.",
+            library_name, sent, datetime.now().strftime("%H:%M"),
         )
     return sent
 
@@ -402,9 +433,12 @@ def _run_sync_once() -> int:
 
 def _sync_loop() -> None:
     logger.info(
-        "fine_sync: background thread started (PID %s, interval %ss).",
+        "fine_sync: background thread started (PID %s, interval %ss, "
+        "reminder window %02d:00–%02d:00).",
         os.getpid(),
         SYNC_INTERVAL_SECONDS,
+        REMINDER_START_HOUR,
+        REMINDER_END_HOUR,
     )
     while True:
         time.sleep(SYNC_INTERVAL_SECONDS)

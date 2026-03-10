@@ -273,8 +273,8 @@ def register_library(request):
         _send_email("send_account_credentials", institute_email, password, username)
 
         # ── WhatsApp credentials to new admin ─────────────────────
-        if phone_number:
-            _send_whatsapp("send_account_credentials_whatsapp", phone_number, password, username)
+        # if phone_number:
+        #     _send_whatsapp("send_account_credentials_whatsapp", phone_number, password, username)
 
         messages.success(request, f"✅ Library registered! Your login username is: {username}")
         return redirect("/authentication/sign_in/")
@@ -300,7 +300,7 @@ def view_forget_password(request):
 
             # send_password_reset_email(user, new_password, lib_name, username)
             _send_email("send_password_reset_email", user, new_password, lib_name, user.username)
-            _send_whatsapp("send_password_reset_whatsapp", user, new_password, lib_name, user.username)
+            # _send_whatsapp("send_password_reset_whatsapp", user, new_password, lib_name, user.username)
 
         messages.success(request, "If this email exists, a new password has been sent.")
         return redirect("/authentication/sign_in/")

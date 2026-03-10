@@ -134,7 +134,7 @@
                 <div class="member-avatar">
                   {% if txn.member.photo_mime_type %}
                   <img
-                    src="{% url 'members:member_photo' txn.member.pk %}"
+                    src="{% url 'transactions:member_photo_image' txn.member.pk %}"
                     alt="{{ txn.member.first_name }}"
                     class="member-avatar__photo"
                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"

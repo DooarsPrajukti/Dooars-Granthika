@@ -38,7 +38,8 @@ class BookForm(forms.ModelForm):
         fields = [
             "title", "author", "isbn", "category",
             "publisher", "publication_year", "language", "edition",
-            "total_copies", "available_copies", "shelf_location",
+            "total_copies", "shelf_location",
+            "price",
             "description",
             # cover_image and new_category are declared above as extra fields
         ]
@@ -51,7 +52,7 @@ class BookForm(forms.ModelForm):
             "edition":          forms.TextInput(attrs={"placeholder": "e.g. 3rd Edition"}),
             "shelf_location":   forms.TextInput(attrs={"placeholder": "e.g. A-12-F"}),
             "total_copies":     forms.NumberInput(attrs={"placeholder": "e.g. 10", "min": 0}),
-            "available_copies": forms.NumberInput(attrs={"placeholder": "e.g. 7",  "min": 0}),
+            "price":            forms.NumberInput(attrs={"placeholder": "e.g. 350.00", "min": 0, "step": "0.01", "required": True}),
             "description":      forms.Textarea(attrs={
                                     "rows": 4,
                                     "placeholder": "A brief description of the book…",
@@ -101,16 +102,15 @@ class BookForm(forms.ModelForm):
     def clean(self):
         cleaned      = super().clean()
         total        = cleaned.get("total_copies")
-        available    = cleaned.get("available_copies")
         new_cat_name = cleaned.get("new_category", "").strip()
         chosen_cat   = cleaned.get("category")
 
-        # ── 1. Stock sanity ───────────────────────────────────────────
-        if total is not None and available is not None and available > total:
-            self.add_error(
-                "available_copies",
-                "Available copies cannot exceed total copies.",
-            )
+        # ── 1. Price required ─────────────────────────────────────────
+        price = cleaned.get("price")
+        if price is None:
+            self.add_error("price", "Price is required.")
+        elif price < 0:
+            self.add_error("price", "Price cannot be negative.")
 
         # ── 2. Category required ──────────────────────────────────────
         if not chosen_cat and not new_cat_name:
@@ -157,7 +157,8 @@ REQUIRED_COLS  = {"isbn"}
 OPTIONAL_COLS  = {
     "title", "author", "category", "publisher",
     "publication_year", "language", "edition",
-    "shelf_location", "total_copies", "available_copies", "description",
+    "shelf_location", "total_copies", "description",
+    "price",
 }
 ALL_COLS = REQUIRED_COLS | OPTIONAL_COLS
 
@@ -282,25 +283,36 @@ def parse_excel_rows(file_obj, user):
         else:
             data_out["publication_year"] = None
 
-        # ── total_copies / available_copies ───────────────────────────
-        for field in ("total_copies", "available_copies"):
-            val = row_dict.get(field)
-            if val is not None and str(val).strip():
-                try:
-                    int_val = int(float(str(val)))
-                    if int_val < 0:
-                        errors.append(f"{field} cannot be negative.")
-                    else:
-                        data_out[field] = int_val
-                except ValueError:
-                    errors.append(f"{field} '{val}' is not a number.")
-            else:
-                data_out.setdefault(field, 1)
+        # ── total_copies — available_copies auto-set to total ─────────
+        val = row_dict.get("total_copies")
+        if val is not None and str(val).strip():
+            try:
+                int_val = int(float(str(val)))
+                if int_val < 0:
+                    errors.append("total_copies cannot be negative.")
+                else:
+                    data_out["total_copies"] = int_val
+            except ValueError:
+                errors.append(f"total_copies '{val}' is not a number.")
+        else:
+            data_out.setdefault("total_copies", 1)
+        # available_copies always equals total_copies on import
+        data_out["available_copies"] = data_out.get("total_copies", 1)
 
-        tc = data_out.get("total_copies", 1)
-        ac = data_out.get("available_copies", 1)
-        if ac > tc:
-            errors.append("available_copies cannot exceed total_copies.")
+        # ── price (required) ──────────────────────────────────────────
+        price_val = row_dict.get("price")
+        if price_val is None or str(price_val).strip() == "" or str(price_val).strip().lower() == "none":
+            errors.append("Price is required.")
+        else:
+            try:
+                from decimal import Decimal as _D
+                p = _D(str(price_val)).quantize(_D("0.01"))
+                if p < 0:
+                    errors.append("price cannot be negative.")
+                else:
+                    data_out["price"] = p
+            except Exception:
+                errors.append(f"price '{price_val}' is not a valid number.")
 
         # ── Category — auto-create if not found ───────────────────────
         cat_name = str(row_dict.get("category") or "").strip()

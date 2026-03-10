@@ -220,32 +220,24 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label" for="id_available_copies">
-                Available Copies <span class="required">*</span>
-              </label>
-              <input type="number" id="id_available_copies" name="available_copies"
-                class="form-control" placeholder="e.g. 7" min="0"
-                max="{{ form.total_copies.value|default:'' }}"
-                value="{{ form.available_copies.value|default:'' }}" required>
-              <div class="invalid-feedback">
-                <i class="fas fa-exclamation-circle"></i>
-                {% if form.available_copies.errors %}
-                  {{ form.available_copies.errors|join:", " }}
-                {% else %}
-                  Available copies cannot exceed total copies.
-                {% endif %}
-              </div>
-              <div class="form-text" id="issuedCopiesHint" style="font-size:.73rem;color:var(--text-muted);margin-top:4px;display:none;">
-                <i class="fas fa-hand-holding-heart"></i>
-                <span id="issuedCopiesCount"></span> issued (out on loan)
-              </div>
-            </div>
-
-            <div class="form-group">
               <label class="form-label" for="id_shelf_location">Shelf Location</label>
               <input type="text" id="id_shelf_location" name="shelf_location"
                 class="form-control" placeholder="e.g. A-12-F"
                 value="{{ form.shelf_location.value|default:'' }}">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="id_price">
+                Price (₹) <span class="required">*</span>
+              </label>
+              <input type="number" id="id_price" name="price"
+                class="form-control" placeholder="e.g. 350.00"
+                min="0" step="0.01" required
+                value="{{ form.price.value|default:'' }}">
+              <div class="invalid-feedback">
+                <i class="fas fa-exclamation-circle"></i>
+                {% if form.price.errors %}{{ form.price.errors|join:", " }}{% else %}Price is required.{% endif %}
+              </div>
             </div>
 
             <div class="form-group">
@@ -343,6 +335,7 @@
             <span class="dot"></span> ISBN
             <em style="font-weight:400;color:#ef4444;margin-left:2px;">(required)</em>
           </div>
+          <div class="col-pill required"><span class="dot"></span> Price (₹)</div>
           <div class="col-pill"><span class="dot"></span> Title</div>
           <div class="col-pill"><span class="dot"></span> Author</div>
           <div class="col-pill"><span class="dot"></span> Category</div>
@@ -351,7 +344,6 @@
           <div class="col-pill"><span class="dot"></span> Language</div>
           <div class="col-pill"><span class="dot"></span> Edition</div>
           <div class="col-pill"><span class="dot"></span> Total Copies</div>
-          <div class="col-pill"><span class="dot"></span> Available Copies</div>
           <div class="col-pill"><span class="dot"></span> Shelf Location</div>
           <div class="col-pill"><span class="dot"></span> Description</div>
         </div>
@@ -454,6 +446,7 @@
                   <th>Author</th>
                   <th>Category</th>
                   <th>Total Copies</th>
+                  <th>Price (₹)</th>
                   <th>Errors / Notes</th>
                 </tr>
               </thead>
@@ -485,7 +478,10 @@
                     {% endif %}
                   </td>
                   <td style="text-align:center;">
-                    {{ r.data.total_copies }} / {{r.data.available_copies}}
+                    {{ r.data.total_copies }}
+                  </td>
+                  <td style="text-align:right;">
+                    {% if r.data.price %}₹{{ r.data.price }}{% else %}<span style="color:#ef4444;font-size:.68rem;">Missing</span>{% endif %}
                   </td>
                   <td>
                     {% if r.errors %}

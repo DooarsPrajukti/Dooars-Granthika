@@ -9,8 +9,8 @@
         <th data-sort="isbn">ISBN <span class="sort-icon">▲</span></th>
         <th data-sort="category">Category <span class="sort-icon">▲</span></th>
         <th data-sort="total">Total Copies <span class="sort-icon">▲</span></th>
-        <th data-sort="available">Available <span class="sort-icon">▲</span></th>
         <th data-sort="status">Stock Status <span class="sort-icon">▲</span></th>
+        <th data-sort="price">Price (₹) <span class="sort-icon">▲</span></th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -38,7 +38,6 @@
         <td class="text-muted text-sm">{{ book.isbn }}</td>
         <td data-category="{{ book.category.slug }}">{{ book.category.name }}</td>
         <td>{{ book.total_copies }}</td>
-        <td><strong>{{ book.available_copies }}</strong></td>
         <td>
           {% if book.available_copies == 0 %}
             <span class="badge badge-out-stock">Out of Stock</span>
@@ -48,6 +47,7 @@
             <span class="badge badge-available">Available</span>
           {% endif %}
         </td>
+        <td class="text-sm">{% if book.price %}₹{{ book.price }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
         <td>
           <div class="action-btns">
             <a href="{% url 'books:book_detail' book.pk %}" class="action-btn action-btn-view" data-tooltip="View">

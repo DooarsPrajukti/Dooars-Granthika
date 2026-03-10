@@ -22,8 +22,8 @@ BUSINESS RULES
 2. RETURN BOOK
    ✔ Transaction must belong to this library (tenant check)
    ✔ Book must not already be returned
-   ✔ If return_date > due_date → overdue Fine created automatically
-   ✔ If book is damaged → damage Fine created automatically
+   ✔ If return_date > due_date → overdue Fine upserted automatically
+   ✔ If book is damaged → damage Fine upserted automatically
 
 3. RENEW BOOK
    ✔ Member must be active
@@ -45,6 +45,13 @@ A background daemon thread (fine_sync.py) runs
 Transaction.sync_overdue_for_library() every FINE_SYNC_INTERVAL seconds.
 Views call _sync_overdue_if_stale() which is a no-op when the background
 thread has already synced within STALE_THRESHOLD_SECONDS.
+
+Double-fine prevention
+──────────────────────
+fine_sync.py uses get_or_create keyed on (library, transaction, fine_type).
+return_book now uses the same get_or_create pattern so whichever path runs
+first wins and the second path only updates the existing unpaid row instead
+of inserting a duplicate.
 """
 
 from __future__ import annotations
@@ -327,6 +334,8 @@ def _sync_overdue_if_stale(library) -> None:
     if now - last >= STALE_THRESHOLD_SECONDS:
         Transaction.sync_overdue_for_library(library)
         _last_sync[library.pk] = now
+        # Bulk-settle overdue transactions whose fines are all paid
+        _sync_overdue_settled_for_library(library)
         # Rule: auto-mark severely overdue books as lost (if toggle ON)
         _auto_mark_lost_overdue_books(library)
         # Rule 6: block members who have overdue loans that are not returned
@@ -436,28 +445,129 @@ def _auto_block_overdue_members(library) -> None:
         pass
 
 
+def _sync_overdue_settled_for_library(library) -> None:
+    """
+    Bulk-flip overdue → overdue_settled for transactions where:
+      1. At least one Fine row exists (paid or waived), AND
+      2. No UNPAID Fine rows remain.
+
+    This prevents transactions with zero fines (fine not yet created)
+    from being incorrectly marked as settled.
+    """
+    today = date.today()
+
+    # Collect all transaction PKs that are currently OVERDUE for this library
+    overdue_pks = set(
+        Transaction.objects.for_library(library)
+        .filter(status=Transaction.STATUS_OVERDUE)
+        .values_list("pk", flat=True)
+    )
+    if not overdue_pks:
+        return
+
+    # Transactions that still have at least one UNPAID fine → must NOT settle
+    has_unpaid = set(
+        Fine.objects.for_library(library)
+        .filter(transaction_id__in=overdue_pks, status=Fine.STATUS_UNPAID)
+        .values_list("transaction_id", flat=True)
+        .distinct()
+    )
+
+    # Transactions that have at least one PAID or WAIVED fine → eligible
+    has_paid = set(
+        Fine.objects.for_library(library)
+        .filter(
+            transaction_id__in=overdue_pks,
+            status__in=(Fine.STATUS_PAID, Fine.STATUS_WAIVED),
+        )
+        .values_list("transaction_id", flat=True)
+        .distinct()
+    )
+
+    # Settle only if: has a paid/waived fine AND has no unpaid fine
+    settled_pks = has_paid - has_unpaid
+    if not settled_pks:
+        return
+
+    Transaction.objects.filter(pk__in=settled_pks).update(
+        status         = Transaction.STATUS_OVERDUE_SETTLED,
+        fine_paid      = True,
+        fine_paid_date = today,
+    )
+
+
 def _reset_overdue_after_fine_settled(txn, library) -> None:
     """
-    After a Fine is paid or waived: if the transaction is still OVERDUE
-    and no unpaid Fine rows remain, reset it to ISSUED and push due_date
-    to today so the computed overdue_days / fine_amount properties return 0.
-
-    This is the fix for "fine paid but renewal still blocked":
-    txn.fine_amount is a computed @property (overdue_days × rate) that
-    keeps accruing regardless of payment — only resetting the status and
-    due_date can stop it.
+    After a Fine is paid or waived: if the transaction is still OVERDUE,
+    has no remaining UNPAID fines, AND has at least one PAID/WAIVED fine,
+    flip it to OVERDUE_SETTLED immediately (instant feedback at payment time).
     """
     if txn.status != Transaction.STATUS_OVERDUE:
         return
     has_unpaid, _ = _has_unpaid_fine(txn, library)
     if has_unpaid:
         return
+    # Guard: only settle if at least one paid/waived fine exists
+    has_paid = Fine.objects.for_library(library).filter(
+        transaction=txn,
+        status__in=(Fine.STATUS_PAID, Fine.STATUS_WAIVED),
+    ).exists()
+    if not has_paid:
+        return
     today = date.today()
-    txn.status         = Transaction.STATUS_ISSUED
-    txn.due_date       = today
+    txn.status         = Transaction.STATUS_OVERDUE_SETTLED
     txn.fine_paid      = True
     txn.fine_paid_date = today
-    txn.save(update_fields=["status", "due_date", "fine_paid", "fine_paid_date", "updated_at"])
+    txn.save(update_fields=["status", "fine_paid", "fine_paid_date", "updated_at"])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helper: upsert a Fine row without creating duplicates
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _upsert_fine(
+    library,
+    txn,
+    fine_type: str,
+    amount: Decimal,
+    status: str,
+    paid_date=None,
+) -> Fine:
+    """
+    Create-or-update a Fine row keyed on (library, transaction, fine_type).
+
+    Rules:
+      • If no row exists → create it with the supplied values.
+      • If an UNPAID row exists → update amount / status / paid_date in-place.
+      • If a PAID or WAIVED row already exists → leave it untouched and return it.
+
+    This is the single canonical path used by both return_book (view) and
+    fine_sync (background thread) so neither can produce a duplicate row.
+    """
+    fine_obj, created = Fine.objects.get_or_create(
+        library     = library,
+        transaction = txn,
+        fine_type   = fine_type,
+        defaults={
+            "amount":    amount,
+            "status":    status,
+            "paid_date": paid_date,
+        },
+    )
+    if not created and fine_obj.status == Fine.STATUS_UNPAID:
+        changed = False
+        if fine_obj.amount != amount:
+            fine_obj.amount = amount
+            changed = True
+        if fine_obj.status != status:
+            fine_obj.status = status
+            changed = True
+        if fine_obj.paid_date != paid_date:
+            fine_obj.paid_date = paid_date
+            changed = True
+        if changed:
+            fine_obj.save(update_fields=["amount", "status", "paid_date", "updated_at"])
+    return fine_obj
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -807,12 +917,10 @@ def issue_book(request):
                 f'"{book.title}" issued to {member.first_name} {member.last_name}. '
                 f'Due: {due_date.strftime("%d %B %Y")}.',
             )
-            # import core.whatsapp_service
-            # core.whatsapp_service.send_book_issued_whatsapp(txn)
             # ── Email: book issued confirmation ────────────────────────────────
             if _member_emails_on(library) and getattr(member, "email", None):
                 _send_email("send_book_issued_email", member, txn)
-                
+
             return redirect("transactions:transaction_detail", pk=txn.pk)
 
         else:
@@ -859,9 +967,13 @@ def _has_unpaid_fine_for_member(member, library) -> tuple[bool, Decimal]:
 # RULES ENFORCED:
 #   ✔ Transaction must belong to this library
 #   ✔ Not already returned
-#   ✔ Late return  → Fine(TYPE_OVERDUE) created only if auto_fine is ON (Rule 7)
-#   ✔ Damaged      → Fine(TYPE_DAMAGE)  created only if auto_fine is ON (Rule 7)
+#   ✔ Late return  → Fine(TYPE_OVERDUE) upserted via _upsert_fine (Rule 7)
+#   ✔ Damaged      → Fine(TYPE_DAMAGE)  upserted via _upsert_fine (Rule 7)
 #   ✔ On successful return — unblock member if no remaining overdue loans (Rule 6)
+#
+# FIX: replaced Fine.objects.create() with _upsert_fine() so that if
+# fine_sync already created a row for this (library, transaction, fine_type)
+# the view updates it in-place instead of inserting a duplicate.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @login_required
@@ -893,6 +1005,12 @@ def return_book(request, pk):
             overdue_days = max(0, (return_date - txn.due_date).days - grace_period)
             fine_rate    = _get_fine_rate(library, txn)
             overdue_fine = Decimal(overdue_days) * fine_rate if overdue_days > 0 else Decimal("0.00")
+
+            fine_status = Fine.STATUS_PAID if fine_paid_now else Fine.STATUS_UNPAID
+            fine_date   = return_date if fine_paid_now else None
+
+            # ── Rule 7: only create fines if auto_fine is enabled ──────────────
+            apply_fines = _auto_fine_enabled(library)
 
             with db_transaction.atomic():
                 txn.return_date      = return_date
@@ -928,32 +1046,28 @@ def return_book(request, pk):
                     book.available_copies = min(book.total_copies, book.available_copies + 1)
                     book.save(update_fields=["available_copies"])
 
-                fine_status = Fine.STATUS_PAID if fine_paid_now else Fine.STATUS_UNPAID
-                fine_date   = return_date if fine_paid_now else None
-
-                # ── Rule 7: only create fines if auto_fine is enabled ──────────
-                apply_fines = _auto_fine_enabled(library)
-
-                # ── Rule 2/4: fine for late return ─────────────────────────────
+                # ── Rule 2/4: fine for late return (no-duplicate upsert) ───────
+                # Uses get_or_create keyed on (library, transaction, fine_type)
+                # matching fine_sync.py so whichever runs first wins.
                 if overdue_days > 0 and apply_fines:
-                    Fine.objects.create(
-                        library     = library,
-                        transaction = txn,
-                        fine_type   = Fine.TYPE_OVERDUE,
-                        amount      = overdue_fine,
-                        status      = fine_status,
-                        paid_date   = fine_date,
+                    _upsert_fine(
+                        library   = library,
+                        txn       = txn,
+                        fine_type = Fine.TYPE_OVERDUE,
+                        amount    = overdue_fine,
+                        status    = fine_status,
+                        paid_date = fine_date,
                     )
 
-                # ── Rule 4: fine for damaged book ──────────────────────────────
+                # ── Rule 4: fine for damaged book (no-duplicate upsert) ────────
                 if damage_charge > 0 and apply_fines:
-                    Fine.objects.create(
-                        library     = library,
-                        transaction = txn,
-                        fine_type   = Fine.TYPE_DAMAGE,
-                        amount      = damage_charge,
-                        status      = fine_status,
-                        paid_date   = fine_date,
+                    _upsert_fine(
+                        library   = library,
+                        txn       = txn,
+                        fine_type = Fine.TYPE_DAMAGE,
+                        amount    = damage_charge,
+                        status    = fine_status,
+                        paid_date = fine_date,
                     )
 
                 # ── Rule 6: unblock member if no remaining overdue loans ────────
@@ -968,12 +1082,12 @@ def return_book(request, pk):
 
             fine_msg = ""
             if overdue_days > 0 and not fine_paid_now:
-                if _auto_fine_enabled(library):
+                if apply_fines:
                     fine_msg = f" Overdue fine of ₹{overdue_fine} created."
                 else:
                     fine_msg = " (Auto-fine is OFF — no fine recorded.)"
             if damage_charge > 0 and not fine_paid_now:
-                if _auto_fine_enabled(library):
+                if apply_fines:
                     fine_msg += f" Damage charge of ₹{damage_charge} created."
 
             messages.success(
@@ -1053,7 +1167,7 @@ def renew_book(request, pk):
         return _error("Book renewals are currently disabled by the library administrator.")
 
     # ── Guard: only active loans ───────────────────────────────────────────────
-    if txn.status not in (Transaction.STATUS_ISSUED, Transaction.STATUS_OVERDUE):
+    if txn.status not in (Transaction.STATUS_ISSUED, Transaction.STATUS_OVERDUE, Transaction.STATUS_OVERDUE_SETTLED):
         return _error(
             f"Only issued or overdue loans can be renewed. "
             f"Current status: {txn.get_status_display()}."
@@ -1319,8 +1433,14 @@ def mark_fine_paid(request, pk=None):
                     method=cd["payment_method"],
                     ref=cd.get("payment_ref", ""),
                 )
-                # Reset overdue → issued if all fines now settled
-                _reset_overdue_after_fine_settled(fine.transaction, library)
+                # Re-fetch the transaction from DB so _reset sees fresh state
+                # (fine.transaction is a cached object; mark_paid() only updated
+                #  the Fine row — the Transaction object in memory is stale)
+                txn_fresh = Transaction.objects.select_related("member").get(
+                    pk=fine.transaction_id
+                )
+                # Flip overdue → overdue_settled if all fines now paid/waived
+                _reset_overdue_after_fine_settled(txn_fresh, library)
             messages.success(request, f"Fine of ₹{fine.amount} marked as paid.")
             # ── Email: fine payment receipt ────────────────────────────────────
             _member = fine.transaction.member if hasattr(fine.transaction, "member") else None
@@ -1580,7 +1700,7 @@ def member_search_api(request):
                 except Exception:
                     pass
         try:
-            return request.build_absolute_uri(reverse("members:member_photo", args=[member.pk]))
+            return request.build_absolute_uri(reverse("transactions:member_photo_image", args=[member.pk]))
         except Exception:
             return None
 
@@ -1653,6 +1773,68 @@ def book_search_api(request):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @login_required
+def member_suggestions_api(request):
+    """
+    Autocomplete endpoint — returns up to 10 members whose member_id,
+    first_name, or last_name contains the query string (case-insensitive).
+    Called on every keystroke in the Member ID field.
+    """
+    library = _get_library_or_404(request)
+    owner   = library.user
+
+    from members.models import Member
+
+    q = request.GET.get("q", "").strip()
+    if not q:
+        return JsonResponse({"results": []})
+
+    # Evaluate queryset into a list so we can reuse it without a second DB hit
+    members = list(
+        Member.objects.filter(owner=owner).filter(
+            Q(member_id__icontains=q)
+            | Q(first_name__icontains=q)
+            | Q(last_name__icontains=q)
+        ).order_by("member_id")[:10]
+    )
+
+    if not members:
+        return JsonResponse({"results": []})
+
+    # Bulk unpaid fine totals — keyed by member PK
+    member_pks = [m.pk for m in members]
+    fine_totals = {
+        row["transaction__member_id"]: row["total"]
+        for row in Fine.objects.for_library(library)
+        .filter(transaction__member_id__in=member_pks, status=Fine.STATUS_UNPAID)
+        .values("transaction__member_id")
+        .annotate(total=Sum("amount", output_field=_DF()))
+    }
+
+    def _suggestion_photo_url(member):
+        if getattr(member, "photo", None):
+            try:
+                return request.build_absolute_uri(
+                    reverse("transactions:member_photo_image", args=[member.pk])
+                )
+            except Exception:
+                pass
+        return None
+
+    results = [
+        {
+            "member_id": m.member_id,
+            "name":      f"{m.first_name} {m.last_name}".strip(),
+            "status":    m.status,
+            "total_due": str(fine_totals.get(m.pk, Decimal("0.00"))),
+            "photo_url": _suggestion_photo_url(m),
+        }
+        for m in members
+    ]
+
+    return JsonResponse({"results": results})
+
+
+@login_required
 def member_lookup_api(request):
     library = _get_library_or_404(request)
     owner   = library.user
@@ -1681,20 +1863,12 @@ def member_lookup_api(request):
     )
     slots = max(0, borrow_limit - active_loans) if borrow_limit else -1
 
+    # photo is a raw BLOB — use member_photo_image route only when data exists
     photo_url = None
-    for _f in ("photo", "profile_photo", "avatar", "profile_picture", "image", "profile_image"):
-        _v = getattr(member, _f, None)
-        if _v:
-            try:
-                if hasattr(_v, "name") and _v.name:
-                    photo_url = request.build_absolute_uri(_v.url)
-                    break
-            except Exception:
-                pass
-    if not photo_url:
+    if getattr(member, "photo", None):
         try:
             photo_url = request.build_absolute_uri(
-                reverse("members:member_photo", args=[member.pk])
+                reverse("transactions:member_photo_image", args=[member.pk])
             )
         except Exception:
             pass
@@ -1789,7 +1963,6 @@ def book_lookup_api(request):
         )
 
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 18. Book Cover Image  (serves BLOB by book PK)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1828,25 +2001,12 @@ def book_cover_image(request, pk):
 # ─────────────────────────────────────────────────────────────────────────────
 # 18a. Book Cover by Copy ID
 #      GET /transactions/api/book-cover/copy/<copy_id>/
-#
-#      Flow:
-#        1. Look up books_bookcopy WHERE copy_id = <copy_id> AND book__owner = user
-#        2. Follow FK  →  books_book
-#        3. Serve cover_image BLOB
-#
-#      Used by the issue-book page: user scans / types a Copy ID and the UI
-#      immediately previews the book cover without a separate book-lookup round-trip.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @login_required
 def book_cover_by_copy_id(request, copy_id):
     """
     Resolve a BookCopy.copy_id → Book → cover BLOB and serve it.
-
-    Lookup path (mirrors the DB schema):
-        dooars_granthika_db.books_bookcopy  (copy_id column)
-            └─ book_id FK →
-        dooars_granthika_db.books_book  (cover_image BLOB column)
     """
     from books.models import BookCopy
 
@@ -1871,5 +2031,37 @@ def book_cover_by_copy_id(request, copy_id):
         raise Http404("Cover image is empty.")
     mime        = (getattr(book, "cover_mime_type", None) or "image/jpeg").strip() or "image/jpeg"
     response    = HttpResponse(image_bytes, content_type=mime)
+    response["Cache-Control"] = "private, max-age=3600"
+    return response
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 19. Member Photo  (serves BLOB by member PK)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def member_photo_image(request, pk):
+    """
+    Serve the photo BLOB for a member identified by PK.
+    photo_mime_type column is used when present, falls back to image/jpeg.
+    Returns 404 when the member has no photo so the frontend initial-avatar
+    fallback renders instead of a broken <img>.
+    """
+    from members.models import Member
+
+    library = _get_library_or_404(request)
+    owner   = library.user
+
+    member = get_object_or_404(Member, pk=pk, owner=owner)
+
+    raw = getattr(member, "photo", None)
+    if not raw:
+        raise Http404("No photo.")
+
+    image_bytes = bytes(raw)
+    if not image_bytes:
+        raise Http404("Photo is empty.")
+
+    mime = (getattr(member, "photo_mime_type", None) or "image/jpeg").strip() or "image/jpeg"
+    response = HttpResponse(image_bytes, content_type=mime)
     response["Cache-Control"] = "private, max-age=3600"
     return response

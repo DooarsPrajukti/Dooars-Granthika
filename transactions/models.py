@@ -69,16 +69,18 @@ class Transaction(TenantModelMixin):
     issue time so historic records are unaffected by rule changes.
     """
 
-    STATUS_ISSUED   = "issued"
-    STATUS_RETURNED = "returned"
-    STATUS_OVERDUE  = "overdue"
-    STATUS_LOST     = "lost"
+    STATUS_ISSUED          = "issued"
+    STATUS_RETURNED        = "returned"
+    STATUS_OVERDUE         = "overdue"
+    STATUS_OVERDUE_SETTLED = "overdue_settled"
+    STATUS_LOST            = "lost"
 
     STATUS_CHOICES = [
-        (STATUS_ISSUED,   "Issued"),
-        (STATUS_RETURNED, "Returned"),
-        (STATUS_OVERDUE,  "Overdue"),
-        (STATUS_LOST,     "Lost"),
+        (STATUS_ISSUED,          "Issued"),
+        (STATUS_RETURNED,        "Returned"),
+        (STATUS_OVERDUE,         "Overdue"),
+        (STATUS_OVERDUE_SETTLED, "Overdue – Settled"),
+        (STATUS_LOST,            "Lost"),
     ]
 
     CONDITION_GOOD    = "good"
@@ -205,7 +207,7 @@ class Transaction(TenantModelMixin):
 
     @property
     def is_overdue(self) -> bool:
-        if self.status in (self.STATUS_RETURNED, self.STATUS_LOST):
+        if self.status in (self.STATUS_RETURNED, self.STATUS_LOST, self.STATUS_OVERDUE_SETTLED):
             return False
         return date.today() > self.due_date
 

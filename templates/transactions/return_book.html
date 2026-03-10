@@ -62,7 +62,7 @@
             <div class="overview-avatar">
               {% if transaction.member.photo_mime_type %}
               <img
-                src="{% url 'members:member_photo' transaction.member.pk %}"
+                src="{% url 'transactions:member_photo_image' transaction.member.pk %}"
                 alt="{{ transaction.member.first_name }}"
                 class="member-avatar__photo"
                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
@@ -88,7 +88,17 @@
           </div>
           <div class="overview-book">
             <div class="overview-book__cover">
+              {% if transaction.book.cover_image %}
+              <img
+                src="{% url 'transactions:book_cover_image' transaction.book.pk %}"
+                alt="{{ transaction.book.title }}"
+                style="width:100%;height:100%;object-fit:cover;border-radius:4px;"
+                onerror="this.style.display='none';this.nextElementSibling.style.display='block';"
+              >
+              <svg style="display:none" viewBox="0 0 32 38" fill="none"><rect x="2" y="2" width="28" height="34" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 11h18M7 16h18M7 21h12" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+              {% else %}
               <svg viewBox="0 0 32 38" fill="none"><rect x="2" y="2" width="28" height="34" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 11h18M7 16h18M7 21h12" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+              {% endif %}
             </div>
             <div>
               <h3 class="overview-name">{{ transaction.book.title }}</h3>

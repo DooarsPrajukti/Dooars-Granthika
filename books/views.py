@@ -220,8 +220,9 @@ def book_create(request):
                     edition          = edition,
                     shelf_location   = d.get("shelf_location", ""),
                     description      = d.get("description", ""),
+                    price            = d.get("price"),
                     total_copies     = total,
-                    available_copies = total,
+                    available_copies = total,  # always equals total on import
                 )
                 create_book_copies(book, lib_code, total)
             created += 1
@@ -240,9 +241,10 @@ def book_create(request):
             total    = form.cleaned_data.get("total_copies", 1)
 
             with transaction.atomic():
-                book          = form.save(commit=False)
-                book.owner    = request.user
-                book.category = form.cleaned_data["category"]
+                book                 = form.save(commit=False)
+                book.owner           = request.user
+                book.category        = form.cleaned_data["category"]
+                book.available_copies = total  # always equals total on create
                 img = form.cleaned_data.get("cover_image")
                 if img:
                     book.cover_image     = img["data"]

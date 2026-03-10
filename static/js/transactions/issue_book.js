@@ -474,43 +474,49 @@
       dropEl:    mDrop,
       searchUrl: window.MEMBER_SEARCH_URL,
 
-      // Only show suggestions where typed query matches the member_id column
-      filterItems(items, q) {
-        const qUp = q.trim().toUpperCase();
-        return items.filter(m =>
-          m.member_id && m.member_id.toUpperCase().includes(qUp)
-        );
-      },
+      // No client-side filterItems — member_suggestions_api already filters
+      // server-side by member_id / first_name / last_name icontains.
 
       buildItems(items, q) {
         return items.map(m => {
-          const initial = (m.name || '?')[0].toUpperCase();
-          const limit   = m.borrow_limit || 0;
-          const slots   = limit ? Math.max(0, limit - (m.active_loans || 0)) : null;
-          let cls   = 'suggest-item__badge suggest-item__badge--ok';
-          let label = slots === null ? '∞ slots' : slots === 0 ? 'Limit reached' : slots + ' slot' + (slots !== 1 ? 's' : '') + ' left';
-          if (slots === 0) cls = 'suggest-item__badge suggest-item__badge--full';
-          else if (slots === 1) cls = 'suggest-item__badge suggest-item__badge--warn';
+          const initial  = (m.name || '?')[0].toUpperCase();
+          const due      = parseFloat(m.total_due || '0');
+          const isActive = m.status === 'active';
 
-          // Avatar: photo if available, else coloured initial letter
+          // Status badge
+          let badgeCls   = 'suggest-item__badge suggest-item__badge--ok';
+          let badgeLabel = 'Active';
+          if (!isActive) {
+            badgeCls   = 'suggest-item__badge suggest-item__badge--full';
+            badgeLabel = m.status || 'Inactive';
+          } else if (due > 0) {
+            badgeCls   = 'suggest-item__badge suggest-item__badge--warn';
+            badgeLabel = '₹' + due.toFixed(0) + ' due';
+          }
+
+          // Avatar: use photo BLOB if available, fall back to initial
+          const initialSpan =
+            `<span style="display:flex;width:100%;height:100%;align-items:center;
+                          justify-content:center;border-radius:50%;
+                          background:linear-gradient(135deg,#6366f1,#8b5cf6);
+                          color:#fff;font-weight:700;font-size:0.85rem;">${initial}</span>`;
           const avatarInner = m.photo_url
             ? `<img src="${esc(m.photo_url)}" alt=""
-                    style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;"
+                    style="width:100%;height:100%;object-fit:cover;border-radius:50%;"
                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-               <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;
-                            border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);
+               <span style="display:none;width:100%;height:100%;align-items:center;
+                            justify-content:center;border-radius:50%;
+                            background:linear-gradient(135deg,#6366f1,#8b5cf6);
                             color:#fff;font-weight:700;font-size:0.85rem;">${initial}</span>`
-            : `<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;
-                            border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);
-                            color:#fff;font-weight:700;font-size:0.85rem;">${initial}</span>`;
+            : initialSpan;
 
           return `<div class="suggest-item" role="option" tabindex="-1">
             <div class="suggest-item__avatar" style="overflow:hidden;">${avatarInner}</div>
             <div class="suggest-item__body">
               <span class="suggest-item__name">${highlight(m.member_id, q)}</span>
-              <span class="suggest-item__meta">${esc(m.name)}${m.active_loans ? ` · ${m.active_loans} loan${m.active_loans !== 1 ? 's' : ''}` : ''}</span>
+              <span class="suggest-item__meta">${esc(m.name)}</span>
             </div>
-            <span class="${cls}">${label}</span>
+            <span class="${badgeCls}">${badgeLabel}</span>
           </div>`;
         }).join('');
       },
@@ -549,8 +555,16 @@
           const matchedCopy = (b.copy_ids || []).find(c => c.toUpperCase().includes(qUp)) || b.copy_ids?.[0] || b.book_id || '';
 
           return `<div class="suggest-item" role="option" tabindex="-1">
-            <div class="suggest-item__book-icon">
-              <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 7h6M7 10h6M7 13h4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+            <div class="suggest-item__book-icon" style="overflow:hidden;flex-shrink:0;">
+              ${b.cover_url
+                ? `<img src="${esc(b.cover_url)}" alt=""
+                        style="width:100%;height:100%;object-fit:cover;border-radius:4px;"
+                        onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                   <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;">
+                     <svg viewBox="0 0 20 20" fill="none"><rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 7h6M7 10h6M7 13h4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+                   </span>`
+                : `<svg viewBox="0 0 20 20" fill="none"><rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 7h6M7 10h6M7 13h4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>`
+              }
             </div>
             <div class="suggest-item__body">
               <span class="suggest-item__name">${highlight(matchedCopy, q)}</span>

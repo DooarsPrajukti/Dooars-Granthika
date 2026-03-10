@@ -190,7 +190,7 @@
                 <div class="member-avatar">
                   {% if fine.transaction.member.photo_mime_type %}
                   <img
-                    src="{% url 'members:member_photo' fine.transaction.member.pk %}"
+                    src="{% url 'transactions:member_photo_image' fine.transaction.member.pk %}"
                     alt="{{ fine.transaction.member.first_name }}"
                     class="member-avatar__photo"
                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"

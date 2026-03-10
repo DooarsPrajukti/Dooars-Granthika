@@ -32,7 +32,7 @@
       <p class="page-subtitle">Created on {{ transaction.created_at|date:"d F Y, H:i" }}</p>
     </div>
     <div class="page-header__actions">
-      {% if transaction.status == 'issued' or transaction.status == 'overdue' %}
+      {% if transaction.status == 'issued' or transaction.status == 'overdue' or transaction.status == 'overdue_settled' %}
       <a href="{% url 'transactions:return_book' transaction.id %}" class="btn btn--primary">
         <svg viewBox="0 0 20 20" fill="none"><path d="M4 10h10M10 6l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Process Return
@@ -78,7 +78,7 @@
           <div class="member-profile">
             <div class="member-profile__avatar" style="position:relative;overflow:hidden;">
               <img
-                src="{% url 'members:member_photo' transaction.member.pk %}"
+                src="{% url 'transactions:member_photo_image' transaction.member.pk %}"
                 alt="{{ transaction.member.first_name }}"
                 style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;"
                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"

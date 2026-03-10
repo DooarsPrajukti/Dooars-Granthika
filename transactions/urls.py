@@ -1,51 +1,37 @@
 """
 transactions/urls.py
 """
-
 from django.urls import path
 from . import views
 
 app_name = "transactions"
 
 urlpatterns = [
-    # ── Transaction list & detail ──────────────────────────────────────
-    path("",                        views.transaction_list,   name="transaction_list"),
-    path("<int:pk>/",               views.transaction_detail, name="transaction_detail"),
+    # ── Transaction CRUD ──────────────────────────────────────────────────────
+    path("",                          views.transaction_list,   name="transaction_list"),
+    path("issue/",                    views.issue_book,         name="issue_book"),
+    path("<int:pk>/",                 views.transaction_detail, name="transaction_detail"),
+    path("<int:pk>/return/",          views.return_book,        name="return_book"),
+    path("<int:pk>/renew/",           views.renew_book,         name="renew_book"),
 
-    # ── Issue / Return / Renew ─────────────────────────────────────────
-    path("issue/",                  views.issue_book,         name="issue_book"),
-    path("<int:pk>/return/",        views.return_book,        name="return_book"),
-    path("<int:pk>/renew/",         views.renew_book,         name="renew_book"),
+    # ── Overdue / Fine ────────────────────────────────────────────────────────
+    path("overdue/",                  views.overdue_list,       name="overdue_list"),
+    path("fines/",                    views.fine_list,          name="fine_list"),
+    path("fines/pay/",                views.mark_fine_paid,     name="mark_fine_paid"),
 
-    # ── Overdue ────────────────────────────────────────────────────────
-    path("overdue/",                views.overdue_list,       name="overdue_list"),
+    # ── Missing / Lost ────────────────────────────────────────────────────────
+    path("missing/",                  views.missing_books,      name="missing_books"),
+    path("missing/lost/",             views.mark_lost,          name="mark_lost"),
+    path("missing/<int:pk>/recover/", views.mark_recovered,     name="mark_recovered"),
+    path("missing/<int:pk>/penalty/", views.add_penalty,        name="add_penalty"),
 
-    # ── Fines ──────────────────────────────────────────────────────────
-    path("fines/",                  views.fine_list,          name="fine_list"),
-    # path("fines/pay/",              views.mark_fine_paid,     name="mark_fine_paid"),
-    # path("fines/<int:pk>/waive/",   views.waive_fine,         name="waive_fine"),
-
-    # ── Missing / Lost books ───────────────────────────────────────────
-    path("missing/",                views.missing_books,      name="missing_books"),
-    path("missing/mark-lost/",      views.mark_lost,          name="mark_lost"),
-    path("missing/<int:pk>/recover/", views.mark_recovered,   name="mark_recovered"),
-    path("missing/penalty/",        views.add_penalty,        name="add_penalty"),
-
-    # ── AJAX search APIs (used by issue-book autocomplete) ─────────────
-    path("api/members/",            views.member_search_api,  name="member_search_api"),
-    path("api/books/",              views.book_search_api,    name="book_search_api"),
-
-    # ── AJAX exact-ID lookup APIs (used by issue-book ID fields) ─────────
-    path("api/member-lookup/",      views.member_lookup_api,  name="member_lookup_api"),
-    path("api/book-lookup/",        views.book_lookup_api,    name="book_lookup_api"),
-
-    # ── Book cover image (BLOB served as HTTP response) ───────────────
-    path("api/book-cover/<int:pk>/", views.book_cover_image,  name="book_cover_image"),
-
-    # ── Book cover by Copy ID (books_bookcopy → books_book → BLOB) ────
+    # ── AJAX / API ────────────────────────────────────────────────────────────
+    path("api/member-lookup/",        views.member_lookup_api,      name="member_lookup_api"),
+    path("api/member-search/",        views.member_search_api,      name="member_search_api"),
+    path("api/member-suggestions/",   views.member_suggestions_api, name="member_suggestions_api"),  # ← autocomplete
+    path("api/book-lookup/",          views.book_lookup_api,        name="book_lookup_api"),
+    path("api/book-search/",          views.book_search_api,        name="book_search_api"),
+    path("api/book-cover/<int:pk>/",  views.book_cover_image,       name="book_cover_image"),
     path("api/book-cover/copy/<str:copy_id>/", views.book_cover_by_copy_id, name="book_cover_by_copy_id"),
-
-    # ── Book cover upload (POST — saves BLOB) ─────────────────────────
-    # path("api/book-cover/<int:pk>/upload/", views.book_cover_upload, name="book_cover_upload"),
-
+    path("api/member-photo/<int:pk>/", views.member_photo_image,    name="member_photo_image"),
 ]
