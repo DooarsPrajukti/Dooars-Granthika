@@ -51,21 +51,27 @@ def _fernet():
 def generate_receipt_number(library) -> str:
     """
     Generate a unique receipt number for the given library.
-    Format:  RCT-<LIBRARY_CODE>-<YYYYMMDD>-<4-char-hex>
-
-    The function loops until a number not already used in Payment is found.
+    Format:  RCT-DG-<LIB>-<XXXXXXXX>
+      LIB      -- first 3 characters of the library name, uppercased
+      XXXXXXXX -- 8 random digits
     """
     from django.utils.crypto import get_random_string
 
-    code = getattr(library, "library_code", "LIB")
-    today_str = date.today().strftime("%Y%m%d")
-    for _ in range(20):  # safety limit
-        suffix = get_random_string(4, "0123456789ABCDEF")
-        candidate = f"RCT-{code}-{today_str}-{suffix}"
+    lib_name = (
+        getattr(library, "library_name", None)
+        or getattr(library, "name", None)
+        or ""
+    ).strip()
+    lib_prefix = lib_name[:3].upper() if len(lib_name) >= 3 else lib_name.upper().ljust(3, "X")
+    lib_prefix = "".join(c for c in lib_prefix if c.isalnum()) or "LIB"
+
+    for _ in range(20):
+        digits    = get_random_string(8, "0123456789")
+        candidate = f"RCT-DG-{lib_prefix}-{digits}"
         if not Payment.objects.filter(receipt_number=candidate).exists():
             return candidate
     # Extremely unlikely fallback
-    return f"RCT-{code}-{today_str}-{uuid.uuid4().hex[:6].upper()}"
+    return f"RCT-DG-{lib_prefix}-{uuid.uuid4().int % 100_000_000:08d}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

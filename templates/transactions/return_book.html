@@ -3,6 +3,177 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/transactions/return_book.css' %}">
+<style>
+/* ── Damage / Lost notice banner ── */
+.copy-status-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: .8125rem;
+  line-height: 1.55;
+  margin-bottom: 14px;
+}
+.copy-status-notice--damaged {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+}
+.copy-status-notice--lost {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+.copy-status-notice svg { flex-shrink: 0; margin-top: 1px; }
+
+/* ── Locked copy-id input ── */
+.copy-id-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.copy-id-field label { font-size: .75rem; color: #6b7280; white-space: nowrap; }
+.copy-id-field input {
+  flex: 1;
+  font-family: monospace;
+  letter-spacing: .06em;
+  font-size: .8125rem;
+  background: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: not-allowed;
+}
+
+/* ── Price row ── */
+/* ── Price display (default — shows book price as a label) ── */
+.price-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.price-display__label {
+  font-size: .8125rem;
+  font-weight: 600;
+  color: #374151;
+}
+.price-display__amount {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -.01em;
+}
+.price-override-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: .75rem;
+  color: #6366f1;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.price-override-link:hover { color: #4f46e5; }
+
+/* ── Override row (shown only when price differs) ── */
+.price-override-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.price-override-row label {
+  font-size: .8125rem;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+.price-override-row input[type="number"] {
+  width: 130px;
+  font-size: .9375rem;
+  font-weight: 700;
+  color: #111827;
+  border: 2px solid #6366f1;
+  border-radius: 8px;
+  padding: 7px 12px;
+  transition: border-color .15s;
+}
+.price-override-row input[type="number"]:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+}
+.price-override-reset {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: .75rem;
+  color: #9ca3af;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.price-override-reset:hover { color: #6b7280; }
+
+/* ── Pay button states ── */
+.btn--pay {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(249,115,22,.35);
+  transition: background .2s, transform .1s, box-shadow .2s;
+}
+.btn--pay:hover {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+  box-shadow: 0 4px 14px rgba(249,115,22,.45);
+  transform: translateY(-1px);
+}
+.btn--pay--lost {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 2px 8px rgba(239,68,68,.35);
+}
+.btn--pay--lost:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: 0 4px 14px rgba(239,68,68,.45);
+}
+.btn--success {
+  transition: background .2s, transform .1s;
+}
+
+/* ── Payment amount badge on button ── */
+.btn-amount-badge {
+  display: inline-block;
+  background: rgba(255,255,255,.25);
+  border-radius: 20px;
+  padding: 1px 8px;
+  font-size: .8rem;
+  margin-left: 6px;
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+
+
+/* ── Lost condition option colour ── */
+.condition-option--lost input:checked ~ .condition-option__box {
+  border-color: #ef4444;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+/* ── Spin keyframe for processing state ── */
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.form-label-hint {
+  font-weight: 400;
+  font-size: .75rem;
+  color: #6b7280;
+  margin-left: 6px;
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -179,26 +350,94 @@
                   Damaged
                 </span>
               </label>
+              <label class="condition-option condition-option--lost">
+                <input type="radio" name="condition" value="lost">
+                <span class="condition-option__box">
+                  <svg viewBox="0 0 20 20" fill="none"><path d="M10 3L3 17h14L10 3z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M10 9v3M10 14v.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
+                  Lost
+                </span>
+              </label>
             </div>
           </div>
 
-          <div class="form-group" id="damageChargeGroup" hidden>
-            <label for="damageCharge" class="form-label">Damage Charge (₹)</label>
-            <input type="number" name="damage_charge" id="damageCharge" class="form-input" min="0" step="0.50" placeholder="0.00">
+          <!-- ── Damaged: copy ID lock + price field ── -->
+          <div id="damageChargeGroup" hidden>
+            <div class="copy-status-notice copy-status-notice--damaged">
+              <svg viewBox="0 0 16 16" fill="none" width="15" height="15">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <div>
+                This copy will be marked <strong>Damaged</strong> and removed from circulation.
+                You will be taken to the <strong>payment screen</strong> to collect the charge.
+                <div class="copy-id-field">
+                  <label>Copy ID</label>
+                  <input type="text" value="{{ transaction.book_copy.copy_id|default:'—' }}" readonly disabled>
+                </div>
+              </div>
+            </div>
+            <!-- Hidden field always submits the charge value -->
+            <input type="hidden" name="damage_charge" id="damageCharge"
+                   value="{{ transaction.book.price|default:'0' }}"
+                   data-book-price="{{ transaction.book.price|default:'0' }}">
+            <div class="price-display" id="damageChargeDisplay">
+              <span class="price-display__label">Charge</span>
+              <span class="price-display__amount" id="damageChargeAmountLabel">₹{{ transaction.book.price|default:'0'|floatformat:2 }}</span>
+              <button type="button" class="price-override-link" id="damageOverrideBtn">different price?</button>
+            </div>
+            <div class="price-override-row" id="damageOverrideRow" hidden>
+              <label for="damageChargeOverride">Adjusted charge (₹)</label>
+              <input type="number" id="damageChargeOverride" min="0" step="0.50"
+                     placeholder="{{ transaction.book.price|default:'0' }}">
+              <button type="button" class="price-override-reset" id="damageResetBtn">reset</button>
+            </div>
           </div>
 
-          <div class="form-group">
+          <!-- ── Lost: copy ID lock + price field ── -->
+          <div id="lostChargeGroup" hidden>
+            <div class="copy-status-notice copy-status-notice--lost">
+              <svg viewBox="0 0 16 16" fill="none" width="15" height="15">
+                <path d="M8 2L2 14h12L8 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M8 7v3M8 12v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <div>
+                This copy will be marked <strong>Lost</strong> and deducted from inventory.
+                You will be taken to the <strong>payment screen</strong> to collect the penalty.
+                <div class="copy-id-field">
+                  <label>Copy ID</label>
+                  <input type="text" value="{{ transaction.book_copy.copy_id|default:'—' }}" readonly disabled>
+                </div>
+              </div>
+            </div>
+            <!-- Hidden field always submits the charge value -->
+            <input type="hidden" name="damage_charge" id="lostCharge"
+                   value="{{ transaction.book.price|default:'0' }}"
+                   data-book-price="{{ transaction.book.price|default:'0' }}">
+            <div class="price-display" id="lostChargeDisplay">
+              <span class="price-display__label">Penalty</span>
+              <span class="price-display__amount" id="lostChargeAmountLabel">₹{{ transaction.book.price|default:'0'|floatformat:2 }}</span>
+              <button type="button" class="price-override-link" id="lostOverrideBtn">different price?</button>
+            </div>
+            <div class="price-override-row" id="lostOverrideRow" hidden>
+              <label for="lostChargeOverride">Adjusted penalty (₹)</label>
+              <input type="number" id="lostChargeOverride" min="0" step="0.50"
+                     placeholder="{{ transaction.book.price|default:'0' }}">
+              <button type="button" class="price-override-reset" id="lostResetBtn">reset</button>
+            </div>
+          </div>
+
+          <!-- Notes -->
+          <div class="form-group" style="margin-top:16px">
             <label for="returnNotes" class="form-label">Return Notes <span style="font-weight:400">(optional)</span></label>
             <textarea name="return_notes" id="returnNotes" class="form-textarea" rows="3" placeholder="Any observations about this return…"></textarea>
           </div>
 
-
           <!-- Submit -->
-          <div class="form-actions">
+          <div class="form-actions" style="margin-top:20px">
             <a href="{% url 'transactions:transaction_detail' transaction.id %}" class="btn btn--ghost">Cancel</a>
             <button type="submit" class="btn btn--success btn--lg" id="confirmReturnBtn">
-              <svg viewBox="0 0 20 20" fill="none"><path d="M3 10l5 5 9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Confirm Return
+              <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M3 10l5 5 9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span id="btnLabel">Confirm Return</span>
             </button>
           </div>
 

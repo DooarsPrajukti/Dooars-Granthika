@@ -85,6 +85,7 @@ class ReturnBookForm(forms.Form):
         ("good",    "Good"),
         ("fair",    "Fair"),
         ("damaged", "Damaged"),
+        ("lost",    "Lost"),
     ]
 
     transaction_id = forms.IntegerField(widget=forms.HiddenInput, required=False)
@@ -161,6 +162,18 @@ class MarkLostForm(forms.Form):
 
     transaction_id = forms.IntegerField(widget=forms.HiddenInput)
     reason         = forms.ChoiceField(choices=REASON_CHOICES, required=False)
+    book_price     = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=0,
+        required=False,
+        label="Replacement / Penalty Amount (₹)",
+        help_text="Pre-filled from book catalogue price. Adjust if needed.",
+    )
+    fine_paid_now  = forms.BooleanField(
+        required=False,
+        label="Mark penalty as collected now",
+    )
     notes          = forms.CharField(
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False,

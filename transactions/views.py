@@ -1000,6 +1000,11 @@ def return_book(request, pk):
             return_notes  = cd.get("return_notes", "")
             fine_paid_now = cd.get("fine_paid_now", False)
 
+            # For damaged/lost the form always sends fine_paid_now=1
+            # so payment is captured at the same moment as the return.
+            is_damaged = condition == Transaction.CONDITION_DAMAGED
+            is_lost    = condition == "lost"   # not a model constant but valid condition value
+
             # ── Rule: late return → compute overdue fine (with grace period) ──
             grace_period = _get_grace_period(library)
             overdue_days = max(0, (return_date - txn.due_date).days - grace_period)
@@ -1013,62 +1018,118 @@ def return_book(request, pk):
             apply_fines = _auto_fine_enabled(library)
 
             with db_transaction.atomic():
+                # ── Lost returned inline — treat as lost + return in one shot ──
+                if is_lost:
+                    txn.status    = Transaction.STATUS_LOST
+                    txn.lost_date = return_date
+                else:
+                    txn.status = Transaction.STATUS_RETURNED
+
                 txn.return_date      = return_date
                 txn.return_condition = condition
                 txn.damage_charge    = damage_charge
                 txn.return_notes     = return_notes
-                txn.status           = Transaction.STATUS_RETURNED
                 txn.returned_to      = request.user.get_full_name() or request.user.username
-
-                if fine_paid_now:
-                    txn.fine_paid      = True
-                    txn.fine_paid_date = return_date
-
+                # NOTE: fine_paid / fine_paid_date are set AFTER payment
+                # is collected on the finance:process_payment screen.
                 txn.save()
 
-                # Restore copy availability
-                book = txn.book
+                # ── Restore / update copy status based on condition ────────────
+                book       = txn.book
                 from books.models import BookCopy as _BookCopy
                 try:
                     copy_to_return = txn.book_copy or (
                         _BookCopy.objects
-                        .filter(book=book, status="issued")
+                        .filter(book=book, status__in=(_BookCopy.Status.BORROWED, "issued", "borrowed"))
                         .order_by("updated_at")
                         .first()
                     )
                     if copy_to_return:
-                        copy_to_return.status = "available"
-                        copy_to_return.save(update_fields=["status"])
+                        if is_damaged:
+                            copy_to_return.status      = _BookCopy.Status.DAMAGED
+                            copy_to_return.returned_at = return_date
+                        elif is_lost:
+                            copy_to_return.status = _BookCopy.Status.LOST
+                        else:
+                            copy_to_return.status      = _BookCopy.Status.AVAILABLE
+                            copy_to_return.returned_at = return_date
+                        copy_to_return.save(update_fields=["status", "returned_at", "updated_at"])
                 except Exception:
                     pass
 
                 if hasattr(book, "available_copies") and hasattr(book, "total_copies"):
-                    book.available_copies = min(book.total_copies, book.available_copies + 1)
-                    book.save(update_fields=["available_copies"])
+                    update_fields = ["total_copies", "available_copies"]
+                    if is_damaged or is_lost:
+                        # Copy leaves inventory permanently
+                        book.total_copies     = max(0, book.total_copies - 1)
+                        book.available_copies = min(book.available_copies, book.total_copies)
+                        # ── Sync book price if staff entered a different amount ──
+                        if damage_charge and damage_charge != (book.price or Decimal("0.00")):
+                            book.price = damage_charge
+                            update_fields.append("price")
+                    else:
+                        # Normal return — restore one slot
+                        book.available_copies = min(book.total_copies, book.available_copies + 1)
+                    book.save(update_fields=update_fields)
+                elif (is_damaged or is_lost) and damage_charge and hasattr(book, "price"):
+                    # Edge case: book model has no copy-count fields but does have price
+                    if damage_charge != (book.price or Decimal("0.00")):
+                        book.price = damage_charge
+                        book.save(update_fields=["price"])
 
-                # ── Rule 2/4: fine for late return (no-duplicate upsert) ───────
-                # Uses get_or_create keyed on (library, transaction, fine_type)
-                # matching fine_sync.py so whichever runs first wins.
+                # ── MissingBook record for lost copies ─────────────────────────
+                if is_lost:
+                    MissingBook.objects.update_or_create(
+                        transaction=txn,
+                        defaults={
+                            "library":        library,
+                            "book":           book,
+                            "status":         MissingBook.STATUS_LOST,
+                            "reported_date":  return_date,
+                            "notes":          return_notes,
+                            "penalty_amount": damage_charge,
+                            "penalty_reason": "lost",
+                            "penalty_paid":   False,
+                        },
+                    )
+
+                # ── Rule 2: fine for late return — always create as UNPAID ──────
+                # Even for damaged/lost, the overdue fine goes to process_payment
                 if overdue_days > 0 and apply_fines:
                     _upsert_fine(
                         library   = library,
                         txn       = txn,
                         fine_type = Fine.TYPE_OVERDUE,
                         amount    = overdue_fine,
-                        status    = fine_status,
-                        paid_date = fine_date,
+                        status    = Fine.STATUS_UNPAID,
+                        paid_date = None,
                     )
 
-                # ── Rule 4: fine for damaged book (no-duplicate upsert) ────────
-                if damage_charge > 0 and apply_fines:
-                    _upsert_fine(
+                # ── Rule 4: fine for damaged/lost — always create, even at 0 ──
+                # When book price is NULL the charge arrives as 0; we still
+                # create the Fine so staff can update the amount on the payment
+                # screen later.
+                charge_fine_obj = None
+                if (is_damaged or is_lost) and apply_fines:
+                    fine_type_for_charge = Fine.TYPE_LOST if is_lost else Fine.TYPE_DAMAGE
+                    charge_fine_obj = _upsert_fine(
                         library   = library,
                         txn       = txn,
-                        fine_type = Fine.TYPE_DAMAGE,
+                        fine_type = fine_type_for_charge,
                         amount    = damage_charge,
-                        status    = fine_status,
-                        paid_date = fine_date,
+                        status    = Fine.STATUS_UNPAID,
+                        paid_date = None,
                     )
+
+                # ── For normal (good/fair) return with fine_paid_now ───────────
+                if fine_paid_now and not (is_damaged or is_lost) and apply_fines:
+                    Fine.objects.for_library(library).filter(
+                        transaction=txn,
+                        status=Fine.STATUS_UNPAID,
+                    ).update(status=Fine.STATUS_PAID, paid_date=return_date)
+                    txn.fine_paid      = True
+                    txn.fine_paid_date = return_date
+                    txn.save(update_fields=["fine_paid", "fine_paid_date", "updated_at"])
 
                 # ── Rule 6: unblock member if no remaining overdue loans ────────
                 member = txn.member
@@ -1080,25 +1141,43 @@ def return_book(request, pk):
                         except Exception:
                             pass
 
+            # ── Redirect: damaged/lost → process_payment for collection ────────
+            if (is_damaged or is_lost) and apply_fines:
+                # Find the primary charge fine to pre-load on the payment screen
+                primary_fine = charge_fine_obj or (
+                    Fine.objects.for_library(library)
+                    .filter(transaction=txn, status=Fine.STATUS_UNPAID)
+                    .order_by("-created_at")
+                    .first()
+                )
+                if primary_fine:
+                    messages.info(
+                        request,
+                        f'"{txn.book.title}" {"marked Lost" if is_lost else "returned as Damaged"}. '
+                        f"Copy removed from inventory. Collect payment below.",
+                    )
+                    return redirect(
+                        reverse("finance:process_payment") + f"?fine_id={primary_fine.fine_id}"
+                    )
+
+            # ── Success message (normal return or no fines) ────────────────────
+            if is_lost:
+                action_msg = f'"{txn.book.title}" marked as Lost. Copy removed from inventory.'
+            elif is_damaged:
+                action_msg = f'"{txn.book.title}" returned — copy marked Damaged and removed from inventory.'
+            else:
+                action_msg = f'"{txn.book.title}" returned successfully.'
+
             fine_msg = ""
-            if overdue_days > 0 and not fine_paid_now:
-                if apply_fines:
-                    fine_msg = f" Overdue fine of ₹{overdue_fine} created."
-                else:
-                    fine_msg = " (Auto-fine is OFF — no fine recorded.)"
-            if damage_charge > 0 and not fine_paid_now:
-                if apply_fines:
-                    fine_msg += f" Damage charge of ₹{damage_charge} created."
+            if overdue_days > 0 and apply_fines and not (is_damaged or is_lost):
+                fine_msg += f" Overdue fine ₹{overdue_fine} {'collected' if fine_paid_now else 'recorded (unpaid)'}."
 
-            messages.success(
-                request,
-                f'"{txn.book.title}" returned successfully.' + fine_msg,
-            )
+            messages.success(request, action_msg + fine_msg)
 
-            # ── Email: book returned confirmation ──────────────────────────────
+            # ── Email ──────────────────────────────────────────────────────────
+            member = txn.member
             if _member_emails_on(library) and getattr(member, "email", None):
-                total_fine_for_email = overdue_fine + (damage_charge if damage_charge > 0 else Decimal("0.00"))
-                _send_email("send_book_returned_email", member, txn, total_fine_for_email)
+                _send_email("send_book_returned_email", member, txn, overdue_fine)
 
             return redirect("transactions:transaction_detail", pk=txn.pk)
 
@@ -1121,6 +1200,7 @@ def return_book(request, pk):
         "overdue_days":      overdue_days_preview,
         "fine_preview":      fine_preview,
         "fine_rate_per_day": fine_rate_preview,
+        "book_price":        txn.book.price,
     })
 
 
@@ -1529,40 +1609,81 @@ def mark_lost(request, pk=None):
         return redirect("transactions:missing_books")
 
     with db_transaction.atomic():
+        fine_paid_now  = form.cleaned_data.get("fine_paid_now", False)
+        penalty_amount = form.cleaned_data.get("book_price") or txn.fine_amount or Decimal("0.00")
+
         txn.status    = Transaction.STATUS_LOST
         txn.lost_date = date.today()
         txn.notes     = form.cleaned_data.get("notes", "")
-        txn.save(update_fields=["status", "lost_date", "notes", "updated_at"])
+        if fine_paid_now:
+            txn.fine_paid      = True
+            txn.fine_paid_date = date.today()
+        txn.save(update_fields=["status", "lost_date", "notes", "fine_paid", "fine_paid_date", "updated_at"])
 
         book = txn.book
         book.total_copies     = max(0, book.total_copies - 1)
         book.available_copies = min(book.available_copies, book.total_copies)
         book.save(update_fields=["total_copies", "available_copies"])
 
-        MissingBook.objects.update_or_create(
+        # Mark the physical copy as lost (blocks re-issue)
+        from books.models import BookCopy as _BookCopy
+        try:
+            copy_to_lose = txn.book_copy or (
+                _BookCopy.objects
+                .filter(book=book, status__in=(_BookCopy.Status.BORROWED, "borrowed", "issued"))
+                .order_by("updated_at")
+                .first()
+            )
+            if copy_to_lose:
+                copy_to_lose.status = _BookCopy.Status.LOST
+                copy_to_lose.save(update_fields=["status", "updated_at"])
+        except Exception:
+            pass
+
+        missing_obj, _ = MissingBook.objects.update_or_create(
             transaction=txn,
             defaults={
-                "library":       library,
-                "book":          book,
-                "status":        MissingBook.STATUS_LOST,
-                "reported_date": date.today(),
-                "notes":         form.cleaned_data.get("notes", ""),
+                "library":        library,
+                "book":           book,
+                "status":         MissingBook.STATUS_LOST,
+                "reported_date":  date.today(),
+                "notes":          form.cleaned_data.get("notes", ""),
+                "penalty_amount": penalty_amount,
+                "penalty_reason": form.cleaned_data.get("reason", "lost"),
+                "penalty_paid":   fine_paid_now,
             },
         )
 
         # ── Rule 4/7: fine for lost book (only if auto_fine enabled) ──────────
         if _auto_fine_enabled(library):
-            Fine.objects.get_or_create(
+            fine_obj, created = Fine.objects.get_or_create(
                 library     = library,
                 transaction = txn,
                 fine_type   = Fine.TYPE_LOST,
                 defaults    = {
-                    "amount": txn.fine_amount or Decimal("0.00"),
-                    "status": Fine.STATUS_UNPAID,
+                    "amount":    penalty_amount,
+                    "status":    Fine.STATUS_PAID if fine_paid_now else Fine.STATUS_UNPAID,
+                    "paid_date": date.today() if fine_paid_now else None,
                 },
             )
+            # If row already existed and we're paying now — update it
+            if not created and fine_paid_now and fine_obj.status == Fine.STATUS_UNPAID:
+                fine_obj.amount    = penalty_amount
+                fine_obj.status    = Fine.STATUS_PAID
+                fine_obj.paid_date = date.today()
+                fine_obj.save(update_fields=["amount", "status", "paid_date", "updated_at"])
 
-    messages.success(request, f'"{txn.book.title}" marked as lost.')
+            # Also sweep any other unpaid fines on this txn if paying now
+            if fine_paid_now:
+                Fine.objects.for_library(library).filter(
+                    transaction=txn,
+                    status=Fine.STATUS_UNPAID,
+                ).exclude(fine_type=Fine.TYPE_LOST).update(
+                    status=Fine.STATUS_PAID, paid_date=date.today()
+                )
+
+    paid_msg = f" Penalty of ₹{penalty_amount} collected." if fine_paid_now else f" Penalty of ₹{penalty_amount} recorded (unpaid)."
+    messages.success(request, f'"{txn.book.title}" marked as lost. Copy removed from inventory.' + paid_msg)
 
     # ── Email: book marked lost notification ───────────────────────────────────
     _member = txn.member if hasattr(txn, "member") else None

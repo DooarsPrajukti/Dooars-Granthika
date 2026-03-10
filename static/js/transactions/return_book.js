@@ -5,114 +5,183 @@
 (function () {
   'use strict';
 
-  const CIRCUMFERENCE = 213.63; // 2π × r34
+  const CIRCUMFERENCE = 213.63;
 
   /* ── DOM refs ── */
   const conditionOptions  = document.getElementById('conditionOptions');
   const damageChargeGroup = document.getElementById('damageChargeGroup');
-  const damageChargeInput = document.getElementById('damageCharge');
-  const totalFineDisplay  = document.getElementById('totalFineDisplay');
-  const damageFineRow     = document.getElementById('damageFineRow');
-  const damageFineDisplay = document.getElementById('damageFineDisplay');
-  const fineConfirmPanel  = document.getElementById('fineConfirmPanel');
-  const finePaidNow       = document.getElementById('finePaidNow');
+  const lostChargeGroup   = document.getElementById('lostChargeGroup');
   const returnForm        = document.getElementById('returnForm');
   const confirmBtn        = document.getElementById('confirmReturnBtn');
 
-  /* Baseline overdue fine — read once from the DOM so damage additions stack on top */
+  /* Hidden fields that actually submit */
+  const damageHidden = document.getElementById('damageCharge');
+  const lostHidden   = document.getElementById('lostCharge');
+
+  /* Display labels */
+  const damageAmountLabel = document.getElementById('damageChargeAmountLabel');
+  const lostAmountLabel   = document.getElementById('lostChargeAmountLabel');
+
+  /* Override rows */
+  const damageOverrideBtn = document.getElementById('damageOverrideBtn');
+  const damageOverrideRow = document.getElementById('damageOverrideRow');
+  const damageOverrideInp = document.getElementById('damageChargeOverride');
+  const damageResetBtn    = document.getElementById('damageResetBtn');
+
+  const lostOverrideBtn   = document.getElementById('lostOverrideBtn');
+  const lostOverrideRow   = document.getElementById('lostOverrideRow');
+  const lostOverrideInp   = document.getElementById('lostChargeOverride');
+  const lostResetBtn      = document.getElementById('lostResetBtn');
+
+  /* Baseline overdue fine from sidebar meter */
   const baseFine = parseFloat(
-    totalFineDisplay?.textContent?.replace('₹', '').trim() || '0'
+    document.querySelector('.fine-meter__amount')
+      ?.textContent?.replace('₹', '').trim() || '0'
   );
 
-  /* ── Condition selector ── */
-  if (conditionOptions) {
-    conditionOptions.addEventListener('change', function (e) {
-      if (e.target.type !== 'radio') return;
-      const isDamaged = e.target.value === 'damaged';
+  /* ── Helpers ── */
+  function bookPrice(hiddenEl) {
+    return parseFloat(hiddenEl?.dataset.bookPrice || '0') || 0;
+  }
 
-      if (damageChargeGroup) {
-        damageChargeGroup.hidden = !isDamaged;
-      }
+  function fmt(n) {
+    return '₹' + (parseFloat(n) || 0).toFixed(2);
+  }
 
-      if (!isDamaged && damageChargeInput) {
-        damageChargeInput.value = '';
-      }
+  /* ── Wire up override toggle for one pair ── */
+  function wireOverride(overrideBtn, overrideRow, overrideInp, resetBtn, hiddenEl, amountLabel) {
+    if (!overrideBtn) return;
 
-      recalcTotal();
+    /* "different price?" clicked — show input pre-filled with current hidden value */
+    overrideBtn.addEventListener('click', function () {
+      overrideInp.value = hiddenEl.value;
+      overrideRow.hidden = false;
+      overrideBtn.hidden = true;
+      overrideInp.focus();
+      overrideInp.select();
+    });
+
+    /* Typing in override input → update hidden field + label + button badge */
+    overrideInp.addEventListener('input', function () {
+      const val = Math.max(0, parseFloat(overrideInp.value) || 0);
+      hiddenEl.value = val.toFixed(2);
+      amountLabel.textContent = fmt(val);
+      const cond = document.querySelector('input[name="condition"]:checked')?.value || 'good';
+      renderButton(cond);
+      animateMeter(calcTotal(cond));
+    });
+
+    /* "reset" → revert to book price */
+    resetBtn.addEventListener('click', function () {
+      const bp = bookPrice(hiddenEl);
+      hiddenEl.value = bp.toFixed(2);
+      amountLabel.textContent = fmt(bp);
+      overrideRow.hidden = true;
+      overrideBtn.hidden = false;
+      overrideInp.value = '';
+      const cond = document.querySelector('input[name="condition"]:checked')?.value || 'good';
+      renderButton(cond);
+      animateMeter(calcTotal(cond));
     });
   }
 
-  /* ── Damage charge live recalc ── */
-  if (damageChargeInput) {
-    damageChargeInput.addEventListener('input', recalcTotal);
+  wireOverride(damageOverrideBtn, damageOverrideRow, damageOverrideInp, damageResetBtn, damageHidden, damageAmountLabel);
+  wireOverride(lostOverrideBtn,   lostOverrideRow,   lostOverrideInp,   lostResetBtn,   lostHidden,   lostAmountLabel);
+
+  /* ── calcTotal ── */
+  function calcTotal(condition) {
+    let charge = 0;
+    if (condition === 'damaged' && damageHidden)
+      charge = Math.max(0, parseFloat(damageHidden.value) || 0);
+    else if (condition === 'lost' && lostHidden)
+      charge = Math.max(0, parseFloat(lostHidden.value) || 0);
+    return baseFine + charge;
   }
 
-  function recalcTotal() {
-    const extra = Math.max(0, parseFloat(damageChargeInput?.value) || 0);
-    const total = baseFine + extra;
+  /* ── renderButton ── */
+  function renderButton(condition) {
+    if (!confirmBtn) return;
+    const charge = calcTotal(condition) - baseFine;
+    const badge  = charge > 0
+      ? `<span class="btn-amount-badge">₹${charge.toFixed(2)}</span>`
+      : '';
 
-    if (totalFineDisplay) {
-      totalFineDisplay.textContent = `₹${total.toFixed(2)}`;
-    }
+    if (condition === 'damaged') {
+      confirmBtn.className = 'btn btn--pay btn--lg';
+      confirmBtn.innerHTML = `
+        <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
+          <path d="M10 3a7 7 0 1 1 0 14A7 7 0 0 1 10 3z" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Pay &amp; Mark Damaged ${badge}
+        <svg viewBox="0 0 16 16" fill="none" width="13" height="13" style="margin-left:4px;opacity:.75">
+          <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`;
 
-    /* Show/hide damage row in fine breakdown */
-    if (damageFineRow) {
-      damageFineRow.style.display = extra > 0 ? '' : 'none';
-    }
-    if (damageFineDisplay) {
-      damageFineDisplay.textContent = `₹${extra.toFixed(2)}`;
-    }
+    } else if (condition === 'lost') {
+      confirmBtn.className = 'btn btn--pay btn--pay--lost btn--lg';
+      confirmBtn.innerHTML = `
+        <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
+          <path d="M10 3L3 17h14L10 3z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/>
+          <path d="M10 9v4M10 15v.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+        Pay &amp; Mark Lost ${badge}
+        <svg viewBox="0 0 16 16" fill="none" width="13" height="13" style="margin-left:4px;opacity:.75">
+          <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`;
 
-    /* Update sidebar meter to reflect new total */
-    animateMeter(total);
+    } else {
+      confirmBtn.className = 'btn btn--success btn--lg';
+      confirmBtn.innerHTML = `
+        <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
+          <path d="M3 10l5 5 9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Confirm Return`;
+    }
   }
 
-  /* ── Fine meter ring animation ── */
-  function animateMeter(overrideAmount) {
-    const ring = document.querySelector('.fine-meter__ring');
+  /* ── updateUI ── */
+  function updateUI() {
+    const condition = document.querySelector('input[name="condition"]:checked')?.value || 'good';
+    if (damageChargeGroup) damageChargeGroup.hidden = condition !== 'damaged';
+    if (lostChargeGroup)   lostChargeGroup.hidden   = condition !== 'lost';
+    renderButton(condition);
+    animateMeter(calcTotal(condition));
+  }
+
+  if (conditionOptions) {
+    conditionOptions.addEventListener('change', function (e) {
+      if (e.target.type === 'radio') updateUI();
+    });
+  }
+
+  /* ── Fine meter ── */
+  function animateMeter(amount) {
     const fill = document.querySelector('.fine-meter__fill');
-    if (!ring || !fill) return;
-
-    /* Max represented amount for 100% fill — same as Python view: ₹500 */
-    const MAX_FINE = 500;
-    const amount = overrideAmount !== undefined
-      ? overrideAmount
-      : parseFloat(ring.dataset.pct || '0') * MAX_FINE / 100;
-
-    const pct    = Math.min(100, (amount / MAX_FINE) * 100);
+    if (!fill) return;
+    const pct    = Math.min(100, ((amount || 0) / 500) * 100);
     const offset = CIRCUMFERENCE - (pct / 100) * CIRCUMFERENCE;
-
-    fill.style.transition     = 'stroke-dashoffset 0.6s ease';
-    fill.style.strokeDashoffset = offset; // SVG attribute — no 'px' unit
+    fill.style.transition       = 'stroke-dashoffset 0.55s ease';
+    fill.style.strokeDashoffset = offset;
   }
 
-  /* Trigger initial animation after a short delay so CSS transition fires */
-  setTimeout(() => animateMeter(), 200);
+  setTimeout(() => animateMeter(baseFine), 200);
 
-  /* ── Form submit guard ── */
+  /* ── Submit guard ── */
   if (returnForm) {
-    returnForm.addEventListener('submit', function (e) {
-      const hasFine = fineConfirmPanel !== null;
-
-      if (hasFine && !finePaidNow?.checked) {
-        const proceed = confirm(
-          'The fine has not been marked as collected. Continue without collecting the fine?'
-        );
-        if (!proceed) {
-          e.preventDefault();
-          return;
-        }
-      }
-
+    returnForm.addEventListener('submit', function () {
       if (confirmBtn) {
-        confirmBtn.disabled = true;
-        confirmBtn.innerHTML = `
-          <svg viewBox="0 0 20 20" fill="none"
-               style="width:15px;height:15px;animation:spin .7s linear infinite;vertical-align:middle">
+        confirmBtn.disabled      = true;
+        confirmBtn.style.opacity = '0.72';
+        confirmBtn.innerHTML     = `
+          <svg viewBox="0 0 20 20" fill="none" width="15" height="15"
+               style="animation:spin .7s linear infinite;vertical-align:middle">
             <path d="M10 2a8 8 0 1 1-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg> Processing…`;
       }
     });
   }
+
+  updateUI();
 
 })();
