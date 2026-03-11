@@ -37,11 +37,6 @@
           <span class="nav-icon"><i class="fas fa-chart-bar"></i></span> Dashboard
         </a>
       </li>
-      {% comment %} <li>
-        <a class="nav-item {% block nav_staff %}{% endblock %}" href="{% url 'staff:staff_list' %}">
-          <span class="nav-icon"><i class="fas fa-user-tie"></i></span> Staff
-        </a>
-      </li> {% endcomment %}
       <li>
         <a class="nav-item {% block nav_books %}{% endblock %}"
            href="{% url 'books:book_list' %}">
@@ -69,6 +64,14 @@
         </a>
       </li>
       <li>
+        <a class="nav-item {% block nav_notifications %}{% endblock %}" href="{% url 'notifications:board' %}">
+          <span class="nav-icon"><i class="fas fa-bell"></i></span> Notifications
+          {% if unread_notification_count %}
+            <span class="nav-badge">{{ unread_notification_count }}</span>
+          {% endif %}
+        </a>
+      </li>
+      <li>
         <a class="nav-item {% block nav_settings %}{% endblock %}"
            href="{% url 'accounts:settings' %}">
           <span class="nav-icon"><i class="fas fa-cog"></i></span> Settings
@@ -88,11 +91,46 @@
   ════════════════════════════════════════════ -->
   <main class="main-content">
 
-    {% comment %} {# ── Top bar block — empty by default (hidden on all pages).
-         Pages that need it override this block with the topbar HTML. ── #} {% endcomment %}
-    {% block topbar %}{% endblock %}
+    <!-- ═══════════════════════════════════════════
+         DEFAULT TOPBAR  (overridable per page)
+    ════════════════════════════════════════════ -->
+    {% block topbar %}
+    <header class="top-bar">
+      <div class="top-bar__left">
+        <button class="top-bar__sidebar-toggle" id="sidebarToggle" title="Toggle sidebar" aria-label="Toggle sidebar">
+          <i class="fas fa-bars"></i>
+        </button>
+        <div class="top-bar__breadcrumb">
+          <span>{% block page_heading %}Dashboard{% endblock %}</span>
+        </div>
+      </div>
 
-    <!-- Django messages (success / error / warning toasts) -->
+      <div class="top-bar__actions">
+
+        <!-- 🔔 Bell — triggers notification modal -->
+        <button class="top-bar__icon-btn notif-modal-toggle" id="notifModalToggle"
+                title="Notifications" aria-label="Open notifications"
+                aria-haspopup="dialog" aria-expanded="false">
+          <i class="fas fa-bell"></i>
+          <span class="top-bar__badge notif-modal-badge" id="topbarBadge" style="display:none">0</span>
+        </button>
+
+        <!-- User info -->
+        <div class="top-bar__user">
+          <div class="top-bar__avatar">
+            {{ user.get_full_name|default:user.username|slice:":1"|upper }}
+          </div>
+          <div class="top-bar__user-info">
+            <span class="top-bar__user-name">{{ user.get_full_name|default:user.username }}</span>
+            {% if user.profile.role %}<span class="top-bar__user-role">{{ user.profile.role }}</span>{% endif %}
+          </div>
+        </div>
+
+      </div>
+    </header>
+    {% endblock %}
+
+    <!-- Django messages -->
     {% if messages %}
     <div class="messages-container">
       {% for message in messages %}
@@ -114,6 +152,121 @@
 
   </main>
 </div><!-- /.dashboard-wrapper -->
+
+
+<!-- ═══════════════════════════════════════════
+     NOTIFICATION MODAL
+     Dropdown dialog anchored to the topbar bell.
+     Toggled by .notif-modal-toggle / #notifModalToggle
+════════════════════════════════════════════ -->
+<div class="notif-modal-backdrop" id="notifModalBackdrop" aria-hidden="true"></div>
+
+<div class="notif-modal" id="notifModal" role="dialog"
+     aria-modal="true" aria-label="Notifications" aria-hidden="true">
+
+  <!-- Arrow pointer -->
+  <div class="notif-modal__arrow"></div>
+
+  <!-- Header -->
+  <div class="notif-modal__header">
+    <div class="notif-modal__title">
+      <i class="fas fa-bell"></i>
+      <span>Notifications</span>
+      <span class="notif-modal__badge notif-modal-badge" id="notifModalBadge" style="display:none">0</span>
+    </div>
+    <div class="notif-modal__controls">
+      <button class="notif-modal__btn" id="notifModalMarkAll" title="Mark all as read">
+        <i class="fas fa-check-double"></i>
+      </button>
+      <button class="notif-modal__btn notif-modal__btn--close" id="notifModalClose" title="Close">
+        <i class="fas fa-xmark"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Quick filter tabs -->
+  <div class="notif-modal__tabs" role="tablist">
+    <button class="notif-modal__tab is-active" data-modal-tab="all"     role="tab" aria-selected="true">All</button>
+    <button class="notif-modal__tab"            data-modal-tab="unread" role="tab" aria-selected="false">Unread</button>
+    <button class="notif-modal__tab"            data-modal-tab="overdue" role="tab" aria-selected="false">Overdue</button>
+  </div>
+
+  <!-- Scrollable list -->
+  <div class="notif-modal__body" id="notifModalBody">
+    <div class="notif-modal__empty">
+      <i class="fas fa-bell-slash"></i>
+      <p>You're all caught up!</p>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="notif-modal__footer">
+    <a href="{% url 'notifications:board' %}" class="notif-modal__view-all">
+      View all <i class="fas fa-arrow-right"></i>
+    </a>
+  </div>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════
+     NOTIFICATION SLIDE-IN PANEL
+     Toggled by any element with class .notif-toggle
+════════════════════════════════════════════ -->
+<div class="notif-overlay" id="notifOverlay" aria-hidden="true"></div>
+
+<aside class="notif-panel" id="notifPanel" aria-hidden="true" aria-label="Notifications">
+
+  <!-- Panel Header -->
+  <div class="notif-panel__header">
+    <div class="notif-panel__title">
+      <i class="fas fa-bell"></i>
+      <span>Notifications</span>
+      <span class="notif-badge" id="notifUnreadCount" style="display:none">0</span>
+    </div>
+    <div class="notif-panel__controls">
+      <button class="notif-panel__btn" id="notifRefresh" title="Refresh">
+        <i class="fas fa-rotate"></i>
+      </button>
+      <button class="notif-panel__btn" id="notifMarkAllRead" title="Mark all as read">
+        <i class="fas fa-check-double"></i>
+      </button>
+      <button class="notif-panel__btn notif-panel__btn--close" id="notifClose" title="Close">
+        <i class="fas fa-xmark"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="notif-panel__tabs" role="tablist">
+    <button class="notif-panel__tab is-active" data-tab="all"     role="tab" aria-selected="true">All</button>
+    <button class="notif-panel__tab"            data-tab="unread" role="tab" aria-selected="false">Unread</button>
+    <button class="notif-panel__tab"            data-tab="overdue" role="tab" aria-selected="false">Overdue</button>
+    <button class="notif-panel__tab"            data-tab="system"  role="tab" aria-selected="false">System</button>
+  </div>
+
+  <!-- Scrollable list -->
+  <div class="notif-panel__body" id="notifBody">
+    <!-- Populated by notifications.js -->
+    <div class="notif-empty">
+      <div class="notif-empty__icon"><i class="fas fa-bell-slash"></i></div>
+      <p class="notif-empty__text">Nothing here</p>
+      <p class="notif-empty__sub">You're all caught up!</p>
+    </div>
+  </div>
+
+  <!-- Panel Footer -->
+  <div class="notif-panel__footer">
+    <a href="{% url 'notifications:board' %}" class="notif-panel__view-all">
+      View all notifications <i class="fas fa-arrow-right"></i>
+    </a>
+  </div>
+
+</aside>
+
+<!-- Toast container (injected by JS if not present) -->
+<div class="nb-toast-container"></div>
+
 
 <!-- ═══════════════════════════════════════════
      SCRIPTS

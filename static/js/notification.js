@@ -18,6 +18,10 @@ const NotifUtils = (() => {
     error:   'fa-circle-xmark',
     system:  'fa-gear',
     overdue: 'fa-clock',
+    book:    'fa-book',
+    return:  'fa-rotate-left',
+    member:  'fa-user',
+    fine:    'fa-coins',
   };
 
   function timeAgo(dateStr) {
@@ -73,9 +77,10 @@ const NotifStore = (() => {
 
   function emit() { _listeners.forEach(fn => fn(_list)); }
 
-  async function fetch() {
+  async function fetchAll() {
     try {
-      _list = await NotifUtils.api('/api/notifications/');
+      const data = await NotifUtils.api('/api/notifications/');
+      _list = Array.isArray(data) ? data : (data.results || []);
     } catch (e) {
       console.warn('[NotifStore] fetch failed', e);
     }
@@ -113,19 +118,13 @@ const NotifStore = (() => {
     catch (e) { console.warn(e); }
   }
 
-  /** Returns items newer than last fetch that we haven't seen */
-  function getNew(list) {
-    return list.filter(n => !_seenIds.has(n.id));
-  }
-
+  function getNew(list) { return list.filter(n => !_seenIds.has(n.id)); }
   function markSeen(list) { list.forEach(n => _seenIds.add(n.id)); }
-
   function subscribe(fn) { _listeners.push(fn); }
-
   function getAll()    { return _list; }
   function getUnread() { return _list.filter(n => !n.read).length; }
 
-  return { fetch, markRead, markAllRead, remove, clearAll, subscribe, getAll, getUnread, getNew, markSeen };
+  return { fetch: fetchAll, markRead, markAllRead, remove, clearAll, subscribe, getAll, getUnread, getNew, markSeen };
 })();
 
 
@@ -134,7 +133,7 @@ const NotifStore = (() => {
 ═══════════════════════════════════════════════════════════ */
 const BadgeManager = (() => {
   function update(count) {
-    document.querySelectorAll('.notif-badge, #topbarBadge, #notifUnreadCount').forEach(el => {
+    document.querySelectorAll('.notif-badge, #topbarBadge, #notifUnreadCount, .notification-badge, .notif-modal-badge').forEach(el => {
       el.textContent = count > 99 ? '99+' : count;
       el.style.display = count === 0 ? 'none' : 'inline-flex';
     });
@@ -153,12 +152,12 @@ const NotifPanel = (() => {
   const btnClose   = document.getElementById('notifClose');
   const btnMarkAll = document.getElementById('notifMarkAllRead');
   const btnRefresh = document.getElementById('notifRefresh');
-  const tabs       = document.querySelectorAll('.notif-tab');
+  const tabs       = document.querySelectorAll('[data-tab]');
 
   let isOpen    = false;
   let activeTab = 'all';
 
-  if (!panel) return { init() {} };  // guard if panel not in DOM
+  if (!panel) return { init() {}, open() {}, close() {}, toggle() {} };
 
   function filterList(list) {
     if (activeTab === 'all')    return list;
@@ -261,7 +260,7 @@ const NotifPanel = (() => {
    TOAST POPUP  (works on every page)
 ═══════════════════════════════════════════════════════════ */
 const NotifToast = (() => {
-  const DURATION = 5000;  // ms before auto-dismiss
+  const DURATION = 5000;
 
   let container = document.querySelector('.nb-toast-container');
   if (!container) {
@@ -277,6 +276,10 @@ const NotifToast = (() => {
     error:   'fa-circle-xmark',
     system:  'fa-gear',
     overdue: 'fa-clock',
+    book:    'fa-book',
+    return:  'fa-rotate-left',
+    member:  'fa-user',
+    fine:    'fa-coins',
   };
 
   async function show(n, duration = DURATION) {
@@ -284,7 +287,6 @@ const NotifToast = (() => {
     const toast = document.createElement('div');
     toast.className = `nb-toast nb-toast--${type}`;
     toast.innerHTML = `
-      <div class="nb-toast__bar"></div>
       <div class="nb-toast__icon"><i class="fas ${TYPE_ICON[type] || 'fa-circle-info'}"></i></div>
       <div class="nb-toast__body">
         <p class="nb-toast__title">${n.title}</p>
@@ -295,9 +297,13 @@ const NotifToast = (() => {
 
     container.appendChild(toast);
 
+    // Trigger enter animation
+    requestAnimationFrame(() => toast.classList.add('is-visible'));
+
     const dismiss = async () => {
+      toast.classList.remove('is-visible');
       toast.classList.add('is-leaving');
-      await NotifUtils.sleep(240);
+      await NotifUtils.sleep(280);
       toast.remove();
     };
 
@@ -313,7 +319,7 @@ const NotifToast = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════
-   FULL BOARD  (only activates on notification_board page)
+   FULL BOARD  (only activates on notification board page)
 ═══════════════════════════════════════════════════════════ */
 const NotifBoard = (() => {
   const PAGE_SIZE = 15;
@@ -325,19 +331,18 @@ const NotifBoard = (() => {
   function init() {
     if (!window.NOTIF_BOARD) return;
 
-    const list       = document.getElementById('nbList');
-    const empty      = document.getElementById('nbEmpty');
-    const search     = document.getElementById('nbSearch');
-    const filters    = document.querySelectorAll('.nb-filter');
-    const btnMark    = document.getElementById('nbMarkAllRead');
-    const btnClear   = document.getElementById('nbClearAll');
-    const btnPrev    = document.getElementById('nbPrevPage');
-    const btnNext    = document.getElementById('nbNextPage');
-    const pageInfo   = document.getElementById('nbPageInfo');
+    const listEl    = document.getElementById('nbList');
+    const emptyEl   = document.getElementById('nbEmpty');
+    const searchEl  = document.getElementById('nbSearch');
+    const filters   = document.querySelectorAll('.nb-filter');
+    const btnMark   = document.getElementById('nbMarkAllRead');
+    const btnClear  = document.getElementById('nbClearAll');
+    const btnPrev   = document.getElementById('nbPrevPage');
+    const btnNext   = document.getElementById('nbNextPage');
+    const pageInfo  = document.getElementById('nbPageInfo');
 
-    if (!list) return;
+    if (!listEl) return;
 
-    // ── Filter + Search + Paginate ──
     function getFiltered() {
       let data = fullList;
       if (activeFilter === 'unread') data = data.filter(n => !n.read);
@@ -353,33 +358,33 @@ const NotifBoard = (() => {
     }
 
     function updateStats(data) {
-      document.getElementById('statTotal').textContent   = data.length;
-      document.getElementById('statUnread').textContent  = data.filter(n => !n.read).length;
-      document.getElementById('statOverdue').textContent = data.filter(n => n.type === 'overdue').length;
-      document.getElementById('statSystem').textContent  = data.filter(n => n.type === 'system').length;
+      const safe = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+      safe('statTotal',   data.length);
+      safe('statUnread',  data.filter(n => !n.read).length);
+      safe('statOverdue', data.filter(n => n.type === 'overdue').length);
+      safe('statSystem',  data.filter(n => n.type === 'system').length);
     }
 
     function renderBoard(data) {
-      const filtered  = getFiltered();
+      const filtered   = getFiltered();
       const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
       if (currentPage > totalPages) currentPage = totalPages;
 
       const start = (currentPage - 1) * PAGE_SIZE;
       const page  = filtered.slice(start, start + PAGE_SIZE);
 
-      list.innerHTML = '';
+      listEl.innerHTML = '';
       updateStats(data);
 
       if (!page.length) {
-        list.appendChild(empty);
-        empty.style.display = 'flex';
-        btnPrev.disabled = true;
-        btnNext.disabled = true;
-        pageInfo.textContent = 'Page 0 of 0';
+        if (emptyEl) { listEl.appendChild(emptyEl); emptyEl.style.display = 'flex'; }
+        if (btnPrev) btnPrev.disabled = true;
+        if (btnNext) btnNext.disabled = true;
+        if (pageInfo) pageInfo.textContent = 'Page 0 of 0';
         return;
       }
 
-      empty.style.display = 'none';
+      if (emptyEl) emptyEl.style.display = 'none';
       const frag = document.createDocumentFragment();
 
       page.forEach(n => {
@@ -404,31 +409,24 @@ const NotifBoard = (() => {
             <button class="nb-item__btn nb-item__btn--delete" title="Delete" data-id="${n.id}"><i class="fas fa-trash-can"></i></button>
           </div>`;
 
-        // mark read
         item.querySelector('.nb-item__btn--read')?.addEventListener('click', () => NotifStore.markRead(n.id));
-
-        // delete
         item.querySelector('.nb-item__btn--delete').addEventListener('click', async () => {
           item.classList.add('is-removing');
           await NotifUtils.sleep(260);
           NotifStore.remove(n.id);
         });
-
-        // click row = mark read
         item.querySelector('.nb-item__body').addEventListener('click', () => NotifStore.markRead(n.id));
-
         frag.appendChild(item);
       });
 
-      list.appendChild(frag);
+      listEl.appendChild(frag);
 
-      pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
-      btnPrev.disabled = currentPage <= 1;
-      btnNext.disabled = currentPage >= totalPages;
+      if (pageInfo) pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+      if (btnPrev) btnPrev.disabled = currentPage <= 1;
+      if (btnNext) btnNext.disabled = currentPage >= totalPages;
     }
 
-    // ── Events ──
-    search?.addEventListener('input', e => {
+    searchEl?.addEventListener('input', e => {
       searchQuery = e.target.value.trim();
       currentPage = 1;
       renderBoard(fullList);
@@ -449,11 +447,7 @@ const NotifBoard = (() => {
     btnPrev?.addEventListener('click', () => { currentPage--; renderBoard(fullList); });
     btnNext?.addEventListener('click', () => { currentPage++; renderBoard(fullList); });
 
-    // ── Subscribe to store ──
-    NotifStore.subscribe(list => {
-      fullList = list;
-      renderBoard(fullList);
-    });
+    NotifStore.subscribe(list => { fullList = list; renderBoard(fullList); });
   }
 
   return { init };
@@ -461,22 +455,18 @@ const NotifBoard = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════
-   POLLER  (checks for new notifications every 30 s, shows toasts)
+   POLLER  (checks for new notifications every 30s, shows toasts)
 ═══════════════════════════════════════════════════════════ */
 const NotifPoller = (() => {
   async function poll() {
-    const fresh = await NotifStore.fetch();
+    const fresh    = await NotifStore.fetch();
     const newItems = NotifStore.getNew(fresh);
-
-    // Show toast for each new notification (max 3 at once to avoid spam)
     newItems.slice(0, 3).forEach(n => NotifToast.show(n));
     NotifStore.markSeen(fresh);
   }
 
   function init() {
-    // On first load: seed seen IDs without toasting
     NotifStore.fetch().then(list => NotifStore.markSeen(list));
-    // Then poll every 30 s
     setInterval(poll, 30_000);
   }
 
@@ -485,8 +475,158 @@ const NotifPoller = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════
-   AUTO-DISMISS DJANGO TOASTS
+   NOTIFICATION MODAL  (topbar bell dropdown)
 ═══════════════════════════════════════════════════════════ */
+const NotifModal = (() => {
+  const modal    = document.getElementById('notifModal');
+  const backdrop = document.getElementById('notifModalBackdrop');
+  const body     = document.getElementById('notifModalBody');
+  const btnClose = document.getElementById('notifModalClose');
+  const btnMark  = document.getElementById('notifModalMarkAll');
+  const tabs     = document.querySelectorAll('[data-modal-tab]');
+  const toggles  = document.querySelectorAll('.notif-modal-toggle');
+
+  let isOpen    = false;
+  let activeTab = 'all';
+
+  // Max items shown in the modal (keeps it concise)
+  const MAX_ITEMS = 8;
+
+  if (!modal) return { init() {} };
+
+  /* ── Helpers ── */
+  function filterList(list) {
+    if (activeTab === 'unread') return list.filter(n => !n.read);
+    if (activeTab === 'overdue') return list.filter(n => n.type === 'overdue');
+    return list;
+  }
+
+  function renderItem(n) {
+    const type = n.type || 'info';
+    const el   = document.createElement('div');
+    el.className = `notif-modal__item notif-modal__item--${n.read ? 'read' : 'unread'}`;
+    el.dataset.id = n.id;
+    el.innerHTML = `
+      <div class="notif-modal__item-icon notif-modal__item-icon--${type}">
+        <i class="fas ${NotifUtils.icon(type)}"></i>
+      </div>
+      <div class="notif-modal__item-body">
+        <p class="notif-modal__item-title">${n.title}</p>
+        ${n.description ? `<p class="notif-modal__item-desc">${n.description}</p>` : ''}
+        <span class="notif-modal__item-time">${NotifUtils.timeAgo(n.created_at)}</span>
+      </div>
+      <button class="notif-modal__item-dismiss" title="Dismiss">
+        <i class="fas fa-xmark"></i>
+      </button>`;
+
+    // Mark read on body click
+    el.querySelector('.notif-modal__item-body').addEventListener('click', () => {
+      NotifStore.markRead(n.id);
+      el.classList.remove('notif-modal__item--unread');
+      el.classList.add('notif-modal__item--read');
+    });
+
+    // Dismiss
+    el.querySelector('.notif-modal__item-dismiss').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      el.classList.add('is-dismissing');
+      await NotifUtils.sleep(220);
+      NotifStore.remove(n.id);
+    });
+
+    return el;
+  }
+
+  function render(list) {
+    const filtered = filterList(list).slice(0, MAX_ITEMS);
+
+    if (!filtered.length) {
+      body.innerHTML = `
+        <div class="notif-modal__empty">
+          <i class="fas fa-bell-slash"></i>
+          <p>Nothing to show</p>
+        </div>`;
+      return;
+    }
+
+    body.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    filtered.forEach((n, i) => {
+      const el = renderItem(n);
+      el.style.animationDelay = `${i * 30}ms`;
+      frag.appendChild(el);
+    });
+    body.appendChild(frag);
+  }
+
+  function open() {
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    backdrop.classList.add('is-visible');
+    toggles.forEach(t => t.setAttribute('aria-expanded', 'true'));
+    isOpen = true;
+    // Re-render with latest data on every open
+    render(NotifStore.getAll());
+  }
+
+  function close() {
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    backdrop.classList.remove('is-visible');
+    toggles.forEach(t => t.setAttribute('aria-expanded', 'false'));
+    isOpen = false;
+  }
+
+  function toggle() { isOpen ? close() : open(); }
+
+  function init() {
+    if (!modal) return;
+
+    // Bell toggles
+    toggles.forEach(t => t.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggle();
+    }));
+
+    // Close button
+    btnClose?.addEventListener('click', close);
+
+    // Backdrop click closes
+    backdrop?.addEventListener('click', close);
+
+    // Mark all read
+    btnMark?.addEventListener('click', () => {
+      NotifStore.markAllRead();
+    });
+
+    // Tab switching
+    tabs.forEach(t => t.addEventListener('click', () => {
+      activeTab = t.dataset.modalTab;
+      tabs.forEach(x => {
+        x.classList.toggle('is-active', x === t);
+        x.setAttribute('aria-selected', x === t);
+      });
+      render(NotifStore.getAll());
+    }));
+
+    // Escape key closes
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && isOpen) close(); });
+
+    // Clicking inside the modal does NOT close it
+    modal.addEventListener('click', e => e.stopPropagation());
+
+    // React to store changes
+    NotifStore.subscribe((list) => {
+      if (isOpen) render(list);
+      BadgeManager.update(NotifStore.getUnread());
+    });
+  }
+
+  return { init, open, close, toggle };
+})();
+
+
+
 function initDjangoMessages() {
   document.querySelectorAll('.message').forEach((msg, i) => {
     setTimeout(() => {
@@ -503,33 +643,18 @@ function initDjangoMessages() {
    BOOT
 ═══════════════════════════════════════════════════════════ */
 function boot() {
-  NotifPanel.init();   // slide-in panel — all pages
-  NotifBoard.init();   // full board    — board page only
-  NotifPoller.init();  // polling + toasts — all pages
+  NotifModal.init();   // topbar bell modal     — all pages
+  NotifPanel.init();   // slide-in panel        — all pages
+  NotifBoard.init();   // full board            — board page only
+  NotifPoller.init();  // polling + toasts      — all pages
   initDjangoMessages();
 
-  // Expose globally for manual use e.g. NotifToast.show({...})
-  window.NotifToast = NotifToast;
-  window.NotifStore = NotifStore;
-  window.NotifPanel = NotifPanel;
+  window.NotifToast  = NotifToast;
+  window.NotifStore  = NotifStore;
+  window.NotifPanel  = NotifPanel;
+  window.NotifModal  = NotifModal;
 }
 
 document.readyState === 'loading'
   ? document.addEventListener('DOMContentLoaded', boot)
   : boot();
-// ```
-
-// ---
-
-// ### 📁 File placement
-// ```
-// your_project/
-// ├── templates/
-// │   └── notifications/
-// │       └── notification_board.html      ← full board page
-// ├── static/
-// │   ├── css/dashboards/
-// │   │   ├── notification.css             ← unchanged (panel styles)
-// │   │   └── notification_board.css       ← NEW (board + toast styles)
-// │   └── js/
-// │       └── notifications.js             ← NEW unified JS
