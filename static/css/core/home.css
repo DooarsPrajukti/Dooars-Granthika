@@ -7,7 +7,7 @@
   gap: 3rem;
   align-items: center;
   padding: 6rem 2rem 4rem;
-  max-width: 1200px;
+  max-width: 1800px;
   margin: 60px auto 0;
   opacity: 0;
   animation: fadeInUp 0.8s ease-out forwards;
@@ -125,7 +125,7 @@
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 2rem;
   padding: 4rem 2rem;
-  max-width: 1200px;
+  max-width: 1800px;
   margin: 0 auto;
   background: linear-gradient(135deg, rgba(0, 192, 6, 0.05), rgba(44, 62, 80, 0.05));
   border-radius: 20px;
