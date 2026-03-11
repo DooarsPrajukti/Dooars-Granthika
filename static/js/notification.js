@@ -1,10 +1,16 @@
 /* =============================================================
-   notifications.js  v2
-   ─ Slide-in panel  → works on EVERY page
-   ─ Full board      → activated when window.NOTIF_BOARD = true
-   ─ Popup toasts    → works on EVERY page (polled + push)
+   notifications.js  v3
+   ─ NotifUtils    → shared helpers (timeAgo, api, icon, cookie)
+   ─ NotifStore    → single data source, pub/sub, API calls
+   ─ BadgeManager  → keeps ALL badge elements in sync
+   ─ NotifModal    → topbar bell dropdown (NEW)
+   ─ NotifPanel    → full-height slide-in drawer
+   ─ NotifToast    → bottom-right popup toasts
+   ─ NotifBoard    → full board page (window.NOTIF_BOARD = true)
+   ─ NotifPoller   → 30-second background refresh
    ============================================================= */
 'use strict';
+
 
 /* ═══════════════════════════════════════════════════════════
    SHARED UTILITIES
@@ -68,7 +74,7 @@ const NotifUtils = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════
-   STORE  (single source of truth for all notification data)
+   STORE — single source of truth, pub/sub, all API calls
 ═══════════════════════════════════════════════════════════ */
 const NotifStore = (() => {
   let _list      = [];
@@ -80,7 +86,7 @@ const NotifStore = (() => {
   async function fetchAll() {
     try {
       const data = await NotifUtils.api('/api/notifications/');
-      _list = Array.isArray(data) ? data : (data.results || []);
+      _list = Array.isArray(data) ? data : (data.results ?? []);
     } catch (e) {
       console.warn('[NotifStore] fetch failed', e);
     }
@@ -98,7 +104,7 @@ const NotifStore = (() => {
   }
 
   async function markAllRead() {
-    _list.forEach(n => n.read = true);
+    _list.forEach(n => { n.read = true; });
     emit();
     try { await NotifUtils.api('/api/notifications/mark-all-read/', 'POST'); }
     catch (e) { console.warn(e); }
@@ -118,24 +124,30 @@ const NotifStore = (() => {
     catch (e) { console.warn(e); }
   }
 
-  function getNew(list) { return list.filter(n => !_seenIds.has(n.id)); }
-  function markSeen(list) { list.forEach(n => _seenIds.add(n.id)); }
-  function subscribe(fn) { _listeners.push(fn); }
-  function getAll()    { return _list; }
-  function getUnread() { return _list.filter(n => !n.read).length; }
+  function getNew(list)    { return list.filter(n => !_seenIds.has(n.id)); }
+  function markSeen(list)  { list.forEach(n => _seenIds.add(n.id)); }
+  function subscribe(fn)   { _listeners.push(fn); }
+  function getAll()        { return _list; }
+  function getUnread()     { return _list.filter(n => !n.read).length; }
 
-  return { fetch: fetchAll, markRead, markAllRead, remove, clearAll, subscribe, getAll, getUnread, getNew, markSeen };
+  return { fetch: fetchAll, markRead, markAllRead, remove, clearAll,
+           subscribe, getAll, getUnread, getNew, markSeen };
 })();
 
 
 /* ═══════════════════════════════════════════════════════════
-   BADGE MANAGER  (topbar bell badges on all pages)
+   BADGE MANAGER — keeps every badge element in sync
 ═══════════════════════════════════════════════════════════ */
 const BadgeManager = (() => {
   function update(count) {
-    document.querySelectorAll('.notif-badge, #topbarBadge, #notifUnreadCount, .notification-badge, .notif-modal-badge').forEach(el => {
-      el.textContent = count > 99 ? '99+' : count;
-      el.style.display = count === 0 ? 'none' : 'inline-flex';
+    // Targets: sidebar nav-badge, topbar bell badge, modal header badge,
+    //          panel header badge, any custom .notification-badge
+    document.querySelectorAll(
+      '.notif-badge, .notif-modal-badge, .nav-badge, ' +
+      '#topbarBadge, #notifUnreadCount, #notifModalBadge, .notification-badge'
+    ).forEach(el => {
+      el.textContent    = count > 99 ? '99+' : String(count);
+      el.style.display  = count === 0 ? 'none' : 'inline-flex';
     });
   }
   return { update };
@@ -143,34 +155,175 @@ const BadgeManager = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════
-   SLIDE-IN PANEL  (present on every page via dashboard_base)
+   NOTIFICATION MODAL — topbar bell dropdown
+═══════════════════════════════════════════════════════════ */
+const NotifModal = (() => {
+  const modal    = document.getElementById('notifModal');
+  const backdrop = document.getElementById('notifModalBackdrop');
+  const bodyEl   = document.getElementById('notifModalBody');
+  const btnClose = document.getElementById('notifModalClose');
+  const btnMark  = document.getElementById('notifModalMarkAll');
+  const tabs     = document.querySelectorAll('[data-modal-tab]');
+  const toggles  = document.querySelectorAll('.notif-modal-toggle');
+
+  if (!modal) return { init() {}, open() {}, close() {}, toggle() {} };
+
+  let isOpen    = false;
+  let activeTab = 'all';
+  const MAX     = 8;   // max items shown in dropdown
+
+  /* ── filter ── */
+  function filterList(list) {
+    if (activeTab === 'unread')  return list.filter(n => !n.read);
+    if (activeTab === 'overdue') return list.filter(n => n.type === 'overdue');
+    return list;
+  }
+
+  /* ── build one item row ── */
+  function makeItem(n) {
+    const type = n.type || 'info';
+    const el   = document.createElement('div');
+    el.className  = `notif-modal__item notif-modal__item--${n.read ? 'read' : 'unread'}`;
+    el.dataset.id = n.id;
+    el.innerHTML  = `
+      <div class="notif-modal__item-icon notif-modal__item-icon--${type}">
+        <i class="fas ${NotifUtils.icon(type)}"></i>
+      </div>
+      <div class="notif-modal__item-body">
+        <p class="notif-modal__item-title">${n.title}</p>
+        ${n.description ? `<p class="notif-modal__item-desc">${n.description}</p>` : ''}
+        <span class="notif-modal__item-time">${NotifUtils.timeAgo(n.created_at)}</span>
+      </div>
+      <button class="notif-modal__item-dismiss" title="Dismiss" aria-label="Dismiss">
+        <i class="fas fa-xmark"></i>
+      </button>`;
+
+    /* mark read on body click */
+    el.querySelector('.notif-modal__item-body').addEventListener('click', () => {
+      NotifStore.markRead(n.id);
+      el.classList.replace('notif-modal__item--unread', 'notif-modal__item--read');
+    });
+
+    /* dismiss */
+    el.querySelector('.notif-modal__item-dismiss').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      el.classList.add('is-dismissing');
+      await NotifUtils.sleep(220);
+      NotifStore.remove(n.id);
+    });
+
+    return el;
+  }
+
+  /* ── render list ── */
+  function render(list) {
+    const items = filterList(list).slice(0, MAX);
+    if (!items.length) {
+      bodyEl.innerHTML = `
+        <div class="notif-modal__empty">
+          <i class="fas fa-bell-slash"></i>
+          <p>Nothing to show</p>
+        </div>`;
+      return;
+    }
+    bodyEl.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    items.forEach((n, i) => {
+      const el = makeItem(n);
+      el.style.animationDelay = `${i * 25}ms`;
+      frag.appendChild(el);
+    });
+    bodyEl.appendChild(frag);
+  }
+
+  /* ── open / close / toggle ── */
+  function open() {
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    backdrop.classList.add('is-visible');
+    toggles.forEach(t => t.setAttribute('aria-expanded', 'true'));
+    isOpen = true;
+    render(NotifStore.getAll());   // always fresh on open
+  }
+
+  function close() {
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    backdrop.classList.remove('is-visible');
+    toggles.forEach(t => t.setAttribute('aria-expanded', 'false'));
+    isOpen = false;
+  }
+
+  function toggle() { isOpen ? close() : open(); }
+
+  /* ── init ── */
+  function init() {
+    /* Bell / any .notif-modal-toggle clicks */
+    toggles.forEach(t => t.addEventListener('click', e => {
+      e.stopPropagation();
+      toggle();
+    }));
+
+    btnClose?.addEventListener('click', close);
+    backdrop?.addEventListener('click', close);
+    btnMark?.addEventListener('click', () => NotifStore.markAllRead());
+
+    /* Tab switching */
+    tabs.forEach(t => t.addEventListener('click', () => {
+      activeTab = t.dataset.modalTab;
+      tabs.forEach(x => {
+        x.classList.toggle('is-active', x === t);
+        x.setAttribute('aria-selected', String(x === t));
+      });
+      render(NotifStore.getAll());
+    }));
+
+    /* Escape closes */
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && isOpen) close(); });
+
+    /* Clicking inside modal doesn't bubble to backdrop */
+    modal.addEventListener('click', e => e.stopPropagation());
+
+    /* Re-render & update badges whenever store changes */
+    NotifStore.subscribe(list => {
+      if (isOpen) render(list);
+      BadgeManager.update(NotifStore.getUnread());
+    });
+  }
+
+  return { init, open, close, toggle };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════
+   NOTIFICATION PANEL — full-height slide-in drawer
 ═══════════════════════════════════════════════════════════ */
 const NotifPanel = (() => {
   const panel      = document.getElementById('notifPanel');
   const overlay    = document.getElementById('notifOverlay');
-  const body       = document.getElementById('notifBody');
+  const bodyEl     = document.getElementById('notifBody');
   const btnClose   = document.getElementById('notifClose');
   const btnMarkAll = document.getElementById('notifMarkAllRead');
   const btnRefresh = document.getElementById('notifRefresh');
   const tabs       = document.querySelectorAll('[data-tab]');
 
+  if (!panel) return { init() {}, open() {}, close() {}, toggle() {} };
+
   let isOpen    = false;
   let activeTab = 'all';
 
-  if (!panel) return { init() {}, open() {}, close() {}, toggle() {} };
-
   function filterList(list) {
-    if (activeTab === 'all')    return list;
-    if (activeTab === 'unread') return list.filter(n => !n.read);
-    return list.filter(n => n.type === activeTab);
+    if (activeTab === 'unread')  return list.filter(n => !n.read);
+    if (activeTab !== 'all')     return list.filter(n => n.type === activeTab);
+    return list;
   }
 
-  function renderItem(n) {
+  function makeItem(n) {
     const type = n.type || 'info';
     const el   = document.createElement('div');
-    el.className = `notif-item notif-item--${n.read ? 'read' : 'unread'} is-entering`;
+    el.className  = `notif-item notif-item--${n.read ? 'read' : 'unread'} is-entering`;
     el.dataset.id = n.id;
-    el.innerHTML = `
+    el.innerHTML  = `
       <div class="notif-item__dot"></div>
       <div class="notif-item__icon notif-item__icon--${type}">
         <i class="fas ${NotifUtils.icon(type)}"></i>
@@ -183,10 +336,12 @@ const NotifPanel = (() => {
           ${n.tag ? `<span class="notif-item__tag notif-item__tag--${n.tag}">${n.tag}</span>` : ''}
         </div>
       </div>
-      <button class="notif-item__dismiss" title="Dismiss"><i class="fas fa-xmark"></i></button>`;
+      <button class="notif-item__dismiss" title="Dismiss" aria-label="Dismiss">
+        <i class="fas fa-xmark"></i>
+      </button>`;
 
     el.querySelector('.notif-item__body').addEventListener('click', () => NotifStore.markRead(n.id));
-    el.querySelector('.notif-item__dismiss').addEventListener('click', async (e) => {
+    el.querySelector('.notif-item__dismiss').addEventListener('click', async e => {
       e.stopPropagation();
       el.classList.add('is-dismissing');
       await NotifUtils.sleep(280);
@@ -196,9 +351,9 @@ const NotifPanel = (() => {
   }
 
   function render(list) {
-    const filtered = filterList(list);
-    if (!filtered.length) {
-      body.innerHTML = `
+    const items = filterList(list);
+    if (!items.length) {
+      bodyEl.innerHTML = `
         <div class="notif-empty">
           <div class="notif-empty__icon"><i class="fas fa-bell-slash"></i></div>
           <p class="notif-empty__text">Nothing here</p>
@@ -206,10 +361,10 @@ const NotifPanel = (() => {
         </div>`;
       return;
     }
-    body.innerHTML = '';
+    bodyEl.innerHTML = '';
     const frag = document.createDocumentFragment();
-    filtered.forEach(n => frag.appendChild(renderItem(n)));
-    body.appendChild(frag);
+    items.forEach(n => frag.appendChild(makeItem(n)));
+    bodyEl.appendChild(frag);
   }
 
   function open() {
@@ -231,22 +386,26 @@ const NotifPanel = (() => {
   function init() {
     btnClose?.addEventListener('click', close);
     overlay?.addEventListener('click', close);
-    btnMarkAll?.addEventListener('click', NotifStore.markAllRead);
-    btnRefresh?.addEventListener('click', NotifStore.fetch);
+    btnMarkAll?.addEventListener('click', () => NotifStore.markAllRead());
+    btnRefresh?.addEventListener('click', () => NotifStore.fetch());
 
     tabs.forEach(t => t.addEventListener('click', () => {
       activeTab = t.dataset.tab;
-      tabs.forEach(x => { x.classList.toggle('is-active', x === t); x.setAttribute('aria-selected', x === t); });
+      tabs.forEach(x => {
+        x.classList.toggle('is-active', x === t);
+        x.setAttribute('aria-selected', String(x === t));
+      });
       render(NotifStore.getAll());
     }));
 
+    /* Any .notif-toggle in the page opens the panel */
     document.querySelectorAll('.notif-toggle').forEach(btn =>
       btn.addEventListener('click', toggle)
     );
 
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && isOpen) close(); });
 
-    NotifStore.subscribe((list) => {
+    NotifStore.subscribe(list => {
       render(list);
       BadgeManager.update(NotifStore.getUnread());
     });
@@ -257,17 +416,22 @@ const NotifPanel = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════
-   TOAST POPUP  (works on every page)
+   NOTIFICATION TOAST — bottom-right popup
 ═══════════════════════════════════════════════════════════ */
 const NotifToast = (() => {
   const DURATION = 5000;
 
-  let container = document.querySelector('.nb-toast-container');
-  if (!container) {
-    container = document.createElement('div');
-    container.className = 'nb-toast-container';
-    document.body.appendChild(container);
-  }
+  /* Use existing container or create one */
+  const container = (() => {
+    let c = document.getElementById('toastContainer') ||
+            document.querySelector('.nb-toast-container');
+    if (!c) {
+      c = document.createElement('div');
+      c.className = 'nb-toast-container';
+      document.body.appendChild(c);
+    }
+    return c;
+  })();
 
   const TYPE_ICON = {
     info:    'fa-circle-info',
@@ -283,21 +447,23 @@ const NotifToast = (() => {
   };
 
   async function show(n, duration = DURATION) {
-    const type = n.type || 'info';
+    const type  = n.type || 'info';
     const toast = document.createElement('div');
     toast.className = `nb-toast nb-toast--${type}`;
     toast.innerHTML = `
-      <div class="nb-toast__icon"><i class="fas ${TYPE_ICON[type] || 'fa-circle-info'}"></i></div>
+      <div class="nb-toast__icon">
+        <i class="fas ${TYPE_ICON[type] || 'fa-circle-info'}"></i>
+      </div>
       <div class="nb-toast__body">
         <p class="nb-toast__title">${n.title}</p>
         ${n.description ? `<p class="nb-toast__desc">${n.description}</p>` : ''}
       </div>
-      <button class="nb-toast__close" title="Dismiss"><i class="fas fa-xmark"></i></button>
+      <button class="nb-toast__close" title="Dismiss" aria-label="Dismiss">
+        <i class="fas fa-xmark"></i>
+      </button>
       <div class="nb-toast__progress" style="animation-duration:${duration}ms"></div>`;
 
     container.appendChild(toast);
-
-    // Trigger enter animation
     requestAnimationFrame(() => toast.classList.add('is-visible'));
 
     const dismiss = async () => {
@@ -308,9 +474,9 @@ const NotifToast = (() => {
     };
 
     toast.querySelector('.nb-toast__close').addEventListener('click', dismiss);
-    toast.addEventListener('mouseenter', () => toast.querySelector('.nb-toast__progress').style.animationPlayState = 'paused');
-    toast.addEventListener('mouseleave', () => toast.querySelector('.nb-toast__progress').style.animationPlayState = 'running');
-
+    const prog = toast.querySelector('.nb-toast__progress');
+    toast.addEventListener('mouseenter', () => prog.style.animationPlayState = 'paused');
+    toast.addEventListener('mouseleave', () => prog.style.animationPlayState = 'running');
     setTimeout(dismiss, duration);
   }
 
@@ -319,7 +485,7 @@ const NotifToast = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════
-   FULL BOARD  (only activates on notification board page)
+   FULL BOARD — activates only when window.NOTIF_BOARD = true
 ═══════════════════════════════════════════════════════════ */
 const NotifBoard = (() => {
   const PAGE_SIZE = 15;
@@ -331,22 +497,22 @@ const NotifBoard = (() => {
   function init() {
     if (!window.NOTIF_BOARD) return;
 
-    const listEl    = document.getElementById('nbList');
-    const emptyEl   = document.getElementById('nbEmpty');
-    const searchEl  = document.getElementById('nbSearch');
-    const filters   = document.querySelectorAll('.nb-filter');
-    const btnMark   = document.getElementById('nbMarkAllRead');
-    const btnClear  = document.getElementById('nbClearAll');
-    const btnPrev   = document.getElementById('nbPrevPage');
-    const btnNext   = document.getElementById('nbNextPage');
-    const pageInfo  = document.getElementById('nbPageInfo');
+    const listEl   = document.getElementById('nbList');
+    const emptyEl  = document.getElementById('nbEmpty');
+    const searchEl = document.getElementById('nbSearch');
+    const filters  = document.querySelectorAll('.nb-filter');
+    const btnMark  = document.getElementById('nbMarkAllRead');
+    const btnClear = document.getElementById('nbClearAll');
+    const btnPrev  = document.getElementById('nbPrevPage');
+    const btnNext  = document.getElementById('nbNextPage');
+    const pageInfo = document.getElementById('nbPageInfo');
 
     if (!listEl) return;
 
     function getFiltered() {
       let data = fullList;
-      if (activeFilter === 'unread') data = data.filter(n => !n.read);
-      else if (activeFilter !== 'all') data = data.filter(n => n.type === activeFilter);
+      if (activeFilter === 'unread')     data = data.filter(n => !n.read);
+      else if (activeFilter !== 'all')   data = data.filter(n => n.type === activeFilter);
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         data = data.filter(n =>
@@ -358,11 +524,11 @@ const NotifBoard = (() => {
     }
 
     function updateStats(data) {
-      const safe = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-      safe('statTotal',   data.length);
-      safe('statUnread',  data.filter(n => !n.read).length);
-      safe('statOverdue', data.filter(n => n.type === 'overdue').length);
-      safe('statSystem',  data.filter(n => n.type === 'system').length);
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set('statTotal',   data.length);
+      set('statUnread',  data.filter(n => !n.read).length);
+      set('statOverdue', data.filter(n => n.type === 'overdue').length);
+      set('statSystem',  data.filter(n => n.type === 'system').length);
     }
 
     function renderBoard(data) {
@@ -390,9 +556,9 @@ const NotifBoard = (() => {
       page.forEach(n => {
         const type = n.type || 'info';
         const item = document.createElement('div');
-        item.className = `nb-item nb-item--${n.read ? 'read' : 'unread'}`;
+        item.className  = `nb-item nb-item--${n.read ? 'read' : 'unread'}`;
         item.dataset.id = n.id;
-        item.innerHTML = `
+        item.innerHTML  = `
           <div class="nb-item__icon nb-item__icon--${type}">
             <i class="fas ${NotifUtils.icon(type)}"></i>
           </div>
@@ -405,8 +571,14 @@ const NotifBoard = (() => {
             </div>
           </div>
           <div class="nb-item__actions">
-            ${!n.read ? `<button class="nb-item__btn nb-item__btn--read" title="Mark read" data-id="${n.id}"><i class="fas fa-check"></i></button>` : ''}
-            <button class="nb-item__btn nb-item__btn--delete" title="Delete" data-id="${n.id}"><i class="fas fa-trash-can"></i></button>
+            ${!n.read
+              ? `<button class="nb-item__btn nb-item__btn--read" title="Mark read" aria-label="Mark read">
+                   <i class="fas fa-check"></i>
+                 </button>`
+              : ''}
+            <button class="nb-item__btn nb-item__btn--delete" title="Delete" aria-label="Delete">
+              <i class="fas fa-trash-can"></i>
+            </button>
           </div>`;
 
         item.querySelector('.nb-item__btn--read')?.addEventListener('click', () => NotifStore.markRead(n.id));
@@ -422,8 +594,8 @@ const NotifBoard = (() => {
       listEl.appendChild(frag);
 
       if (pageInfo) pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
-      if (btnPrev) btnPrev.disabled = currentPage <= 1;
-      if (btnNext) btnNext.disabled = currentPage >= totalPages;
+      if (btnPrev)  btnPrev.disabled = currentPage <= 1;
+      if (btnNext)  btnNext.disabled = currentPage >= totalPages;
     }
 
     searchEl?.addEventListener('input', e => {
@@ -439,11 +611,10 @@ const NotifBoard = (() => {
       renderBoard(fullList);
     }));
 
-    btnMark?.addEventListener('click', NotifStore.markAllRead);
+    btnMark?.addEventListener('click', () => NotifStore.markAllRead());
     btnClear?.addEventListener('click', () => {
       if (confirm('Clear all notifications? This cannot be undone.')) NotifStore.clearAll();
     });
-
     btnPrev?.addEventListener('click', () => { currentPage--; renderBoard(fullList); });
     btnNext?.addEventListener('click', () => { currentPage++; renderBoard(fullList); });
 
@@ -455,7 +626,7 @@ const NotifBoard = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════
-   POLLER  (checks for new notifications every 30s, shows toasts)
+   POLLER — background refresh every 30 s, toasts for new items
 ═══════════════════════════════════════════════════════════ */
 const NotifPoller = (() => {
   async function poll() {
@@ -466,6 +637,7 @@ const NotifPoller = (() => {
   }
 
   function init() {
+    /* First load: seed seen IDs silently (no toasts) */
     NotifStore.fetch().then(list => NotifStore.markSeen(list));
     setInterval(poll, 30_000);
   }
@@ -475,158 +647,8 @@ const NotifPoller = (() => {
 
 
 /* ═══════════════════════════════════════════════════════════
-   NOTIFICATION MODAL  (topbar bell dropdown)
+   AUTO-DISMISS DJANGO MESSAGES
 ═══════════════════════════════════════════════════════════ */
-const NotifModal = (() => {
-  const modal    = document.getElementById('notifModal');
-  const backdrop = document.getElementById('notifModalBackdrop');
-  const body     = document.getElementById('notifModalBody');
-  const btnClose = document.getElementById('notifModalClose');
-  const btnMark  = document.getElementById('notifModalMarkAll');
-  const tabs     = document.querySelectorAll('[data-modal-tab]');
-  const toggles  = document.querySelectorAll('.notif-modal-toggle');
-
-  let isOpen    = false;
-  let activeTab = 'all';
-
-  // Max items shown in the modal (keeps it concise)
-  const MAX_ITEMS = 8;
-
-  if (!modal) return { init() {} };
-
-  /* ── Helpers ── */
-  function filterList(list) {
-    if (activeTab === 'unread') return list.filter(n => !n.read);
-    if (activeTab === 'overdue') return list.filter(n => n.type === 'overdue');
-    return list;
-  }
-
-  function renderItem(n) {
-    const type = n.type || 'info';
-    const el   = document.createElement('div');
-    el.className = `notif-modal__item notif-modal__item--${n.read ? 'read' : 'unread'}`;
-    el.dataset.id = n.id;
-    el.innerHTML = `
-      <div class="notif-modal__item-icon notif-modal__item-icon--${type}">
-        <i class="fas ${NotifUtils.icon(type)}"></i>
-      </div>
-      <div class="notif-modal__item-body">
-        <p class="notif-modal__item-title">${n.title}</p>
-        ${n.description ? `<p class="notif-modal__item-desc">${n.description}</p>` : ''}
-        <span class="notif-modal__item-time">${NotifUtils.timeAgo(n.created_at)}</span>
-      </div>
-      <button class="notif-modal__item-dismiss" title="Dismiss">
-        <i class="fas fa-xmark"></i>
-      </button>`;
-
-    // Mark read on body click
-    el.querySelector('.notif-modal__item-body').addEventListener('click', () => {
-      NotifStore.markRead(n.id);
-      el.classList.remove('notif-modal__item--unread');
-      el.classList.add('notif-modal__item--read');
-    });
-
-    // Dismiss
-    el.querySelector('.notif-modal__item-dismiss').addEventListener('click', async (e) => {
-      e.stopPropagation();
-      el.classList.add('is-dismissing');
-      await NotifUtils.sleep(220);
-      NotifStore.remove(n.id);
-    });
-
-    return el;
-  }
-
-  function render(list) {
-    const filtered = filterList(list).slice(0, MAX_ITEMS);
-
-    if (!filtered.length) {
-      body.innerHTML = `
-        <div class="notif-modal__empty">
-          <i class="fas fa-bell-slash"></i>
-          <p>Nothing to show</p>
-        </div>`;
-      return;
-    }
-
-    body.innerHTML = '';
-    const frag = document.createDocumentFragment();
-    filtered.forEach((n, i) => {
-      const el = renderItem(n);
-      el.style.animationDelay = `${i * 30}ms`;
-      frag.appendChild(el);
-    });
-    body.appendChild(frag);
-  }
-
-  function open() {
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
-    backdrop.classList.add('is-visible');
-    toggles.forEach(t => t.setAttribute('aria-expanded', 'true'));
-    isOpen = true;
-    // Re-render with latest data on every open
-    render(NotifStore.getAll());
-  }
-
-  function close() {
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
-    backdrop.classList.remove('is-visible');
-    toggles.forEach(t => t.setAttribute('aria-expanded', 'false'));
-    isOpen = false;
-  }
-
-  function toggle() { isOpen ? close() : open(); }
-
-  function init() {
-    if (!modal) return;
-
-    // Bell toggles
-    toggles.forEach(t => t.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggle();
-    }));
-
-    // Close button
-    btnClose?.addEventListener('click', close);
-
-    // Backdrop click closes
-    backdrop?.addEventListener('click', close);
-
-    // Mark all read
-    btnMark?.addEventListener('click', () => {
-      NotifStore.markAllRead();
-    });
-
-    // Tab switching
-    tabs.forEach(t => t.addEventListener('click', () => {
-      activeTab = t.dataset.modalTab;
-      tabs.forEach(x => {
-        x.classList.toggle('is-active', x === t);
-        x.setAttribute('aria-selected', x === t);
-      });
-      render(NotifStore.getAll());
-    }));
-
-    // Escape key closes
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && isOpen) close(); });
-
-    // Clicking inside the modal does NOT close it
-    modal.addEventListener('click', e => e.stopPropagation());
-
-    // React to store changes
-    NotifStore.subscribe((list) => {
-      if (isOpen) render(list);
-      BadgeManager.update(NotifStore.getUnread());
-    });
-  }
-
-  return { init, open, close, toggle };
-})();
-
-
-
 function initDjangoMessages() {
   document.querySelectorAll('.message').forEach((msg, i) => {
     setTimeout(() => {
@@ -640,15 +662,33 @@ function initDjangoMessages() {
 
 
 /* ═══════════════════════════════════════════════════════════
+   SIDEBAR TOGGLE (topbar hamburger for collapsed mode)
+═══════════════════════════════════════════════════════════ */
+function initSidebarToggle() {
+  const btn     = document.getElementById('sidebarToggle');
+  const sidebar = document.getElementById('sidebar');
+  const main    = document.getElementById('mainContent');
+  if (!btn || !sidebar) return;
+
+  btn.addEventListener('click', () => {
+    sidebar.classList.toggle('is-collapsed');
+    main?.classList.toggle('sidebar-collapsed');
+  });
+}
+
+
+/* ═══════════════════════════════════════════════════════════
    BOOT
 ═══════════════════════════════════════════════════════════ */
 function boot() {
-  NotifModal.init();   // topbar bell modal     — all pages
-  NotifPanel.init();   // slide-in panel        — all pages
-  NotifBoard.init();   // full board            — board page only
-  NotifPoller.init();  // polling + toasts      — all pages
-  initDjangoMessages();
+  NotifModal.init();        // topbar bell modal   — all pages
+  NotifPanel.init();        // slide-in panel      — all pages
+  NotifBoard.init();        // full board          — board page only
+  NotifPoller.init();       // background polling  — all pages
+  initDjangoMessages();     // auto-dismiss toasts
+  initSidebarToggle();      // collapsible sidebar
 
+  /* Global access for manual use e.g. NotifToast.show({...}) */
   window.NotifToast  = NotifToast;
   window.NotifStore  = NotifStore;
   window.NotifPanel  = NotifPanel;
