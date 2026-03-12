@@ -154,6 +154,9 @@ def book_create(request):
                     d["category_name"]     = cat.name if cat else ""
                     d["_category_created"] = d.get("_category_created", False)
                     d.pop("category", None)
+                    # Decimal is not JSON-serialisable — store as string
+                    if d.get("price") is not None:
+                        d["price"] = str(d["price"])
                     session_rows.append({
                         "row":    r["row"],
                         "data":   d,
@@ -241,10 +244,12 @@ def book_create(request):
             total    = form.cleaned_data.get("total_copies", 1)
 
             with transaction.atomic():
-                book                 = form.save(commit=False)
-                book.owner           = request.user
-                book.category        = form.cleaned_data["category"]
-                book.available_copies = total  # always equals total on create
+                book                  = form.save(commit=False)
+                book.owner            = request.user
+                book.category         = form.cleaned_data["category"]
+                book.total_copies     = total
+                book.available_copies = total
+                book.price            = form.cleaned_data.get("price") or None
                 img = form.cleaned_data.get("cover_image")
                 if img:
                     book.cover_image     = img["data"]
@@ -290,6 +295,7 @@ def book_update(request, pk):
             with transaction.atomic():
                 updated          = form.save(commit=False)
                 updated.category = form.cleaned_data["category"]
+                updated.price    = form.cleaned_data.get("price") or None
                 img = form.cleaned_data.get("cover_image")
                 if img:
                     updated.cover_image     = img["data"]
@@ -304,6 +310,12 @@ def book_update(request, pk):
                     extra = new_total - current_total
                     create_book_copies(book, lib_code, extra)
                     messages.info(request, f"{extra} new physical {'copy' if extra == 1 else 'copies'} generated.")
+
+                # Sync legacy aggregate columns with real BookCopy counts
+                Book.objects.filter(pk=book.pk).update(
+                    total_copies     = book.copy_count,
+                    available_copies = book.available_copy_count,
+                )
 
             if hasattr(form, "_created_category"):
                 messages.info(request, f'New category "{form._created_category}" was created.')
@@ -457,16 +469,17 @@ def stock_dashboard(request):
 
 @login_required
 def export_books(request):
-    qs = _user_books(request.user)
+    qs = _user_books(request.user).prefetch_related("copies")
     qs = _filter_books(qs, request)
 
-    total_count   = qs.count()
+    all_books     = list(qs)
+    total_count   = len(all_books)
     preview_limit = 8
-    preview_books = list(qs[:preview_limit])
+    preview_books = all_books[:preview_limit]
     preview_more  = max(0, total_count - preview_limit)
 
-    total_sum     = sum(b.copy_count           for b in qs)
-    available_sum = sum(b.available_copy_count for b in qs)
+    total_sum     = sum(b.copy_count           for b in all_books)
+    available_sum = sum(b.available_copy_count for b in all_books)
     issued_sum    = total_sum - available_sum
 
     return render(request, "books/book_export.html", {
@@ -492,6 +505,7 @@ def export_books_excel(request):
 
     qs = _user_books(request.user).prefetch_related("copies")
     qs = _filter_books(qs, request)
+    books = list(qs)  # evaluate once — prefetch cache used for all copy lookups
 
     HEADER_FILL  = PatternFill("solid", fgColor="0A1628")
     HEADER_FONT  = Font(color="FFFFFF", bold=True, size=9)
@@ -508,8 +522,8 @@ def export_books_excel(request):
     ws = wb.active
     ws.title = "Book Catalogue"
 
-    headers    = ["#","Title","Author","ISBN","Category","Publisher","Language","Edition","Total Copies","Available","Borrowed","Shelf Location","Added On"]
-    col_widths = [4, 32, 22, 18, 16, 20, 11, 12, 12, 10, 10, 14, 12]
+    headers    = ["#","Title","Author","ISBN","Category","Publisher","Language","Edition","Total Copies","Available","Borrowed","Price (₹)","Shelf Location","Added On"]
+    col_widths = [4, 32, 22, 18, 16, 20, 11, 12, 12, 10, 10, 11, 14, 12]
 
     ws.append(headers)
     ws.row_dimensions[1].height = 22
@@ -520,27 +534,31 @@ def export_books_excel(request):
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.freeze_panes = "A2"
 
-    for idx, book in enumerate(qs, 1):
-        avail = book.available_copy_count
+    for idx, book in enumerate(books, 1):
+        avail    = book.available_copy_count
         borrowed = book.borrowed_copy_count
-        total = book.copy_count
+        total    = book.copy_count
+        price    = float(book.price) if book.price is not None else ""
         ws.append([idx, book.title, book.author, book.isbn,
             book.category.name if book.category else "",
             book.publisher, book.language, book.edition,
-            total, avail, borrowed, book.shelf_location,
-            book.created_at.strftime("%d/%m/%Y")])
+            total, avail, borrowed, price,
+            book.shelf_location, book.created_at.strftime("%d/%m/%Y")])
         r = ws.max_row
         avail_cell = ws.cell(row=r, column=10)
-        if avail == 0: avail_cell.fill = RED_FILL
-        elif avail <= LOW_STOCK_THRESHOLD: avail_cell.fill = ORANGE_FILL
-        else: avail_cell.fill = GREEN_FILL
+        if avail == 0:                          avail_cell.fill = RED_FILL
+        elif avail <= LOW_STOCK_THRESHOLD:      avail_cell.fill = ORANGE_FILL
+        else:                                   avail_cell.fill = GREEN_FILL
         for ci in range(1, len(headers) + 1):
             ws.cell(row=r, column=ci).border = BORDER
 
     last_data = ws.max_row
-    ws.append(["","TOTALS","","","","","","",
-        f"=SUM(I2:I{last_data})", f"=SUM(J2:J{last_data})",
-        f"=SUM(K2:K{last_data})","",""])
+    if last_data >= 2:
+        ws.append(["", "TOTALS", "", "", "", "", "", "",
+            f"=SUM(I2:I{last_data})", f"=SUM(J2:J{last_data})",
+            f"=SUM(K2:K{last_data})", "", "", ""])
+    else:
+        ws.append(["", "TOTALS", "", "", "", "", "", "", 0, 0, 0, "", "", ""])
     for ci in range(1, len(headers) + 1):
         cell = ws.cell(row=ws.max_row, column=ci)
         cell.fill = TOTALS_FILL; cell.font = TOTALS_FONT
@@ -559,7 +577,7 @@ def export_books_excel(request):
         ws2.column_dimensions[get_column_letter(ci)].width = w
     ws2.freeze_panes = "A2"
 
-    for book in qs:
+    for book in books:  # reuse the same list — no second DB hit
         for copy in book.copies.all():
             ws2.append([copy.copy_id, book.title, book.author, book.isbn,
                 copy.get_status_display(),
@@ -627,6 +645,9 @@ def import_books_excel(request):
                 d["category_name"] = cat.name if cat else ""
                 d.pop("category", None)
                 d.pop("_category_created", None)
+                # Decimal is not JSON-serialisable — store as string
+                if d.get("price") is not None:
+                    d["price"] = str(d["price"])
                 session_rows.append({
                     "row": r["row"], "data": d, "status": r["status"],
                     "errors": r["errors"],
@@ -696,6 +717,7 @@ def import_books_excel(request):
                     shelf_location=d.get("shelf_location", ""),
                     total_copies=total, available_copies=total,
                     description=d.get("description", ""),
+                    price=d.get("price") or None,
                 )
                 create_book_copies(book, lib_code, total)
             created_count += 1

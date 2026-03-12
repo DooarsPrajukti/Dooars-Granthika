@@ -156,9 +156,9 @@ MAX_EXCEL_BYTES = 10 * 1024 * 1024  # 10 MB
 REQUIRED_COLS  = {"isbn"}
 OPTIONAL_COLS  = {
     "title", "author", "category", "publisher",
-    "publication_year", "language", "edition",
-    "shelf_location", "total_copies", "description",
-    "price",
+    "publication year", "language", "edition",
+    "shelf location", "total copies", "description",
+    "price", "price (₹)",
 }
 ALL_COLS = REQUIRED_COLS | OPTIONAL_COLS
 
@@ -214,40 +214,97 @@ def parse_excel_rows(file_obj, user):
     Parse an uploaded Excel file and return a list of row-result dicts:
 
         {
-          "row":    int,           # 1-based data row number
-          "data":   dict,          # cleaned field values
+          "row":    int,           # 1-based sheet row number of this data row
+          "data":   dict,          # cleaned field values (category = Category instance)
           "status": "new" | "duplicate" | "error",
           "errors": [str, …],
           "book":   Book | None,   # existing Book instance if duplicate
         }
 
     Auto-creates categories (per user) when they don't exist yet.
-    Does NOT save any Book records — that is the view's job after user confirms.
+    Does NOT save any Book records — that is the view's job after confirmation.
     """
-    import io
+    import io as _io
     import openpyxl
+    from decimal import Decimal as _D, InvalidOperation
     from django.utils.text import slugify as _slugify
 
-    data = file_obj.read()
-    wb   = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
-    ws   = wb.active
+    # ── Column-name normaliser ────────────────────────────────────────
+    # Maps any reasonable header spelling → internal snake_case key.
+    _COL_MAP = {
+        "title":            "title",
+        "author":           "author",
+        "isbn":             "isbn",
+        "category":         "category",
+        "publisher":        "publisher",
+        "publication year": "publication_year",
+        "publicationyear":  "publication_year",
+        "publication_year": "publication_year",
+        "language":         "language",
+        "edition":          "edition",
+        "total copies":     "total_copies",
+        "totalcopies":      "total_copies",
+        "total_copies":     "total_copies",
+        "price (₹)":        "price",
+        "price(₹)":         "price",
+        "price (rs)":       "price",
+        "price":            "price",
+        "shelf location":   "shelf_location",
+        "shelflocation":    "shelf_location",
+        "shelf_location":   "shelf_location",
+        "description":      "description",
+        # legacy — silently ignored; value always derived from total_copies
+        "available copies": None,
+        "available_copies": None,
+    }
 
-    rows_iter = ws.iter_rows(values_only=True)
-    raw_headers = next(rows_iter, None)
-    if raw_headers is None:
+    raw_data = file_obj.read()
+    wb = openpyxl.load_workbook(_io.BytesIO(raw_data), read_only=True, data_only=True)
+
+    # Accept sheet named "Books" or fall back to active sheet
+    ws = wb["Books"] if "Books" in wb.sheetnames else wb.active
+
+    all_rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+
+    if not all_rows:
         return []
 
-    # Normalise header names
-    headers = [str(h).strip().lower().replace(" ", "_") if h is not None else ""
-    for h in raw_headers]
+    # ── Find header row (skip blank / hint rows) ──────────────────────
+    header_row_idx = None
+    for i, row in enumerate(all_rows):
+        normalised = [str(c).strip().lower() if c is not None else "" for c in row]
+        if "isbn" in normalised or "title" in normalised:
+            header_row_idx = i
+            break
+    if header_row_idx is None:
+        return []
+
+    raw_headers = all_rows[header_row_idx]
+    # col_index → internal key  (None = ignore column)
+    col_index_map = {}
+    for ci, h in enumerate(raw_headers):
+        key = _COL_MAP.get(str(h).strip().lower() if h is not None else "")
+        if key:   # key is None for ignored cols and missing entries
+            col_index_map[ci] = key
 
     results = []
 
-    for row_idx, raw_row in enumerate(rows_iter, start=2):
-        row_dict = {headers[i]: (raw_row[i] if i < len(raw_row) else None)
-                    for i in range(len(headers))}
+    for row_idx, raw_row in enumerate(
+        all_rows[header_row_idx + 1:],
+        start=header_row_idx + 2,   # 1-based sheet row number
+    ):
+        # Skip entirely blank rows and the hint/notes row (row 2 in template)
+        if all(v is None or str(v).strip() == "" for v in raw_row):
+            continue
 
-        errors = []
+        # Build raw dict from mapped columns only
+        row_dict = {
+            key: (raw_row[ci] if ci < len(raw_row) else None)
+            for ci, key in col_index_map.items()
+        }
+
+        errors   = []
         data_out = {}
 
         # ── ISBN (required) ───────────────────────────────────────────
@@ -259,60 +316,73 @@ def parse_excel_rows(file_obj, user):
             continue
         data_out["isbn"] = isbn_raw
 
-        # ── Duplicate check ───────────────────────────────────────────
+        # ── Title & Author (required) ─────────────────────────────────
+        for req_field in ("title", "author"):
+            val = str(row_dict.get(req_field) or "").strip()
+            if not val or val.lower() == "none":
+                errors.append(f"{req_field.title()} is required.")
+            data_out[req_field] = val
+
+        # ── Duplicate check (by ISBN) ─────────────────────────────────
         existing = Book.objects.filter(owner=user, isbn=isbn_raw).first()
         status   = "duplicate" if existing else "new"
 
-        # ── Optional text fields ──────────────────────────────────────
-        for field in ("title", "author", "publisher", "edition",
-                      "shelf_location", "language", "description"):
+        # ── Plain text fields ─────────────────────────────────────────
+        for field in ("publisher", "edition", "shelf_location",
+                      "language", "description"):
             val = row_dict.get(field)
             data_out[field] = str(val).strip() if val is not None else ""
 
         # ── publication_year ──────────────────────────────────────────
         yr = row_dict.get("publication_year")
-        if yr:
+        if yr is not None and str(yr).strip() not in ("", "None"):
             try:
                 yr_int = int(float(str(yr)))
                 if 1000 <= yr_int <= 2099:
                     data_out["publication_year"] = yr_int
                 else:
-                    errors.append(f"publication_year '{yr}' out of range 1000–2099.")
-            except ValueError:
-                errors.append(f"publication_year '{yr}' is not a number.")
+                    errors.append(f"Publication Year '{yr}' is out of range 1000–2099.")
+                    data_out["publication_year"] = None
+            except (ValueError, TypeError):
+                errors.append(f"Publication Year '{yr}' is not a valid number.")
+                data_out["publication_year"] = None
         else:
             data_out["publication_year"] = None
 
-        # ── total_copies — available_copies auto-set to total ─────────
-        val = row_dict.get("total_copies")
-        if val is not None and str(val).strip():
+        # ── total_copies ──────────────────────────────────────────────
+        tc_val = row_dict.get("total_copies")
+        if tc_val is not None and str(tc_val).strip() not in ("", "None"):
             try:
-                int_val = int(float(str(val)))
-                if int_val < 0:
-                    errors.append("total_copies cannot be negative.")
+                tc_int = int(float(str(tc_val)))
+                if tc_int < 1:
+                    errors.append("Total Copies must be at least 1.")
+                    data_out["total_copies"] = 1
                 else:
-                    data_out["total_copies"] = int_val
-            except ValueError:
-                errors.append(f"total_copies '{val}' is not a number.")
+                    data_out["total_copies"] = tc_int
+            except (ValueError, TypeError):
+                errors.append(f"Total Copies '{tc_val}' is not a valid number.")
+                data_out["total_copies"] = 1
         else:
-            data_out.setdefault("total_copies", 1)
-        # available_copies always equals total_copies on import
-        data_out["available_copies"] = data_out.get("total_copies", 1)
+            data_out["total_copies"] = 1
+        # available_copies is always derived — never read from the sheet
+        data_out["available_copies"] = data_out["total_copies"]
 
-        # ── price (required) ──────────────────────────────────────────
+        # ── price ─────────────────────────────────────────────────────
         price_val = row_dict.get("price")
-        if price_val is None or str(price_val).strip() == "" or str(price_val).strip().lower() == "none":
+        if price_val is None or str(price_val).strip() in ("", "None"):
             errors.append("Price is required.")
+            data_out["price"] = None
         else:
             try:
-                from decimal import Decimal as _D
-                p = _D(str(price_val)).quantize(_D("0.01"))
+                p = _D(str(price_val).replace(",", "").strip()).quantize(_D("0.01"))
                 if p < 0:
-                    errors.append("price cannot be negative.")
+                    errors.append("Price cannot be negative.")
+                    data_out["price"] = None
                 else:
                     data_out["price"] = p
-            except Exception:
-                errors.append(f"price '{price_val}' is not a valid number.")
+            except (InvalidOperation, Exception):
+                errors.append(f"Price '{price_val}' is not a valid number.")
+                data_out["price"] = None
 
         # ── Category — auto-create if not found ───────────────────────
         cat_name = str(row_dict.get("category") or "").strip()
@@ -320,6 +390,7 @@ def parse_excel_rows(file_obj, user):
             cat_qs = Category.objects.filter(owner=user, name__iexact=cat_name)
             if cat_qs.exists():
                 data_out["category"] = cat_qs.first()
+                data_out["_category_created"] = False
             else:
                 new_cat = Category.objects.create(
                     owner=user,
@@ -330,6 +401,7 @@ def parse_excel_rows(file_obj, user):
                 data_out["_category_created"] = True
         else:
             data_out["category"] = None
+            data_out["_category_created"] = False
 
         results.append({
             "row":    row_idx,
