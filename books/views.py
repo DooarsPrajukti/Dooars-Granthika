@@ -241,10 +241,14 @@ def book_create(request):
             total    = form.cleaned_data.get("total_copies", 1)
 
             with transaction.atomic():
-                book                 = form.save(commit=False)
-                book.owner           = request.user
-                book.category        = form.cleaned_data["category"]
-                book.available_copies = total  # always equals total on create
+                book                  = form.save(commit=False)
+                book.owner            = request.user
+                book.category         = form.cleaned_data["category"]
+                # On create: available always equals total input
+                book.total_copies     = total
+                book.available_copies = total
+                # Price — take from form if provided
+                book.price = form.cleaned_data.get("price") or None
                 img = form.cleaned_data.get("cover_image")
                 if img:
                     book.cover_image     = img["data"]
@@ -290,6 +294,8 @@ def book_update(request, pk):
             with transaction.atomic():
                 updated          = form.save(commit=False)
                 updated.category = form.cleaned_data["category"]
+                # Price — take from form if provided
+                updated.price = form.cleaned_data.get("price") or None
                 img = form.cleaned_data.get("cover_image")
                 if img:
                     updated.cover_image     = img["data"]
@@ -304,6 +310,14 @@ def book_update(request, pk):
                     extra = new_total - current_total
                     create_book_copies(book, lib_code, extra)
                     messages.info(request, f"{extra} new physical {'copy' if extra == 1 else 'copies'} generated.")
+
+                # Keep legacy aggregate columns in sync with actual BookCopy records
+                real_total     = book.copy_count
+                real_available = book.available_copy_count
+                Book.objects.filter(pk=book.pk).update(
+                    total_copies     = real_total,
+                    available_copies = real_available,
+                )
 
             if hasattr(form, "_created_category"):
                 messages.info(request, f'New category "{form._created_category}" was created.')
@@ -457,18 +471,16 @@ def stock_dashboard(request):
 
 @login_required
 def export_books(request):
-    qs = _user_books(request.user).prefetch_related("copies")
+    qs = _user_books(request.user)
     qs = _filter_books(qs, request)
 
-    # Evaluate once — all subsequent operations work off this list
-    all_books     = list(qs)
-    total_count   = len(all_books)
+    total_count   = qs.count()
     preview_limit = 8
-    preview_books = all_books[:preview_limit]
+    preview_books = list(qs[:preview_limit])
     preview_more  = max(0, total_count - preview_limit)
 
-    total_sum     = sum(b.copy_count           for b in all_books)
-    available_sum = sum(b.available_copy_count for b in all_books)
+    total_sum     = sum(b.copy_count           for b in qs)
+    available_sum = sum(b.available_copy_count for b in qs)
     issued_sum    = total_sum - available_sum
 
     return render(request, "books/book_export.html", {
@@ -494,8 +506,6 @@ def export_books_excel(request):
 
     qs = _user_books(request.user).prefetch_related("copies")
     qs = _filter_books(qs, request)
-    # Evaluate once so prefetch_related is honoured for all copy property calls
-    books = list(qs)
 
     HEADER_FILL  = PatternFill("solid", fgColor="0A1628")
     HEADER_FONT  = Font(color="FFFFFF", bold=True, size=9)
@@ -524,10 +534,10 @@ def export_books_excel(request):
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.freeze_panes = "A2"
 
-    for idx, book in enumerate(books, 1):
-        avail    = book.available_copy_count
+    for idx, book in enumerate(qs, 1):
+        avail = book.available_copy_count
         borrowed = book.borrowed_copy_count
-        total    = book.copy_count
+        total = book.copy_count
         ws.append([idx, book.title, book.author, book.isbn,
             book.category.name if book.category else "",
             book.publisher, book.language, book.edition,
@@ -535,20 +545,16 @@ def export_books_excel(request):
             book.created_at.strftime("%d/%m/%Y")])
         r = ws.max_row
         avail_cell = ws.cell(row=r, column=10)
-        if avail == 0:              avail_cell.fill = RED_FILL
+        if avail == 0: avail_cell.fill = RED_FILL
         elif avail <= LOW_STOCK_THRESHOLD: avail_cell.fill = ORANGE_FILL
-        else:                       avail_cell.fill = GREEN_FILL
+        else: avail_cell.fill = GREEN_FILL
         for ci in range(1, len(headers) + 1):
             ws.cell(row=r, column=ci).border = BORDER
 
-    last_data = ws.max_row  # last row with actual book data
-    # Only add SUM formulas when there is at least one data row
-    if last_data >= 2:
-        ws.append(["", "TOTALS", "", "", "", "", "", "",
-            f"=SUM(I2:I{last_data})", f"=SUM(J2:J{last_data})",
-            f"=SUM(K2:K{last_data})", "", ""])
-    else:
-        ws.append(["", "TOTALS", "", "", "", "", "", "", 0, 0, 0, "", ""])
+    last_data = ws.max_row
+    ws.append(["","TOTALS","","","","","","",
+        f"=SUM(I2:I{last_data})", f"=SUM(J2:J{last_data})",
+        f"=SUM(K2:K{last_data})","",""])
     for ci in range(1, len(headers) + 1):
         cell = ws.cell(row=ws.max_row, column=ci)
         cell.fill = TOTALS_FILL; cell.font = TOTALS_FONT
@@ -567,7 +573,7 @@ def export_books_excel(request):
         ws2.column_dimensions[get_column_letter(ci)].width = w
     ws2.freeze_panes = "A2"
 
-    for book in books:
+    for book in qs:
         for copy in book.copies.all():
             ws2.append([copy.copy_id, book.title, book.author, book.isbn,
                 copy.get_status_display(),
