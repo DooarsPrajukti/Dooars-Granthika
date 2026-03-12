@@ -1,4 +1,6 @@
 import threading
+import logging
+import traceback
 
 from django.core.mail import send_mail, EmailMultiAlternatives
 from django.conf import settings
@@ -7,6 +9,8 @@ from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.urls import reverse
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 # ==============================
@@ -387,6 +391,20 @@ def build_html_email(title, body_content):
 # ==============================
 def _send_email_task(subject, plain_message, html_message, recipient):
     """Internal: runs in a background thread — never blocks the request."""
+
+    # ── Debug: log config before attempting send ──────────────────────────
+    logger.info("=== EMAIL DEBUG ===")
+    logger.info("EMAIL_BACKEND    : %s", getattr(settings, "EMAIL_BACKEND", "NOT SET"))
+    logger.info("EMAIL_HOST       : %s", getattr(settings, "EMAIL_HOST", "NOT SET"))
+    logger.info("EMAIL_PORT       : %s", getattr(settings, "EMAIL_PORT", "NOT SET"))
+    logger.info("EMAIL_USE_TLS    : %s", getattr(settings, "EMAIL_USE_TLS", "NOT SET"))
+    logger.info("EMAIL_HOST_USER  : %s", getattr(settings, "EMAIL_HOST_USER", "NOT SET"))
+    logger.info("EMAIL_HOST_PASS  : %s", "SET" if getattr(settings, "EMAIL_HOST_PASSWORD", "") else "NOT SET / EMPTY")
+    logger.info("DEFAULT_FROM_EMAIL: %s", getattr(settings, "DEFAULT_FROM_EMAIL", "NOT SET"))
+    logger.info("TO               : %s", recipient)
+    logger.info("SUBJECT          : %s", subject)
+    logger.info("===================")
+
     try:
         email = EmailMultiAlternatives(
             subject=subject,
@@ -396,16 +414,19 @@ def _send_email_task(subject, plain_message, html_message, recipient):
         )
         email.attach_alternative(html_message, "text/html")
         email.send(fail_silently=False)
+        logger.info("✅ Email sent successfully to %s", recipient)
     except Exception as e:
-        print("Email sending failed:", e)
+        logger.error("❌ Email sending failed to %s | Error: %s", recipient, e)
+        logger.error(traceback.format_exc())
 
 
 def send_basic_email(subject, plain_message, html_message, recipient):
-    """Dispatch email in a daemon thread and return immediately."""
+    """Dispatch email in a background thread and return immediately."""
+    logger.info("send_basic_email() called → recipient=%s subject=%s", recipient, subject)
     thread = threading.Thread(
         target=_send_email_task,
         args=(subject, plain_message, html_message, recipient),
-        daemon=False,
+        daemon=False,   # FIX: daemon=True caused threads to be killed on Render
     )
     thread.start()
     return True
