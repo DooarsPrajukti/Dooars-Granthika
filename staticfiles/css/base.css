@@ -74,8 +74,6 @@ ul {
   top: 0;
   width: 100%;
   z-index: 1000;
-  /* Needed so absolute-positioned mobile nav is relative to the header */
-  position: fixed;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   transition: var(--transition);
 }
@@ -108,43 +106,33 @@ ul {
   color: inherit;
 }
 
-.logo-placeholder {
+/* ── Logo image ─────────────────────────────────────────────────── */
+.logo-img {
+  /* Fixed square size — explicit width AND height so the image
+     always renders at the right dimensions regardless of its
+     natural aspect ratio or any inherited max-width: 100% rule */
   width: 50px;
   height: 50px;
-  background: white;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  color: var(--primary-green);
-  font-size: 1.25rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transition: var(--transition);
-}
-
-.logo-placeholder:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(0, 192, 6, 0.2);
-}
-
-.logo-img {
-  height: 50px;
-  width: auto;
-  max-width: 50px;
+  min-width: 50px;   /* prevent flex from squishing it */
   object-fit: contain;
+
+  /* Visual treatment */
   background-color: white;
   border-radius: 10px;
   padding: 5px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   transition: var(--transition);
+
+  /* Ensure it's always visible */
+  display: block;
 }
 
 .logo-img:hover {
   transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(0, 192, 6, 0.2);
+  box-shadow: 0 6px 16px rgba(0, 192, 6, 0.3);
 }
 
+/* ── Brand text ─────────────────────────────────────────────────── */
 .brand-text {
   display: flex;
   flex-direction: column;
@@ -262,7 +250,6 @@ ul {
   padding: 6px;
   transition: var(--transition);
   flex-shrink: 0;
-  /* Hidden on desktop */
 }
 
 .hamburger:hover {
@@ -668,6 +655,13 @@ ul {
     min-width: 0;
   }
 
+  /* Shrink logo on tablet/mobile */
+  .logo-img {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+  }
+
   /* Hide desktop auth buttons on mobile */
   .auth-buttons {
     display: none;
@@ -759,14 +753,6 @@ ul {
     font-size: 0.65rem;
   }
   
-  .logo-placeholder,
-  .logo-img {
-    width: 38px;
-    height: 38px;
-    max-width: 38px;
-    font-size: 1rem;
-  }
-  
   .page-header {
     padding: 6rem 1rem 3rem;
   }
@@ -805,11 +791,11 @@ ul {
     display: none;
   }
 
-  .logo-img,
-  .logo-placeholder {
+  /* Smallest logo size on phones */
+  .logo-img {
     width: 34px;
     height: 34px;
-    max-width: 34px;
+    min-width: 34px;
   }
 
   .mobile-auth-buttons {
