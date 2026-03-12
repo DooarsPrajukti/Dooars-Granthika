@@ -25,7 +25,7 @@
     </div>
   </div>
   <div class="hero-image">
-    <img src="{% static 'assets\img\advertice.png' %}" alt="Library Management Illustration" />
+    <img src="{% static 'assets/img/advertice.png' %}" alt="Library Management Illustration" />
   </div>
 </section>
 
@@ -86,20 +86,16 @@
 <!-- Stats Section -->
 <section class="stats-section">
   <div class="stat-box" style="--stat-index: 0">
-    <div class="stat-number">10,000+</div>
+    <div class="stat-number">{{ stats.total_books }}</div>
     <div class="stat-label">Books Managed</div>
   </div>
   <div class="stat-box" style="--stat-index: 1">
-    <div class="stat-number">500+</div>
+    <div class="stat-number">{{ stats.total_libraries }}</div>
     <div class="stat-label">Active Libraries</div>
   </div>
   <div class="stat-box" style="--stat-index: 2">
-    <div class="stat-number">50,000+</div>
-    <div class="stat-label">Students Served</div>
-  </div>
-  <div class="stat-box" style="--stat-index: 3">
-    <div class="stat-number">99.9%</div>
-    <div class="stat-label">Uptime</div>
+    <div class="stat-number">{{ stats.total_members }}</div>
+    <div class="stat-label">Members Served</div>
   </div>
 </section>
 
@@ -114,7 +110,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/home.js' %}"></script>
+<script src="{% static 'js/core/home.js' %}"></script>
 {% endblock %}
 
 {% block inline_js %}

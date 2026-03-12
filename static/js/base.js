@@ -113,23 +113,34 @@ function initializeScrollEffects() {
   if (!header) return;
 
   let lastScroll = 0;
+  const SCROLL_DELTA = 10; // minimum px change to trigger hide/show
   
   window.addEventListener('scroll', () => {
     const currentScroll = window.pageYOffset;
 
+    // Add shadow when scrolled
     if (currentScroll > 10) {
       header.classList.add('scrolled');
     } else {
       header.classList.remove('scrolled');
     }
 
-    if (currentScroll > lastScroll && currentScroll > 100) {
-      header.style.transform = 'translateY(-100%)';
+    // Auto-hide only on desktop and only with meaningful scroll distance
+    if (window.innerWidth > 768) {
+      const scrollDiff = currentScroll - lastScroll;
+      if (scrollDiff > SCROLL_DELTA && currentScroll > 150) {
+        // Scrolling down past threshold — hide header
+        header.style.transform = 'translateY(-100%)';
+      } else if (scrollDiff < -SCROLL_DELTA || currentScroll <= 10) {
+        // Scrolling up or near top — show header
+        header.style.transform = 'translateY(0)';
+      }
     } else {
+      // Always show header on mobile
       header.style.transform = 'translateY(0)';
     }
 
-    lastScroll = currentScroll;
+    lastScroll = currentScroll <= 0 ? 0 : currentScroll;
   });
 }
 

@@ -45,19 +45,25 @@ function initializeStatsCounter() {
       if (entry.isIntersecting) {
         const target = entry.target;
         const finalValue = target.textContent.trim();
-        
-        // Check if it's a number or percentage
+
+        // Skip fallback "—" values — nothing to animate
+        if (finalValue === '—' || finalValue === '') {
+          observer.unobserve(target);
+          return;
+        }
+
+        // Detect suffix flags from the live value (e.g. "1,234+" or "99.9%")
         const hasPercent = finalValue.includes('%');
-        const hasPlus = finalValue.includes('+');
-        const hasComma = finalValue.includes(',');
-        
-        // Extract numeric value
-        let numericValue = parseFloat(finalValue.replace(/[^0-9.]/g, ''));
-        
-        if (!isNaN(numericValue)) {
+        const hasPlus    = finalValue.includes('+');
+        const hasComma   = finalValue.includes(',');
+
+        // Strip everything except digits and dots to get the numeric part
+        const numericValue = parseFloat(finalValue.replace(/[^0-9.]/g, ''));
+
+        if (!isNaN(numericValue) && numericValue > 0) {
           animateCounter(target, 0, numericValue, 2000, hasPercent, hasPlus, hasComma);
         }
-        
+
         observer.unobserve(target);
       }
     });
