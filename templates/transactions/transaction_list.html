@@ -227,9 +227,9 @@
               </span>
             </td>
             <td class="td-fine">
-              {% if txn.fine_amount > 0 %}
+              {% if txn.db_total_fine %}
                 <span class="fine-amount {% if not txn.fine_paid %}fine-amount--unpaid{% endif %}">
-                  ₹{{ txn.fine_amount }}
+                  ₹{{ txn.db_total_fine|floatformat:2 }}
                 </span>
               {% else %}
                 <span class="fine-nil">—</span>

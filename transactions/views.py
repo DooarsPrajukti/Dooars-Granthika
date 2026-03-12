@@ -579,6 +579,9 @@ def transaction_list(request):
     library = _get_library_or_404(request)
     _sync_overdue_if_stale(library)
 
+    from django.db.models import OuterRef, Subquery, Sum as _Sum, DecimalField as _DCF
+    from finance.models import Fine as _Fine
+
     qs = Transaction.objects.for_library(library).select_related("member", "book")
 
     q = request.GET.get("q", "").strip()
@@ -600,6 +603,18 @@ def transaction_list(request):
         qs = qs.filter(issue_date__gte=date_from)
     if date_to:
         qs = qs.filter(issue_date__lte=date_to)
+
+    # Annotate each transaction with the real total fine from the Fine table.
+    # This replaces txn.fine_amount (a live property = overdue_days × rate)
+    # which returns 0 for returned/settled books even when fines were charged.
+    fine_subq = (
+        _Fine.objects
+        .filter(transaction=OuterRef("pk"))
+        .values("transaction")
+        .annotate(total=_Sum("amount", output_field=_DCF()))
+        .values("total")
+    )
+    qs = qs.annotate(db_total_fine=Subquery(fine_subq, output_field=_DCF()))
 
     base           = Transaction.objects.for_library(library)
     total_count    = base.count()
