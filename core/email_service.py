@@ -1,3 +1,5 @@
+import threading
+
 from django.core.mail import send_mail, EmailMultiAlternatives
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
@@ -383,7 +385,8 @@ def build_html_email(title, body_content):
 # ==============================
 # Basic Email Sender Function
 # ==============================
-def send_basic_email(subject, plain_message, html_message, recipient):
+def _send_email_task(subject, plain_message, html_message, recipient):
+    """Internal: runs in a background thread — never blocks the request."""
     try:
         email = EmailMultiAlternatives(
             subject=subject,
@@ -393,10 +396,19 @@ def send_basic_email(subject, plain_message, html_message, recipient):
         )
         email.attach_alternative(html_message, "text/html")
         email.send(fail_silently=False)
-        return True
     except Exception as e:
         print("Email sending failed:", e)
-        return False
+
+
+def send_basic_email(subject, plain_message, html_message, recipient):
+    """Dispatch email in a daemon thread and return immediately."""
+    thread = threading.Thread(
+        target=_send_email_task,
+        args=(subject, plain_message, html_message, recipient),
+        daemon=True,
+    )
+    thread.start()
+    return True
 
 
 # ==============================
