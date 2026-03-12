@@ -405,7 +405,7 @@ def send_basic_email(subject, plain_message, html_message, recipient):
     thread = threading.Thread(
         target=_send_email_task,
         args=(subject, plain_message, html_message, recipient),
-        daemon=True,
+        daemon=False,
     )
     thread.start()
     return True
