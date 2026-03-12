@@ -241,14 +241,10 @@ def book_create(request):
             total    = form.cleaned_data.get("total_copies", 1)
 
             with transaction.atomic():
-                book                  = form.save(commit=False)
-                book.owner            = request.user
-                book.category         = form.cleaned_data["category"]
-                # On create: available always equals total input
-                book.total_copies     = total
-                book.available_copies = total
-                # Price — take from form if provided
-                book.price = form.cleaned_data.get("price") or None
+                book                 = form.save(commit=False)
+                book.owner           = request.user
+                book.category        = form.cleaned_data["category"]
+                book.available_copies = total  # always equals total on create
                 img = form.cleaned_data.get("cover_image")
                 if img:
                     book.cover_image     = img["data"]
@@ -294,8 +290,6 @@ def book_update(request, pk):
             with transaction.atomic():
                 updated          = form.save(commit=False)
                 updated.category = form.cleaned_data["category"]
-                # Price — take from form if provided
-                updated.price = form.cleaned_data.get("price") or None
                 img = form.cleaned_data.get("cover_image")
                 if img:
                     updated.cover_image     = img["data"]
@@ -310,14 +304,6 @@ def book_update(request, pk):
                     extra = new_total - current_total
                     create_book_copies(book, lib_code, extra)
                     messages.info(request, f"{extra} new physical {'copy' if extra == 1 else 'copies'} generated.")
-
-                # Keep legacy aggregate columns in sync with actual BookCopy records
-                real_total     = book.copy_count
-                real_available = book.available_copy_count
-                Book.objects.filter(pk=book.pk).update(
-                    total_copies     = real_total,
-                    available_copies = real_available,
-                )
 
             if hasattr(form, "_created_category"):
                 messages.info(request, f'New category "{form._created_category}" was created.')
@@ -731,8 +717,9 @@ def import_books_excel(request):
 def download_import_template(request):
     try:
         import openpyxl
-        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
         from openpyxl.utils import get_column_letter
+        from openpyxl.worksheet.datavalidation import DataValidation
     except ImportError:
         messages.error(request, "openpyxl is not installed.")
         return redirect("books:import_books_excel")
@@ -741,21 +728,88 @@ def download_import_template(request):
     ws = wb.active
     ws.title = "Books"
 
-    headers    = ["Title","Author","ISBN","Category","Publisher","Publication Year","Language","Edition","Total Copies","Available Copies","Shelf Location","Description"]
-    col_widths = [28, 22, 20, 18, 22, 16, 12, 14, 13, 16, 16, 36]
+    # "Available Copies" removed — it always equals Total Copies on import.
+    # "Price (₹)" added.
+    headers    = ["Title","Author","ISBN","Category","Publisher","Publication Year","Language","Edition","Total Copies","Price (₹)","Shelf Location","Description"]
+    col_widths = [28, 22, 20, 18, 22, 16, 12, 14, 13, 12, 16, 36]
 
     HEADER_FILL = PatternFill("solid", fgColor="0A1628")
-    HEADER_FONT = Font(color="FFFFFF", bold=True, size=10)
-    CENTER      = Alignment(horizontal="center", vertical="center")
+    REQ_FILL    = PatternFill("solid", fgColor="1E3A5F")   # brighter for required cols
+    HEADER_FONT = Font(name="Arial", color="FFFFFF", bold=True, size=10)
+    NOTE_FONT   = Font(name="Arial", italic=True, size=8, color="6B7280")
+    NOTE_FILL   = PatternFill("solid", fgColor="F3F4F6")
+    SAMPLE_FONT = Font(name="Arial", size=9, color="374151")
+    SAMPLE_FILL = PatternFill("solid", fgColor="EFF6FF")
+    CENTER      = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    THIN        = Side(style="thin", color="D1D5DB")
+    BORDER      = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+    REQUIRED    = {"Title", "Author", "ISBN", "Total Copies"}
 
+    # ── Row 1: headers ────────────────────────────────────────────────
     ws.append(headers)
-    ws.row_dimensions[1].height = 22
-    for ci, w in enumerate(col_widths, 1):
+    ws.row_dimensions[1].height = 26
+    for ci, (h, w) in enumerate(zip(headers, col_widths), 1):
         cell = ws.cell(row=1, column=ci)
-        cell.fill = HEADER_FILL; cell.font = HEADER_FONT
+        cell.fill      = REQ_FILL if h in REQUIRED else HEADER_FILL
+        cell.font      = HEADER_FONT
         cell.alignment = CENTER
+        cell.border    = BORDER
         ws.column_dimensions[get_column_letter(ci)].width = w
-    ws.freeze_panes = "A2"
+
+    # ── Row 2: hint notes ─────────────────────────────────────────────
+    notes = [
+        "Required", "Required", "Required — unique per library",
+        "e.g. Fiction", "e.g. Penguin", "e.g. 2020",
+        "English / Bengali…", "e.g. 2nd",
+        "Required — sets available copies", "e.g. 250.00",
+        "e.g. A-shelf-3", "Optional summary",
+    ]
+    ws.append(notes)
+    ws.row_dimensions[2].height = 18
+    for ci, note in enumerate(notes, 1):
+        cell = ws.cell(row=2, column=ci)
+        cell.font      = NOTE_FONT
+        cell.fill      = NOTE_FILL
+        cell.alignment = CENTER
+        cell.border    = BORDER
+
+    # ── Row 3: sample data ────────────────────────────────────────────
+    ws.append(["The Alchemist","Paulo Coelho","978-0062315007",
+               "Fiction","HarperCollins",2014,"English","1st",5,350.00,"A-1",
+               "A philosophical novel"])
+    ws.row_dimensions[3].height = 18
+    for ci in range(1, len(headers) + 1):
+        cell = ws.cell(row=3, column=ci)
+        cell.font      = SAMPLE_FONT
+        cell.fill      = SAMPLE_FILL
+        cell.alignment = CENTER
+        cell.border    = BORDER
+
+    # ── Data validation ───────────────────────────────────────────────
+    lang_dv = DataValidation(
+        type="list", formula1='"English,Bengali,Hindi,Sanskrit,Nepali"',
+        allow_blank=True, showDropDown=False,
+    )
+    lang_dv.sqref = "G4:G1000"
+    ws.add_data_validation(lang_dv)
+
+    copies_dv = DataValidation(
+        type="whole", operator="greaterThanOrEqual", formula1="1",
+        allow_blank=True, showErrorMessage=True,
+        errorTitle="Invalid", error="Total Copies must be a whole number ≥ 1.",
+    )
+    copies_dv.sqref = "I4:I1000"
+    ws.add_data_validation(copies_dv)
+
+    price_dv = DataValidation(
+        type="decimal", operator="greaterThanOrEqual", formula1="0",
+        allow_blank=True, showErrorMessage=True,
+        errorTitle="Invalid", error="Price must be a positive number (e.g. 250.00).",
+    )
+    price_dv.sqref = "J4:J1000"
+    ws.add_data_validation(price_dv)
+
+    ws.freeze_panes = "A4"   # keep header + notes rows visible while scrolling
 
     buf = io.BytesIO()
     wb.save(buf); buf.seek(0)
