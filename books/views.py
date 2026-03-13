@@ -297,10 +297,16 @@ def book_update(request, pk):
                 updated.category = form.cleaned_data["category"]
                 updated.price    = form.cleaned_data.get("price") or None
                 img = form.cleaned_data.get("cover_image")
-                if img:
+                if img is False:
+                    # User ticked "Clear" — wipe the stored image
+                    updated.cover_image     = None
+                    updated.cover_mime_type = ""
+                elif img:
+                    # New file uploaded — replace the stored image
                     updated.cover_image     = img["data"]
                     updated.cover_mime_type = img["mime"]
                 else:
+                    # No change — preserve the existing image
                     updated.cover_image     = book.cover_image
                     updated.cover_mime_type = book.cover_mime_type
                 updated.save()

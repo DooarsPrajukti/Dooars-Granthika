@@ -266,21 +266,133 @@
 }
 
 
-/* ── Cover image preview thumbnail ── */
-.cover-preview-wrap {
-  margin-top: 8px;
+/* ── Cover upload panel ── */
+.cover-upload-panel {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  padding: 16px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+}
+
+.cover-preview-pane {
+  position: relative;
+  width: 120px;
+  min-width: 120px;
+  height: 160px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 2px dashed var(--border-light);
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color .2s;
+  flex-shrink: 0;
 }
 
-.cover-preview-thumb {
-  height: 56px;
-  border-radius: 6px;
-  border: 1px solid var(--border-light);
+.cover-preview-pane:hover {
+  border-color: var(--ink-accent);
 }
 
-.cover-preview-label {
+.cover-preview-pane img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 8px;
+}
+
+.cover-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: .78rem;
+  text-align: center;
+  padding: 8px;
+  pointer-events: none;
+}
+
+.cover-placeholder i {
+  font-size: 2rem;
+  opacity: .45;
+}
+
+.cover-preview-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 22, 40, .55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #fff;
   font-size: .75rem;
-  color: var(--ink-accent);
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity .2s;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.cover-preview-pane:hover .cover-preview-overlay {
+  opacity: 1;
+}
+
+.cover-upload-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  padding-top: 4px;
+}
+
+.cover-upload-btn {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+}
+
+.cover-filename-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .8rem;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 6px 10px;
+  max-width: 320px;
+}
+
+.cover-filename-wrap span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cover-clear-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0 2px;
+  font-size: .8rem;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color .15s;
+}
+
+.cover-clear-btn:hover {
+  color: #ef4444;
 }

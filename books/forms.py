@@ -78,8 +78,12 @@ class BookForm(forms.ModelForm):
         """Read uploaded file into bytes; validate type & size."""
         upload = self.cleaned_data.get("cover_image")
 
+        # ClearableFileInput sends False when the user ticks "Clear"
+        if upload is False:
+            return False   # sentinel: caller will wipe the stored image
+
         if not upload:
-            # No new file — keep existing blob if editing
+            # No new file uploaded and no clear requested — keep existing
             return None
 
         # Size check

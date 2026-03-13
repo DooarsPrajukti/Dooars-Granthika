@@ -1,241 +1,268 @@
-/* ============================================================
-   DOOARS GRANTHIKA — Books Module JS
-   ============================================================ */
+/* =============================================================
+   book_form.js  —  Dooars Granthika  |  Add / Edit Book form
+   Place at:  static/js/books/book_form.js
+
+   Depends on:  books.js  (loaded before this file)
+   Django context values are injected via data-* attributes on
+   <div id="bookFormMeta"> in the template.
+   ============================================================= */
 
 "use strict";
 
-/* ── Animated Counter ── */
-function animateCounter(el, target, duration) {
-  duration = duration || 1400;
-  var start = null;
-  var step = function(ts) {
-    if (!start) start = ts;
-    var p = Math.min((ts - start) / duration, 1);
-    el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
-    if (p < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-}
-function initCounters() {
-  var els = document.querySelectorAll("[data-count]");
-  if (!els.length) return;
-  var io = new IntersectionObserver(function(entries) {
-    entries.forEach(function(e) {
-      if (e.isIntersecting) {
-        animateCounter(e.target, parseInt(e.target.dataset.count, 10));
-        io.unobserve(e.target);
+(function () {
+
+  /* ── Read Django-rendered context from the DOM ── */
+  const meta       = document.getElementById("bookFormMeta");
+  const importStep = meta ? meta.dataset.importStep : "";   // "preview" | ""
+
+
+  /* ─────────────────────────────────────────────────────────
+     1.  TAB SWITCHING  (Manual Entry  /  Import from Excel)
+  ───────────────────────────────────────────────────────── */
+
+  const tabBtns   = document.querySelectorAll(".form-tab-btn");
+  const tabPanels = document.querySelectorAll(".tab-panel");
+
+  function activateTab(name) {
+    tabBtns.forEach(function (b) {
+      b.classList.toggle("active", b.dataset.tab === name);
+    });
+    tabPanels.forEach(function (p) {
+      p.classList.toggle("active", p.id === "tab-" + name);
+    });
+  }
+
+  tabBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      activateTab(btn.dataset.tab);
+    });
+  });
+
+  /* Auto-open the import tab when the server returned a preview */
+  if (importStep === "preview") {
+    activateTab("import");
+  }
+
+
+  /* ─────────────────────────────────────────────────────────
+     2.  MANUAL TAB — new-category live hint
+  ───────────────────────────────────────────────────────── */
+
+  var catDrop = document.getElementById("id_category");
+  var newCat  = document.getElementById("id_new_category");
+  var hint    = document.getElementById("newCatHint");
+
+  if (catDrop && newCat && hint) {
+
+    catDrop.addEventListener("change", function () {
+      if (catDrop.value) {
+        newCat.value = "";
+        hideHint();
       }
     });
-  }, { threshold: 0.4 });
-  els.forEach(function(el) { io.observe(el); });
-}
 
-/* ── Progress Bars ── */
-function initProgressBars() {
-  var segs = document.querySelectorAll(".progress-segment[data-width]");
-  if (!segs.length) return;
-  var io = new IntersectionObserver(function(entries) {
-    entries.forEach(function(e) {
-      if (e.isIntersecting) {
-        e.target.style.width = e.target.dataset.width + "%";
-        io.unobserve(e.target);
+    newCat.addEventListener("input", function () {
+      var v = this.value.trim();
+      if (v) {
+        catDrop.value = "";
+        checkDuplicate(v);
+      } else {
+        hideHint();
       }
     });
-  }, { threshold: 0.3 });
-  segs.forEach(function(s) { s.style.width = "0%"; io.observe(s); });
-}
 
-/* ── Server-side Filters — auto-submit on dropdown change ── */
-function initFilters() {
-  var form = document.getElementById("filtersForm");
-  if (!form) return;
-
-  /* Auto-submit when category or stock dropdowns change */
-  ["categoryFilter", "stockFilter"].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) {
-      el.addEventListener("change", function() {
-        form.submit();
-      });
+    function existingCatNames() {
+      return Array.from(catDrop.options)
+        .filter(function (o) { return o.value; })
+        .map(function (o) { return o.text.trim().toLowerCase(); });
     }
-  });
 
-  /* Search: submit on Enter (default form behaviour handles this,
-     but also debounce-submit after 600 ms of inactivity for UX) */
-  var searchInp = document.getElementById("bookSearch");
-  if (searchInp) {
-    var debounceTimer;
-    searchInp.addEventListener("input", function() {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(function() {
-        form.submit();
-      }, 600);
-    });
+    function checkDuplicate(v) {
+      if (existingCatNames().includes(v.toLowerCase())) {
+        showHint("↩ Will reuse existing category", "#1a6fd4", "#e0edff");
+      } else {
+        showHint("✦ New category will be created", "#059669", "#dcfce7");
+      }
+    }
+
+    function showHint(text, color, bg) {
+      hint.textContent        = text;
+      hint.style.color        = color;
+      hint.style.background   = bg;
+      hint.style.display      = "inline-block";
+    }
+
+    function hideHint() {
+      hint.style.display = "none";
+    }
   }
-}
 
-/* ── Table Sort ── */
-function initTableSort() {
-  var ths = document.querySelectorAll(".books-table thead th[data-sort]");
-  ths.forEach(function(th) {
-    th.addEventListener("click", function() {
-      ths.forEach(function(h) { h.classList.remove("sorted"); });
-      th.classList.add("sorted");
-      var ic = th.querySelector(".sort-icon");
-      if (ic) ic.textContent = ic.textContent === "▲" ? "▼" : "▲";
-    });
-  });
-}
 
-/* ── Row Hover ── */
-function initRowHover() {
-  document.querySelectorAll(".books-table tbody tr").forEach(function(r) {
-    r.style.transition = "background .12s, transform .1s";
-    r.addEventListener("mouseenter", function() { r.style.transform = "translateX(2px)"; });
-    r.addEventListener("mouseleave", function() { r.style.transform = ""; });
-  });
-}
+  /* ─────────────────────────────────────────────────────────
+     3.  COVER IMAGE — live preview
+  ───────────────────────────────────────────────────────── */
 
-/* ── Staggered Entrance ── */
-function initStagger() {
-  document.querySelectorAll(".ani").forEach(function(c, i) {
-    c.style.opacity = "0";
-    c.style.transform = "translateY(14px)";
-    c.style.transition = "opacity .34s ease " + (i * 0.05) + "s, transform .34s ease " + (i * 0.05) + "s";
-    requestAnimationFrame(function() {
-      c.style.opacity = "1";
-      c.style.transform = "";
-    });
-  });
-}
+  var coverInput       = document.getElementById("id_cover_image");
+  var coverPreviewImg  = document.getElementById("coverPreviewImg");
+  var coverPlaceholder = document.getElementById("coverPlaceholder");
+  var coverFilenameWrap = document.getElementById("coverFilenameWrap");
+  var coverFilenameTxt  = document.getElementById("coverFilenameTxt");
+  var coverClearBtn     = document.getElementById("coverClearBtn");
+  var coverOverlay      = coverPreviewImg
+                          ? coverPreviewImg.parentElement.querySelector(".cover-preview-overlay")
+                          : null;
 
-/* ── Form Validation ── */
-function initFormValidation() {
-  var form = document.getElementById("bookForm");
-  if (!form) return;
+  function showCoverPreview(file) {
+    if (!file || !coverPreviewImg) return;
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      coverPreviewImg.src          = e.target.result;
+      coverPreviewImg.style.display = "block";
+      if (coverPlaceholder) coverPlaceholder.style.display = "none";
+      if (coverOverlay)     coverOverlay.style.display     = "";
+    };
+    reader.readAsDataURL(file);
+  }
 
-  var totalEl     = document.getElementById("id_total_copies");
-  var availEl     = document.getElementById("id_available_copies");
-  var issuedHint  = document.getElementById("issuedCopiesHint");
-  var issuedCount = document.getElementById("issuedCopiesCount");
-
-  function syncCopies() {
-    if (!totalEl || !availEl) return;
-
-    var total = parseInt(totalEl.value, 10);
-    var avail = parseInt(availEl.value, 10);
-
-    if (!isNaN(total) && total >= 0) {
-      availEl.max = total;
+  function resetCoverPreview() {
+    if (!coverPreviewImg) return;
+    /* Restore to whatever the server originally rendered */
+    var origSrc = coverPreviewImg.dataset.origSrc || "";
+    if (origSrc) {
+      coverPreviewImg.src           = origSrc;
+      coverPreviewImg.style.display = "block";
+      if (coverPlaceholder) coverPlaceholder.style.display = "none";
     } else {
-      availEl.removeAttribute("max");
+      coverPreviewImg.style.display = "none";
+      if (coverPlaceholder) coverPlaceholder.style.display = "";
+      if (coverOverlay)     coverOverlay.style.display     = "none";
     }
-
-    if (!isNaN(total) && !isNaN(avail) && total >= 0 && avail >= 0) {
-      var issued = Math.max(0, total - avail);
-      if (issuedCount) issuedCount.textContent = issued;
-      if (issuedHint)  issuedHint.style.display = issued > 0 ? "block" : "none";
-    } else {
-      if (issuedHint) issuedHint.style.display = "none";
-    }
-
-    if (availEl.classList.contains("is-invalid")) validateCopies();
+    if (coverFilenameWrap) coverFilenameWrap.style.display = "none";
+    if (coverFilenameTxt)  coverFilenameTxt.textContent    = "";
   }
 
-  function validateCopies() {
-    if (!totalEl || !availEl) return true;
-    var total = parseInt(totalEl.value, 10);
-    var avail = parseInt(availEl.value, 10);
-    var ok = !isNaN(avail) && avail >= 0 && (isNaN(total) || avail <= total);
-    availEl.classList.toggle("is-invalid", !ok);
-    availEl.classList.toggle("is-valid",    ok);
-    return ok;
+  /* Stash the original src so we can restore on cancel */
+  if (coverPreviewImg && coverPreviewImg.src) {
+    coverPreviewImg.dataset.origSrc = coverPreviewImg.src;
   }
 
-  if (totalEl) {
-    totalEl.addEventListener("input", syncCopies);
-    totalEl.addEventListener("change", syncCopies);
+  if (coverInput) {
+    coverInput.addEventListener("change", function () {
+      if (this.files && this.files[0]) {
+        var file = this.files[0];
+        showCoverPreview(file);
+        if (coverFilenameTxt)  coverFilenameTxt.textContent    = file.name;
+        if (coverFilenameWrap) coverFilenameWrap.style.display = "flex";
+      }
+    });
   }
-  if (availEl) {
-    availEl.addEventListener("input", syncCopies);
-    availEl.addEventListener("change", syncCopies);
-    availEl.addEventListener("blur", validateCopies);
+
+  if (coverClearBtn) {
+    coverClearBtn.addEventListener("click", function () {
+      if (coverInput) {
+        /* Reset the file input */
+        coverInput.value = "";
+        /* Dispatch change so any other listeners know */
+        coverInput.dispatchEvent(new Event("change"));
+      }
+      resetCoverPreview();
+    });
   }
 
-  syncCopies();
+  /* Make the whole preview pane clickable to trigger file picker */
+  var coverPane = document.getElementById("coverPreviewPane");
+  if (coverPane && coverInput) {
+    coverPane.style.cursor = "pointer";
+    coverPane.addEventListener("click", function (e) {
+      if (e.target !== coverInput && !coverClearBtn.contains(e.target)) {
+        coverInput.click();
+      }
+    });
+  }
 
-  var fields = form.querySelectorAll("[required]");
-  fields.forEach(function(f) {
-    f.addEventListener("blur",  function() { validate(f); });
-    f.addEventListener("input", function() { if (f.classList.contains("is-invalid")) validate(f); });
-  });
 
-  form.addEventListener("submit", function(e) {
-    var ok = true;
-    fields.forEach(function(f) { if (!validate(f)) ok = false; });
-    if (!validateCopies()) ok = false;
+  /* ─────────────────────────────────────────────────────────
+     4.  IMPORT TAB — drag-and-drop + file name display
+  ───────────────────────────────────────────────────────── */
 
-    if (!ok) {
+  var uploadZone  = document.getElementById("uploadZone");
+  var excelInput  = document.getElementById("excelFileInput");
+  var filenameWrap = document.getElementById("uploadFilename");
+  var filenameTxt  = document.getElementById("uploadFilenameTxt");
+  var previewBtn   = document.getElementById("uploadPreviewBtn");
+
+  function setSelectedFile(file) {
+    if (filenameTxt)  filenameTxt.textContent    = file.name;
+    if (filenameWrap) filenameWrap.style.display = "block";
+    if (previewBtn)   previewBtn.disabled        = false;
+  }
+
+  if (excelInput) {
+    excelInput.addEventListener("change", function () {
+      if (this.files.length) setSelectedFile(this.files[0]);
+    });
+  }
+
+  if (uploadZone) {
+    uploadZone.addEventListener("dragover", function (e) {
       e.preventDefault();
-      var first = form.querySelector(".is-invalid");
-      if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
+      uploadZone.classList.add("drag-over");
+    });
 
-    var btn = form.querySelector("[type=submit]");
-    if (btn) {
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
-      btn.disabled  = true;
-    }
-  });
-}
+    uploadZone.addEventListener("dragleave", function () {
+      uploadZone.classList.remove("drag-over");
+    });
 
-function validate(f) {
-  var v  = f.value.trim();
-  var ok = v.length > 0;
-  if (f.type === "number" && ok) {
-    var num = parseFloat(v);
-    ok = !isNaN(num) && num >= 0;
-    if (ok && f.max !== "" && !isNaN(parseFloat(f.max))) {
-      ok = num <= parseFloat(f.max);
-    }
+    uploadZone.addEventListener("drop", function (e) {
+      e.preventDefault();
+      uploadZone.classList.remove("drag-over");
+      if (e.dataTransfer.files.length) {
+        excelInput.files = e.dataTransfer.files;
+        setSelectedFile(e.dataTransfer.files[0]);
+      }
+    });
   }
-  f.classList.toggle("is-invalid", !ok);
-  f.classList.toggle("is-valid",   ok);
-  return ok;
-}
 
-/* ── Delete Animation ── */
-function initDeleteAnim() {
-  var c = document.querySelector(".delete-card");
-  if (!c) return;
-  c.style.opacity = "0";
-  c.style.transform = "scale(.96) translateY(16px)";
-  c.style.transition = "opacity .4s, transform .4s";
-  requestAnimationFrame(function() { c.style.opacity = "1"; c.style.transform = ""; });
-}
 
-/* ── Refresh Button ── */
-function initRefreshBtn() {
-  var btn = document.getElementById("refreshBtn");
-  if (!btn) return;
-  btn.addEventListener("click", function() {
-    var ic = btn.querySelector("i");
-    ic.style.transition = "transform .6s ease";
-    ic.style.transform = "rotate(360deg)";
-    setTimeout(function() { ic.style.transform = ""; ic.style.transition = ""; }, 650);
-    setTimeout(function() { window.location.reload(); }, 300);
-  });
-}
+  /* ─────────────────────────────────────────────────────────
+     5.  IMPORT PREVIEW — select-all checkbox sync
+  ───────────────────────────────────────────────────────── */
 
-document.addEventListener("DOMContentLoaded", function() {
-  initCounters();
-  initProgressBars();
-  initFilters();
-  initTableSort();
-  initRowHover();
-  initStagger();
-  initFormValidation();
-  initDeleteAnim();
-  initRefreshBtn();
-});
+  var selectAllChk = document.getElementById("selectAllChk");
+  var rowChks      = Array.from(document.querySelectorAll(".row-chk"));
+
+  function syncSelectAll() {
+    if (!selectAllChk || !rowChks.length) return;
+    var checkedCount = rowChks.filter(function (c) { return c.checked; }).length;
+    selectAllChk.checked       = checkedCount === rowChks.length;
+    selectAllChk.indeterminate = checkedCount > 0 && checkedCount < rowChks.length;
+  }
+
+  if (selectAllChk && rowChks.length) {
+    syncSelectAll();
+
+    selectAllChk.addEventListener("change", function () {
+      rowChks.forEach(function (c) { c.checked = selectAllChk.checked; });
+    });
+
+    rowChks.forEach(function (c) {
+      c.addEventListener("change", syncSelectAll);
+    });
+  }
+
+
+  /* ─────────────────────────────────────────────────────────
+     6.  IMPORT CONFIRM — prevent double-submit
+  ───────────────────────────────────────────────────────── */
+
+  var confirmForm = document.getElementById("importConfirmForm");
+  var confirmBtn  = document.getElementById("confirmImportBtn");
+
+  if (confirmForm && confirmBtn) {
+    confirmForm.addEventListener("submit", function () {
+      confirmBtn.disabled   = true;
+      confirmBtn.innerHTML  = '<i class="fas fa-spinner fa-spin"></i> Importing…';
+    });
+  }
+
+})();
