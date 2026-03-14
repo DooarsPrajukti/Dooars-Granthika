@@ -270,7 +270,7 @@ class Member(models.Model):
     # MySQL stores this as LONGBLOB (up to 4 GB — more than enough for photos).
     # In Python, reading this field returns a `memoryview`; cast with bytes().
     # Serve via the `member_photo` view: {% url 'members:member_photo' member.pk %}
-    photo           = models.BinaryField(null=True, blank=True)
+    photo           = models.BinaryField(null=True, blank=True, editable=True)
     photo_mime_type = models.CharField(
         max_length=50,
         blank=True,

@@ -58,7 +58,7 @@
         <div>
           <div class="book-cover-placeholder">
             {% if book.cover_image %}
-              <img src="{% url 'books:book_cover' book.pk %}" alt="{{ book.title }}">
+              <img src="{% url 'books:book_cover' book.pk %}?v={{ book.updated_at.timestamp|floatformat:0 }}" alt="{{ book.title }}">
             {% else %}
               <i class="fas fa-book-open"></i>
               <span>No Cover</span>

@@ -473,6 +473,12 @@ def member_photo(request, pk):
     """
     Serve a member photo stored as BinaryField (LONGBLOB in MySQL).
     Must cast memoryview to bytes and check length — not truthiness.
+
+    Cache strategy:
+    • ETag is built from member.updated_at so the browser revalidates
+      automatically after any edit (including a photo change).
+    • max-age=0 + must-revalidate means the browser always checks the
+      ETag before using its cached copy — no stale photo after an edit.
     """
     member = get_object_or_404(Member, pk=pk, owner=request.user)
 
@@ -484,9 +490,17 @@ def member_photo(request, pk):
     if not photo_bytes:
         return HttpResponse(status=404)
 
+    # Build a strong ETag from the member's last-update timestamp
+    etag = f'"{pk}-{int(member.updated_at.timestamp())}"'
+
+    # Respond 304 Not Modified if the browser's cached copy is still fresh
+    if request.META.get("HTTP_IF_NONE_MATCH") == etag:
+        return HttpResponse(status=304)
+
     mime = (member.photo_mime_type or "image/jpeg").strip() or "image/jpeg"
     response = HttpResponse(photo_bytes, content_type=mime)
-    response["Cache-Control"] = "private, max-age=3600"
+    response["ETag"] = etag
+    response["Cache-Control"] = "private, max-age=0, must-revalidate"
     return response
 
 

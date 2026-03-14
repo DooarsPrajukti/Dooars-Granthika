@@ -78,9 +78,16 @@ def _compress_photo(upload_file, max_size=(400, 400), quality=85):
 
     Falls back to raw bytes + original content_type if Pillow is not installed.
     """
+    # Always seek to the start — Django may have read the file during validation
+    try:
+        upload_file.seek(0)
+    except Exception:
+        pass
+
     try:
         from PIL import Image
         img = Image.open(upload_file)
+        img.load()  # Force full read before the file handle is used elsewhere
         # Convert palette / RGBA images to RGB so we can save as JPEG
         if img.mode not in ("RGB", "L"):
             img = img.convert("RGB")
@@ -247,6 +254,11 @@ class MemberForm(forms.ModelForm):
             valid_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
             if hasattr(photo, "content_type") and photo.content_type not in valid_types:
                 raise ValidationError("Only JPG, PNG, GIF or WebP images are allowed.")
+            # Rewind so save_with_create / _compress_photo can read from the start
+            try:
+                photo.seek(0)
+            except Exception:
+                pass
         return photo
 
     def clean(self):
@@ -336,18 +348,28 @@ class MemberForm(forms.ModelForm):
         member.semester = semester
 
         # ── Handle photo blob ─────────────────────────────────────────────────
+        photo_changed = False
         if self.cleaned_data.get("clear_photo"):
             member.photo = None
             member.photo_mime_type = ""
+            photo_changed = True
         else:
             photo_file = self.cleaned_data.get("photo_upload")
             if photo_file:
                 photo_bytes, mime = _compress_photo(photo_file)
                 member.photo = photo_bytes
                 member.photo_mime_type = mime
+                photo_changed = True
 
         if commit:
             member.save()
+            # BinaryField has editable=False by default — Django's UPDATE
+            # omits it. Force-write photo columns whenever they changed.
+            if photo_changed and member.pk:
+                Member.objects.filter(pk=member.pk).update(
+                    photo=member.photo,
+                    photo_mime_type=member.photo_mime_type,
+                )
         return member
 
 
@@ -654,6 +676,11 @@ class _BaseMemberForm(forms.ModelForm):
             valid_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
             if hasattr(photo, "content_type") and photo.content_type not in valid_types:
                 raise ValidationError("Only JPG, PNG, GIF or WebP images are allowed.")
+            # Rewind so save_with_create / _compress_photo can read from the start
+            try:
+                photo.seek(0)
+            except Exception:
+                pass
         return photo
 
     def clean(self):
@@ -759,20 +786,30 @@ class _BaseMemberForm(forms.ModelForm):
             member.semester = None
 
         # ── Photo blob ────────────────────────────────────────────────────────
+        photo_changed = False
         if self.cleaned_data.get("clear_photo"):
             # User ticked "Remove existing photo"
             member.photo = None
             member.photo_mime_type = ""
+            photo_changed = True
         else:
             photo_file = self.cleaned_data.get("photo_upload")
             if photo_file:
                 photo_bytes, mime = _compress_photo(photo_file)
                 member.photo = photo_bytes
                 member.photo_mime_type = mime
+                photo_changed = True
             # If no new file uploaded, leave existing photo untouched
 
         if commit:
             member.save()
+            # BinaryField has editable=False by default, so Django's UPDATE
+            # query omits it.  Force-write photo columns whenever they changed.
+            if photo_changed and member.pk:
+                Member.objects.filter(pk=member.pk).update(
+                    photo=member.photo,
+                    photo_mime_type=member.photo_mime_type,
+                )
         return member
 
 

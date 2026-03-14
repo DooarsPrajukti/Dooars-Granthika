@@ -409,7 +409,7 @@
 
       {% if member.photo %}
       <div style="margin-bottom:1rem;display:flex;align-items:center;gap:1rem;">
-        <img src="{% url 'members:member_photo' member.id %}" alt="{{ member.full_name }}"
+        <img src="{% url 'members:member_photo' member.id %}?v={{ member.updated_at.timestamp|floatformat:0 }}" alt="{{ member.full_name }}"
              class="current-photo-preview"
              style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:2px solid #e5e7eb;" />
         <label style="display:flex;align-items:center;gap:.5rem;font-size:.875rem;color:#374151;cursor:pointer;">

@@ -820,17 +820,24 @@ def finance_reports(request):
 
     # ── Period filter ─────────────────────────────────────────────────────────
     period = request.GET.get("period", "this_month")
-    today  = date.today()
-
+    import datetime
+    from calendar import month_name
+    today  = datetime.date.today()
+    print(today)
     if period == "last_month":
         first_day = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
         last_day  = today.replace(day=1) - timedelta(days=1)
+        period_label = f"{month_name[first_day.month]} {first_day.year}"
+
     elif period == "this_year":
         first_day = today.replace(month=1, day=1)
         last_day  = today
-    else:  # this_month (default)
+        period_label = f"{today.year}"
+
+    else:  # this_month
         first_day = today.replace(day=1)
         last_day  = today
+        period_label = f"{month_name[today.month]} {today.year}"
 
     payments = Payment.objects.filter(
         library  = library,
@@ -879,11 +886,12 @@ def finance_reports(request):
         response["Content-Disposition"] = 'attachment; filename="finance_overview.csv"'
         writer = csv.writer(response)
         writer.writerow(["Period", "Total Income", "Total Expenses", "Net Surplus", "Pending Fines"])
+        print(period)
         writer.writerow([period, total_income, total_expenses, net_surplus, pending_fines])
         return response
 
     return render(request, "finance/finance_reports.html", {
-        "period":         period,
+        "period":         period_label,
         "total_income":   total_income,
         "total_expenses": total_expenses,
         "net_surplus":    net_surplus,

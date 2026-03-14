@@ -41,3 +41,9 @@
 .role-option[data-role="teacher"].selected i,.role-option[data-role="teacher"]:hover i{color:#8b5cf6}
 .role-option[data-role="general"].selected,.role-option[data-role="general"]:hover{border-color:#6b7280;background:#f9fafb}
 .role-option[data-role="general"].selected i,.role-option[data-role="general"]:hover i{color:#6b7280}
+
+/* ── Drop zone: the entire zone is the click target ── */
+.photo-upload-zone { cursor: pointer; }
+.photo-upload-text span { pointer-events: none; }
+.photo-upload-text small { pointer-events: none; }
+.photo-upload-icon { pointer-events: none; }

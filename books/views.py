@@ -297,31 +297,39 @@ def book_update(request, pk):
                 updated.category = form.cleaned_data["category"]
                 updated.price    = form.cleaned_data.get("price") or None
                 img = form.cleaned_data.get("cover_image")
+                cover_changed = False
                 if img is False:
                     # User ticked "Clear" — wipe the stored image
                     updated.cover_image     = None
                     updated.cover_mime_type = ""
+                    cover_changed = True
                 elif img:
                     # New file uploaded — replace the stored image
                     updated.cover_image     = img["data"]
                     updated.cover_mime_type = img["mime"]
+                    cover_changed = True
                 else:
                     # No change — preserve the existing image
                     updated.cover_image     = book.cover_image
                     updated.cover_mime_type = book.cover_mime_type
                 updated.save()
 
+                # BinaryField is editable=False by default — Django's UPDATE
+                # query omits it. Force-write cover columns whenever they changed.
+                update_kwargs = {
+                    "total_copies":     book.copy_count,
+                    "available_copies": book.available_copy_count,
+                }
+                if cover_changed:
+                    update_kwargs["cover_image"]     = updated.cover_image
+                    update_kwargs["cover_mime_type"] = updated.cover_mime_type
+                Book.objects.filter(pk=book.pk).update(**update_kwargs)
+
                 current_total = book.copy_count
                 if new_total > current_total:
                     extra = new_total - current_total
                     create_book_copies(book, lib_code, extra)
                     messages.info(request, f"{extra} new physical {'copy' if extra == 1 else 'copies'} generated.")
-
-                # Sync legacy aggregate columns with real BookCopy counts
-                Book.objects.filter(pk=book.pk).update(
-                    total_copies     = book.copy_count,
-                    available_copies = book.available_copy_count,
-                )
 
             if hasattr(form, "_created_category"):
                 messages.info(request, f'New category "{form._created_category}" was created.')
@@ -623,9 +631,16 @@ def book_cover(request, pk):
     image_bytes = bytes(raw)
     if not image_bytes:
         raise Http404("Cover image is empty.")
+
+    # ETag from updated_at — changes whenever the book record is saved
+    etag = f'"{pk}-{int(book.updated_at.timestamp())}"'
+    if request.META.get("HTTP_IF_NONE_MATCH") == etag:
+        return HttpResponse(status=304)
+
     mime = (book.cover_mime_type or "image/jpeg").strip() or "image/jpeg"
     response = HttpResponse(image_bytes, content_type=mime)
-    response["Cache-Control"] = "private, max-age=3600"
+    response["ETag"] = etag
+    response["Cache-Control"] = "private, max-age=0, must-revalidate"
     return response
 
 

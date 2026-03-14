@@ -168,8 +168,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Photo drag-and-drop + preview ─────────────────────────────────────────
 
-  const dropZone   = $('photoDropZone');
-  const fileInput  = $('memberPhoto');
+  const dropZone  = $('photoDropZone');
+  const fileInput = $('memberPhoto');
+
+  // The side preview box in the HTML is kept for layout but we drive it ourselves
   const previewBox = $('photoPreviewBox');
   const previewImg = $('photoPreviewImg');
   const removeBtn  = $('photoRemoveBtn');
@@ -184,22 +186,79 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('Image must be 5 MB or less.', 'error');
       return;
     }
-    const reader  = new FileReader();
+
+    const reader = new FileReader();
     reader.onload = (e) => {
-      if (previewImg) previewImg.src = e.target.result;
-      if (previewBox) { previewBox.style.display = 'block'; previewBox.classList.add('active'); }
+      // ── Show the side preview box ──────────────────────────────
+      if (previewImg) {
+        previewImg.src = e.target.result;
+        previewImg.style.cssText =
+          'width:100%;height:100%;object-fit:cover;display:block;border-radius:8px;';
+      }
+      if (previewBox) {
+        previewBox.style.cssText =
+          'display:flex;position:relative;width:130px;height:130px;' +
+          'border-radius:10px;overflow:hidden;border:2px solid #e5e7eb;' +
+          'box-shadow:0 2px 8px rgba(0,0,0,.08);flex-shrink:0;';
+      }
+
+      // ── Swap drop-zone to show filename + "change" prompt ─────
+      if (dropZone) {
+        dropZone.style.borderColor  = '#10b981';
+        dropZone.style.background   = '#f0fdf4';
+        const icon = dropZone.querySelector('.photo-upload-icon i');
+        if (icon) { icon.className = 'fas fa-check-circle'; icon.style.color = '#10b981'; }
+        const textSpan = dropZone.querySelector('.photo-upload-text span');
+        if (textSpan) {
+          textSpan.textContent = file.name;
+          textSpan.style.cssText = 'font-size:.85rem;color:#374151;word-break:break-all;';
+        }
+        const small = dropZone.querySelector('.photo-upload-text small');
+        if (small) small.textContent = 'Click or drag to replace';
+      }
     };
     reader.readAsDataURL(file);
   }
 
-  fileInput?.addEventListener('change', () => showPhotoPreview(fileInput.files[0]));
+  function hidePhotoPreview() {
+    if (fileInput)  fileInput.value  = '';
+    if (previewImg) previewImg.src   = '';
+    if (previewBox) previewBox.style.cssText = 'display:none;';
 
-  if (dropZone) {
-    dropZone.addEventListener('dragover',  (e) => { e.preventDefault(); dropZone.style.borderColor = '#3b82f6'; });
-    dropZone.addEventListener('dragleave', ()  => { dropZone.style.borderColor = ''; });
-    dropZone.addEventListener('drop',      (e) => {
-      e.preventDefault();
+    // Reset drop zone appearance
+    if (dropZone) {
       dropZone.style.borderColor = '';
+      dropZone.style.background  = '';
+      const icon = dropZone.querySelector('.photo-upload-icon i');
+      if (icon) { icon.className = 'fas fa-cloud-upload-alt'; icon.style.color = ''; }
+      const textSpan = dropZone.querySelector('.photo-upload-text span');
+      if (textSpan) {
+        textSpan.style.cssText = '';
+        textSpan.textContent   = 'Drag & drop or browse';
+      }
+      const small = dropZone.querySelector('.photo-upload-text small');
+      if (small) small.textContent = 'JPG, PNG or GIF · Max 5 MB';
+    }
+  }
+
+  // Wire file input change (covers both click-to-browse and drop)
+  fileInput?.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (file) showPhotoPreview(file);
+  });
+
+  // Drag-and-drop on the zone
+  if (dropZone) {
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('drag-over');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
       const file = e.dataTransfer.files[0];
       if (file && fileInput) {
         try { const dt = new DataTransfer(); dt.items.add(file); fileInput.files = dt.files; } catch (_) {}
@@ -208,11 +267,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  removeBtn?.addEventListener('click', () => {
-    if (fileInput)  fileInput.value   = '';
-    if (previewImg) previewImg.src    = '';
-    if (previewBox) { previewBox.style.display = 'none'; previewBox.classList.remove('active'); }
-  });
+  // Remove button (on the side preview box)
+  removeBtn?.addEventListener('click', hidePhotoPreview);
 
 
   // ── Submit spinner ────────────────────────────────────────────────────────

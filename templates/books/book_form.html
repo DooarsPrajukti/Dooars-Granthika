@@ -249,7 +249,7 @@
                 <div class="cover-preview-pane" id="coverPreviewPane">
                   {% if form.instance.cover_image %}
                     <img id="coverPreviewImg"
-                         src="{% url 'books:book_cover' form.instance.pk %}"
+                         src="{% url 'books:book_cover' form.instance.pk %}?v={{ form.instance.updated_at.timestamp|floatformat:0 }}"
                          alt="Book cover">
                     <div class="cover-preview-overlay">
                       <i class="fas fa-camera"></i> Change cover

@@ -117,7 +117,7 @@ class Book(models.Model):
     )
 
     # ── Cover image stored as binary blob ─────────────────────────────
-    cover_image     = models.BinaryField(null=True, blank=True)
+    cover_image     = models.BinaryField(null=True, blank=True, editable=True)
     cover_mime_type = models.CharField(
         max_length=50, blank=True, default="image/jpeg",
         help_text="MIME type of the stored cover image.",

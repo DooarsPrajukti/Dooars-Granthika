@@ -167,23 +167,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Photo change preview ──────────────────────────────────────────────────
 
-  const photoInput = $('memberPhoto');
-  const previewDiv = $('photoPreview');
+  const photoInput    = $('memberPhoto');
+  const previewDiv    = $('photoPreview');
+  const fileInputWrap = photoInput?.closest('.file-input-wrapper');
 
   photoInput?.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { showToast('Please select a valid image (JPG, PNG, GIF).', 'error'); return; }
-    if (file.size > 5 * 1024 * 1024)    { showToast('Image must be 5 MB or less.', 'error'); return; }
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image (JPG, PNG, GIF).', 'error');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Image must be 5 MB or less.', 'error');
+      e.target.value = '';
+      return;
+    }
+
+    // Update label text to show chosen filename
+    const labelSpan = fileInputWrap?.querySelector('.file-input-text span');
+    if (labelSpan) labelSpan.textContent = file.name;
 
     const reader  = new FileReader();
     reader.onload = (evt) => {
       if (!previewDiv) return;
       previewDiv.innerHTML = '';
+
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'position:relative;display:inline-block;';
+
       const img = document.createElement('img');
       img.src   = evt.target.result;
       img.alt   = 'New photo preview';
-      previewDiv.appendChild(img);
+      img.style.cssText = 'max-width:200px;max-height:200px;border-radius:8px;border:2px solid #e5e7eb;display:block;';
+
+      // Remove/clear button on the preview
+      const clearBtn = document.createElement('button');
+      clearBtn.type      = 'button';
+      clearBtn.title     = 'Remove selected photo';
+      clearBtn.innerHTML = '<i class="fas fa-times"></i>';
+      clearBtn.style.cssText =
+        'position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;' +
+        'border:none;background:rgba(0,0,0,.55);color:white;font-size:.7rem;cursor:pointer;' +
+        'display:flex;align-items:center;justify-content:center;transition:background .2s;';
+      clearBtn.onmouseenter = () => { clearBtn.style.background = '#ef4444'; };
+      clearBtn.onmouseleave = () => { clearBtn.style.background = 'rgba(0,0,0,.55)'; };
+      clearBtn.addEventListener('click', () => {
+        photoInput.value = '';
+        previewDiv.innerHTML = '';
+        previewDiv.classList.remove('active');
+        if (labelSpan) labelSpan.textContent = 'Change photo';
+      });
+
+      wrapper.appendChild(img);
+      wrapper.appendChild(clearBtn);
+      previewDiv.appendChild(wrapper);
       previewDiv.classList.add('active');
     };
     reader.readAsDataURL(file);

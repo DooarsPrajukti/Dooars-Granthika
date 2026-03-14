@@ -144,7 +144,7 @@
           <label for="alternatePhone">Alternate Phone</label>
           <input type="tel" id="alternatePhone" name="alternate_phone" class="form-control"
                  placeholder="Optional alternate 10-digit number" maxlength="10"
-                 value="{{ form.alternate_phone.value|default:'' }}" />
+                 value="{{ form.alternate_phone.value|default:'0000000000' }}" />
           {% if form.alternate_phone.errors %}<span class="error-message">{{ form.alternate_phone.errors.0 }}</span>{% endif %}
         </div>
 
@@ -154,7 +154,7 @@
           <label for="guardianPhone">Guardian / Parent Phone</label>
           <input type="tel" id="guardianPhone" name="guardian_phone" class="form-control"
                  placeholder="Parent or guardian 10-digit number" maxlength="10"
-                 value="{{ form.guardian_phone.value|default:'' }}" />
+                 value="{{ form.guardian_phone.value|default:'0000000000' }}" />
           {% if form.guardian_phone.errors %}<span class="error-message">{{ form.guardian_phone.errors.0 }}</span>{% endif %}
         </div>
         {% endif %}
@@ -390,12 +390,12 @@
         <div class="photo-upload-zone" id="photoDropZone">
           <div class="photo-upload-icon"><i class="fas fa-cloud-upload-alt"></i></div>
           <div class="photo-upload-text">
-            <span>Drag &amp; drop or <label for="memberPhoto" class="photo-browse-link">browse</label></span>
+            <span>Drag &amp; drop or browse</span>
             <small>JPG, PNG or GIF · Max 5 MB</small>
           </div>
           <input type="file" id="memberPhoto" name="photo_upload" accept="image/*" />
         </div>
-        <div class="photo-preview-box" id="photoPreviewBox">
+        <div class="photo-preview-box" id="photoPreviewBox" style="display:none;">
           <img id="photoPreviewImg" src="" alt="Preview" />
           <button type="button" class="photo-remove-btn" id="photoRemoveBtn" title="Remove photo">
             <i class="fas fa-times"></i>

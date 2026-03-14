@@ -361,3 +361,130 @@ function initDeleteButtons() {
 }
 
 window.initDeleteButtons = initDeleteButtons;
+
+
+// ── Select-or-create mutual exclusivity ──────────────────────────────────────
+
+/**
+ * Wire all .select-or-create widgets so that typing in the "create new" input
+ * clears the corresponding select (and vice-versa), preventing both values
+ * from being submitted at once.
+ *
+ * Each widget must have id="soc-<key>" on the outer div, and contain:
+ *   • a <select>  inside .select-or-create__left
+ *   • an <input>  inside .select-or-create__right
+ */
+function initSelectOrCreate() {
+  document.querySelectorAll('.select-or-create').forEach((widget) => {
+    const selectEl = widget.querySelector('.select-or-create__left select');
+    const inputEl  = widget.querySelector('.select-or-create__right input[type="text"]');
+    const leftPane = widget.querySelector('.select-or-create__left');
+    const rightPane= widget.querySelector('.select-or-create__right');
+
+    if (!selectEl || !inputEl) return;
+
+    function setActive(side) {
+      leftPane?.classList.toggle('soc-active',  side === 'left');
+      rightPane?.classList.toggle('soc-active', side === 'right');
+    }
+
+    // Selecting a value in the dropdown → clear the text input
+    selectEl.addEventListener('change', () => {
+      if (selectEl.value) {
+        inputEl.value = '';
+        setActive('left');
+      } else {
+        setActive(null);
+      }
+    });
+
+    // Typing in the text input → reset the select to empty
+    inputEl.addEventListener('input', () => {
+      if (inputEl.value.trim()) {
+        selectEl.value = '';
+        setActive('right');
+      } else {
+        setActive(null);
+      }
+    });
+
+    // Set initial active side on page load
+    if (selectEl.value)          setActive('left');
+    else if (inputEl.value.trim()) setActive('right');
+  });
+}
+
+window.initSelectOrCreate = initSelectOrCreate;
+
+
+// ── Phone validation ──────────────────────────────────────────────────────────
+
+/**
+ * Attach live UX validation to phone number inputs.
+ * @param {Array<{id: string, required: boolean}>} fields
+ */
+function initPhoneValidation(fields) {
+  fields.forEach(({ id, required }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    // Allow only digits
+    el.addEventListener('input', () => {
+      el.value = el.value.replace(/\D/g, '').slice(0, 10);
+    });
+
+    el.addEventListener('blur', () => {
+      const val = el.value.trim();
+      let errEl = el.nextElementSibling;
+      // Find or create error message element
+      if (!errEl || !errEl.classList.contains('error-message')) {
+        errEl = document.createElement('span');
+        errEl.className = 'error-message';
+        el.parentNode.insertBefore(errEl, el.nextSibling);
+      }
+
+      if (required && !val) {
+        errEl.textContent = 'Phone number is required.';
+      } else if (val && val.length !== 10) {
+        errEl.textContent = 'Enter a valid 10-digit phone number.';
+      } else {
+        errEl.textContent = '';
+      }
+    });
+  });
+}
+
+window.initPhoneValidation = initPhoneValidation;
+
+
+// ── Email validation ──────────────────────────────────────────────────────────
+
+/**
+ * Attach live UX validation to an email input.
+ * @param {string} id — element id
+ */
+function initEmailValidation(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  el.addEventListener('blur', () => {
+    const val = el.value.trim();
+    let errEl = el.nextElementSibling;
+    if (!errEl || !errEl.classList.contains('error-message')) {
+      errEl = document.createElement('span');
+      errEl.className = 'error-message';
+      el.parentNode.insertBefore(errEl, el.nextSibling);
+    }
+
+    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+    if (!val) {
+      errEl.textContent = 'Email address is required.';
+    } else if (!valid) {
+      errEl.textContent = 'Enter a valid email address.';
+    } else {
+      errEl.textContent = '';
+    }
+  });
+}
+
+window.initEmailValidation = initEmailValidation;

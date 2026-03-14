@@ -365,7 +365,7 @@
             <div class="fine-calc__divider"></div>
             <div class="fine-calc__row fine-calc__row--total">
               <span class="fine-calc__label">Amount Due</span>
-              <span class="fine-calc__total {% if unpaid_fine_amount > 0 %}fine-calc__total--danger{% else %}fine-calc__total--nil{% endif %}">
+              <span class="fine-calc__total {% if unpaid_fine_amount %}fine-calc__total--danger{% else %}fine-calc__total--nil{% endif %}">
                 ₹{{ unpaid_fine_amount|floatformat:2 }}
               </span>
             </div>
