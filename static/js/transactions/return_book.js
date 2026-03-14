@@ -33,6 +33,10 @@
   const lostOverrideInp   = document.getElementById('lostChargeOverride');
   const lostResetBtn      = document.getElementById('lostResetBtn');
 
+  /* Hidden field — carries updated book price to the view.
+     Blank = no change to Book.price in the DB.              */
+  const bookPriceOverrideField = document.getElementById('bookPriceOverride');
+
   /* Baseline overdue fine from sidebar meter */
   const baseFine = parseFloat(
     document.querySelector('.fine-meter__amount')
@@ -52,33 +56,37 @@
   function wireOverride(overrideBtn, overrideRow, overrideInp, resetBtn, hiddenEl, amountLabel) {
     if (!overrideBtn) return;
 
-    /* "different price?" clicked — show input pre-filled with current hidden value */
+    /* "different price?" clicked — hide button, show input row */
     overrideBtn.addEventListener('click', function () {
-      overrideInp.value = hiddenEl.value;
+      overrideInp.value  = hiddenEl.value;
       overrideRow.hidden = false;
       overrideBtn.hidden = true;
       overrideInp.focus();
       overrideInp.select();
     });
 
-    /* Typing in override input → update hidden field + label + button badge */
+    /* Typing — update label + hidden charge + bookPriceOverride */
     overrideInp.addEventListener('input', function () {
       const val = Math.max(0, parseFloat(overrideInp.value) || 0);
-      hiddenEl.value = val.toFixed(2);
+      hiddenEl.value          = val.toFixed(2);
       amountLabel.textContent = fmt(val);
+      if (bookPriceOverrideField)
+        bookPriceOverrideField.value = val > 0 ? val.toFixed(2) : '';
       const cond = document.querySelector('input[name="condition"]:checked')?.value || 'good';
       renderButton(cond);
       animateMeter(calcTotal(cond));
     });
 
-    /* "reset" → revert to book price */
+    /* "reset" — revert to book price, hide row, show button */
     resetBtn.addEventListener('click', function () {
       const bp = bookPrice(hiddenEl);
-      hiddenEl.value = bp.toFixed(2);
+      hiddenEl.value          = bp.toFixed(2);
       amountLabel.textContent = fmt(bp);
-      overrideRow.hidden = true;
-      overrideBtn.hidden = false;
-      overrideInp.value = '';
+      overrideRow.hidden      = true;
+      overrideBtn.hidden      = false;
+      overrideInp.value       = '';
+      if (bookPriceOverrideField)
+        bookPriceOverrideField.value = '';
       const cond = document.querySelector('input[name="condition"]:checked')?.value || 'good';
       renderButton(cond);
       animateMeter(calcTotal(cond));

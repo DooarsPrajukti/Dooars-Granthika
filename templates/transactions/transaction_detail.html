@@ -371,9 +371,9 @@
             </div>
 
           </div><!-- /.fine-calc -->
-
           {% if unpaid_fine_amount > 0 %}
-            {% for fine in fines %}{% if fine.status == 'unpaid' %}
+            {% with first_unpaid=fines|dictsort:"id"|first %}
+            {% for fine in fines %}{% if fine.status == 'unpaid' and forloop.first %}
             <a href="{% url 'finance:process_payment' %}?fine_id={{ fine.fine_id }}"
                class="btn btn--primary btn--block"
                style="margin-top:1rem;">
@@ -381,8 +381,8 @@
               Collect ₹{{ unpaid_fine_amount|floatformat:2 }}
             </a>
             {% endif %}{% endfor %}
+            {% endwith %}
           {% endif %}
-
           {% if paid_fine_amount > 0 and unpaid_fine_amount == 0 %}
           <div class="fine-paid-info" style="margin-top:0.75rem;">
             <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -445,7 +445,6 @@
             <th>Status</th>
             <th>Paid On</th>
             <th>Method / Ref</th>
-            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -514,12 +513,10 @@
 
             <td>
               {% if fine.status == 'unpaid' %}
-              <a href="{% url 'finance:process_payment' %}?fine_id={{ fine.fine_id }}"
-                 class="action-btn action-btn--pay"
-                 title="Collect payment for this fine">
-                <svg viewBox="0 0 20 20" fill="none" width="13" height="13"><path d="M4 10l4 4 8-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Collect
-              </a>
+                <span style="display:flex;align-items:center;gap:4px;color:#b91c1c;font-size:0.8125rem;font-weight:600;">
+                  <span style="width:7px;height:7px;border-radius:50%;background:#b91c1c;display:inline-block;"></span>
+                  Unpaid
+                </span>
               {% elif fine.status == 'paid' %}
                 <span style="display:flex;align-items:center;gap:4px;color:#16a34a;font-size:0.8125rem;">
                   <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M3 8l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -533,7 +530,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="8" style="text-align:center;padding:2.5rem;color:#94a3b8;">
+            <td colspan="7" style="text-align:center;padding:2.5rem;color:#94a3b8;">
               <svg viewBox="0 0 48 48" fill="none" style="width:36px;height:36px;display:block;margin:0 auto 8px;opacity:.3;">
                 <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2"/>
                 <path d="M16 24h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
