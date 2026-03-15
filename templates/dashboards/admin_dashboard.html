@@ -6,7 +6,7 @@
 {% block nav_dashboard %}active{% endblock %}
 
 {% block extra_css %}
-{# admin_dashboard.css already loaded by dashboard_base — members.css folded in too #}
+<link rel="stylesheet" href="{% static 'css/dashboards/admin_dashboard.css' %}" />
 {% endblock %}
 
 {% block topbar %}
@@ -16,12 +16,12 @@
     <p class="subtitle">Welcome back, {{ user.get_full_name|default:user.username }}</p>
   </div>
   <div class="top-bar-actions">
-    <button class="btn-icon" title="Notifications">
+    {% comment %} <a class="btn-icon" href="{% url 'accounts:notifications' %}" title="Notifications">
       <i class="fas fa-bell"></i>
       {% if notification_count %}
         <span class="notification-badge">{{ notification_count }}</span>
       {% endif %}
-    </button>
+    </a> {% endcomment %}
     <div class="user-profile">
       {% if library_logo_b64 %}
         <img src="{{ library_logo_b64 }}" alt="Organisation Logo"
@@ -316,7 +316,135 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════
-       SECTION 5 — Recently Added Members
+       SECTION 5 — Overdue & Fines
+  ══════════════════════════════════════════════════ -->
+  <hr class="divider" />
+  <p class="page-section-title"><i class="fas fa-exclamation-triangle"></i> Overdue & Fines</p>
+
+  <!-- Overdue summary stat strip -->
+  <div class="overdue-stats-strip">
+
+    <div class="overdue-stat-item overdue-stat--danger">
+      <div class="overdue-stat-icon"><i class="fas fa-clock"></i></div>
+      <div class="overdue-stat-body">
+        <span class="overdue-stat-value">{{ overdue_count|default:"0" }}</span>
+        <span class="overdue-stat-label">Overdue Books</span>
+      </div>
+    </div>
+
+    <div class="overdue-stat-item overdue-stat--warning">
+      <div class="overdue-stat-icon"><i class="fas fa-rupee-sign"></i></div>
+      <div class="overdue-stat-body">
+        <span class="overdue-stat-value">₹{{ total_fines_pending|default:"0" }}</span>
+        <span class="overdue-stat-label">Fines Pending</span>
+      </div>
+    </div>
+
+    <div class="overdue-stat-item overdue-stat--success">
+      <div class="overdue-stat-icon"><i class="fas fa-check-circle"></i></div>
+      <div class="overdue-stat-body">
+        <span class="overdue-stat-value">₹{{ total_fines_collected|default:"0" }}</span>
+        <span class="overdue-stat-label">Fines Collected</span>
+      </div>
+    </div>
+
+    <div class="overdue-stat-item overdue-stat--info">
+      <div class="overdue-stat-icon"><i class="fas fa-calendar-times"></i></div>
+      <div class="overdue-stat-body">
+        <span class="overdue-stat-value">{{ due_today_count|default:"0" }}</span>
+        <span class="overdue-stat-label">Due Today</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Overdue transactions table -->
+  <div class="members-table-container" style="margin-top: 16px;">
+    <div class="table-header">
+      <h2><i class="fas fa-list-alt" style="color:var(--error);margin-right:8px;"></i>Overdue Transactions</h2>
+      <a href="{% url 'transactions:transaction_list' %}?status=overdue" class="btn-secondary">
+        View All <i class="fas fa-arrow-right"></i>
+      </a>
+    </div>
+
+    {% if overdue_transactions %}
+    <div class="members-table-wrapper">
+      <table class="members-table">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>Book Title</th>
+            <th>Due Date</th>
+            <th>Days Overdue</th>
+            <th>Fine Amount</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for txn in overdue_transactions %}
+          <tr class="overdue-row">
+            <td>
+              <div class="member-info">
+                <div class="member-avatar">
+                  {{ txn.member.full_name|slice:":1"|upper }}
+                </div>
+                <div class="member-details">
+                  <span class="member-name">{{ txn.member.full_name }}</span>
+                  <span class="member-id">{{ txn.member.member_id }}</span>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div class="member-details">
+                <span class="member-name">{{ txn.book.title }}</span>
+                <span class="member-id">{{ txn.book.author }}</span>
+              </div>
+            </td>
+            <td>
+              <span class="overdue-date">{{ txn.due_date|date:"M d, Y" }}</span>
+            </td>
+            <td>
+              <span class="days-overdue-badge">{{ txn.days_overdue }} day{{ txn.days_overdue|pluralize }}</span>
+            </td>
+            <td>
+              <span class="fine-amount {% if txn.fine_paid %}fine-paid{% else %}fine-pending{% endif %}">
+                ₹{{ txn.fine_amount|default:"0" }}
+                {% if txn.fine_paid %}
+                  <i class="fas fa-check" style="margin-left:4px;"></i>
+                {% endif %}
+              </span>
+            </td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'transactions:transaction_detail' txn.id %}" class="action-icon view" title="View Transaction">
+                  <i class="fas fa-eye"></i>
+                </a>
+                {% if not txn.fine_paid %}
+                <a href="{% url 'transactions:collect_fine' txn.id %}" class="action-icon" title="Collect Fine"
+                   style="color:var(--success);border-color:var(--success);">
+                  <i class="fas fa-rupee-sign"></i>
+                </a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon" style="color:var(--success);">
+        <i class="fas fa-check-circle"></i>
+      </div>
+      <h3>No Overdue Books</h3>
+      <p>All books are returned on time. Great job!</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       SECTION 6 — Recently Added Members
   ══════════════════════════════════════════════════ -->
   <hr class="divider" />
 
@@ -401,8 +529,9 @@
 {% block extra_js %}
 <script src="{% static 'js/dashboard/admin_dashboard.js' %}"></script>
 <script src="{% static 'js/members/members.js' %}"></script>
-<script>
-  /* ── Admin dashboard chart data ── */
+
+  <script>
+  /* ── Admin chart data (loans, category, new-members bar) ── */
   window.DASHBOARD_DATA = {
     loansChart: {
       enabled: {% if monthly_loan_labels and monthly_loan_data %}true{% else %}false{% endif %},
@@ -420,63 +549,19 @@
       data:    {% if member_day_data %}{{ member_day_data|safe }}{% else %}[]{% endif %}
     }
   };
+ 
+  /* ── Department doughnut chart data ── */
+  window.DEPT_DATA = {
+    labels: {{ department_labels|safe }},
+    values: {{ department_data|safe }}
+  };
+ 
+  /* ── Member status pie chart data ── */
+  window.STATUS_DATA = {
+    active:   {{ stats.active_count }},
+    passout:  {{ stats.passout_count }},
+    inactive: {{ stats.inactive_count }}
+  };
 
-  /* ── Members dashboard inline charts ── */
-  const deptCtx = document.getElementById('departmentChart');
-  if (deptCtx) {
-    new Chart(deptCtx, {
-      type: 'doughnut',
-      data: {
-        labels: {{ department_labels|safe }},
-        datasets: [{
-          data: {{ department_data|safe }},
-          backgroundColor: [
-            '#667eea','#764ba2','#f093fb','#4facfe',
-            '#43e97b','#fa709a','#fee140','#30cfd0'
-          ],
-          borderWidth: 0
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: {
-          legend: {
-            position: 'bottom',
-            labels: { padding: 15, font: { size: 12 } }
-          }
-        }
-      }
-    });
-  }
-
-  const statusCtx = document.getElementById('statusChart');
-  if (statusCtx) {
-    new Chart(statusCtx, {
-      type: 'pie',
-      data: {
-        labels: ['Active', 'Pass Out', 'Inactive'],
-        datasets: [{
-          data: [
-            {{ stats.active_count }},
-            {{ stats.passout_count }},
-            {{ stats.inactive_count }}
-          ],
-          backgroundColor: ['#10b981','#f59e0b','#ef4444'],
-          borderWidth: 0
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: {
-          legend: {
-            position: 'bottom',
-            labels: { padding: 15, font: { size: 12 } }
-          }
-        }
-      }
-    });
-  }
 </script>
 {% endblock %}

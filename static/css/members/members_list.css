@@ -20,8 +20,9 @@
 }
 
 .members-list-page .filters-grid .filter-group {
-  flex: 0 0 auto;
-  width: 155px;
+  flex: 1 1 0;
+  min-width: 50px;
+  max-width: 200px;
 }
 
 .members-list-page .filters-grid .filter-actions {
@@ -36,22 +37,50 @@
   padding: 1rem 1.5rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
+/* ── Members Table Layout Fix ── */
+.members-list-page .members-table {
+  width: 100%;
+  table-layout: fixed; /* keeps table inside container */
+  border-collapse: collapse;
+}
 
-/* ── Dense table for 9 columns — tighten padding so Actions is always visible ── */
+/* Cells */
 .members-list-page .members-table th,
 .members-list-page .members-table td {
-  padding: 0.875rem 0.75rem;
+  padding: 0.75rem;
   font-size: 0.875rem;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
-/* Member Info cell — keep avatar + name readable */
-.members-list-page .members-table td:first-child {
-  min-width: 180px;
+/* Member Info column */
+.members-list-page .members-table th:nth-child(1),
+.members-list-page .members-table td:nth-child(1) {
+  width: 18%;
 }
 
-/* Actions column — guaranteed space for 3 icon buttons */
+/* Email column */
+.members-list-page .members-table th:nth-child(3),
+.members-list-page .members-table td:nth-child(3) {
+  width: 18%;
+}
+
+/* Phone column */
+.members-list-page .members-table th:nth-child(4),
+.members-list-page .members-table td:nth-child(4) {
+  width: 12%;
+}
+
+/* Status column */
+.members-list-page .members-table th:nth-child(8),
+.members-list-page .members-table td:nth-child(8) {
+  width: 10%;
+}
+
+/* Actions column */
 .members-list-page .members-table th:last-child,
 .members-list-page .members-table td:last-child {
-  min-width: 110px;
+  width: 110px;
   text-align: center;
 }
